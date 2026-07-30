@@ -88,6 +88,10 @@ Antes de producción se migrará a PostgreSQL.
   - Validación estricta de HTTPS y longitud de secretos antes del despliegue.
   - Respaldos consistentes para SQLite y PostgreSQL con SHA-256.
   - Verificación de integridad y procedimiento documentado de recuperación.
+  - React Router actualizado a 8.3.0 sin `react-router-dom`, RSC ni acciones de Router.
+  - React y React DOM actualizados a 19.2.7; Node 22.22 o superior requerido.
+  - Rama de respaldo previa: `backup/pre-react-router-8.3.0`.
+  - Verificación conjunta disponible con `npm run verify:release`.
 - Pruebas por rol:
   - Recorrido visual de 20 pantallas administrativas sin errores de consola.
   - Matriz automatizada de permisos para estudiante y catedrático.

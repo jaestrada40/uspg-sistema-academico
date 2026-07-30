@@ -11,7 +11,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { InstitutionLogo } from '../common/InstitutionLogo';
 
 export const TopHeader: React.FC = () => {

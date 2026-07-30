@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Eye, EyeOff, Lock, User, KeyRound } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Modal } from '../components/common/Modal';

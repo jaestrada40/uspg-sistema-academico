@@ -30,7 +30,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { StatCard } from '../components/common/StatCard';
 import { ProgressBar } from '../components/common/ProgressBar';
 import { StatusBadge } from '../components/common/StatusBadge';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 
 export const DashboardPage: React.FC = () => {
   const {

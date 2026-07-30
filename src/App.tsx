@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router';
 import { AppProvider, useApp } from './context/AppContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { NotificationToastContainer } from './components/common/NotificationToast';

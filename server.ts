@@ -68,12 +68,12 @@ app.use(express.json({ limit: '5mb', strict: true }));
 const configuredOrigin = (() => {
   try { return process.env.APP_URL ? new URL(process.env.APP_URL).origin : null; } catch { return null; }
 })();
-const developmentOrigins = new Set(['http://localhost:3000', 'http://127.0.0.1:3000']);
+const isDevelopmentOrigin = (origin: string) => /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
 app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   const origin = req.get('origin');
   const fetchSite = req.get('sec-fetch-site');
-  const allowed = origin && (origin === configuredOrigin || (!isProduction && developmentOrigins.has(origin)));
+  const allowed = origin && (origin === configuredOrigin || (!isProduction && isDevelopmentOrigin(origin)));
   if ((origin && !allowed) || fetchSite === 'cross-site') {
     return void res.status(403).json({ message: 'Origen de solicitud no permitido.' });
   }

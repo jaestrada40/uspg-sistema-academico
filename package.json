@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.22.0"
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
@@ -18,6 +21,7 @@
     "backup:create": "node scripts/backup-database.mjs",
     "backup:verify": "node scripts/verify-backup.mjs",
     "test:roles": "node scripts/test-role-access.mjs",
+    "verify:release": "npm run lint && npm run build && npm audit --omit=dev",
     "db:import:systems-curriculum": "tsx scripts/import-systems-curriculum.ts",
     "db:seed": "tsx prisma/seed.ts",
     "clean": "rm -rf dist server.js",
@@ -42,10 +46,9 @@
     "pg": "^8.22.0",
     "prisma": "^7.9.1",
     "qrcode": "^1.5.4",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1",
-    "react-router": "^7.18.2",
-    "react-router-dom": "^7.18.2",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router": "^8.3.0",
     "recharts": "^3.10.1",
     "vite": "^6.2.3"
   },
