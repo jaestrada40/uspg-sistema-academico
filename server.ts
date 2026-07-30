@@ -854,9 +854,10 @@ app.get('/api/curriculum-map', requireUser, async (req, res) => {
   const active = new Set(student.enrollments.filter((item) => item.status === 'Inscrito').map((item) => item.section.courseCode));
   const mapped = courses.map((course) => {
     const prerequisiteCodes = course.prerequisites.map((item) => item.prerequisiteCode);
+    const prerequisites = course.prerequisites.map((item) => ({ code: item.prerequisiteCode, name: item.prerequisite.name, completed: approved.has(item.prerequisiteCode) }));
     const missingPrerequisites = course.prerequisites.filter((item) => !approved.has(item.prerequisiteCode)).map((item) => ({ code: item.prerequisiteCode, name: item.prerequisite.name }));
     const status = approved.has(course.code) ? 'APROBADO' : active.has(course.code) ? 'EN_CURSO' : missingPrerequisites.length ? 'BLOQUEADO' : 'DISPONIBLE';
-    return { code: course.code, name: course.name, credits: course.credits, semester: course.semester, prerequisiteCodes, missingPrerequisites, status };
+    return { code: course.code, name: course.name, credits: course.credits, semester: course.semester, prerequisiteCodes, prerequisites, missingPrerequisites, status };
   });
   const charges = student.financialCharges.map((charge) => ({ dueDate: charge.dueDate, balance: Math.max(0, charge.amount - charge.adjustments.reduce((sum, item) => sum + item.amount, 0) - charge.payments.reduce((sum, item) => sum + item.amount, 0)) }));
   const financialSolvent = !charges.some((charge) => charge.dueDate < new Date() && charge.balance > 0);
