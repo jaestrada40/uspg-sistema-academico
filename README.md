@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/uspg-sistema-academico-banner.png" alt="Sistema Académico USPG" width="1200" />
+  <img src="docs/assets/uspg-sistema-academico-dashboard.jpg" alt="Panel administrativo del Sistema Académico USPG" width="1200" />
 </div>
 
 # Sistema Académico USPG
