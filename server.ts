@@ -1932,7 +1932,13 @@ app.post('/api/notifications/outbox/:id/retry', requireAdmin, async (req, res) =
 
 app.get('/api/institution', async (_req, res) => {
   const institution = await prisma.institutionConfig.findUnique({ where: { id: 1 } });
-  res.json(institution);
+  res.json(institution || {
+    id: 1,
+    name: 'Universidad de San Pablo de Guatemala',
+    shortName: 'USPG',
+    logoDataUrl: null,
+    mfaRequiredRoles: null,
+  });
 });
 
 app.put('/api/institution', requireAdmin, async (req, res) => {

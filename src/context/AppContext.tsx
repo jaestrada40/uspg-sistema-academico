@@ -181,7 +181,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!response.ok) throw new Error('No se pudo cargar la configuración institucional');
         return response.json();
       })
-      .then(setInstitution)
+      .then((record: InstitutionConfig | null) => {
+        if (record?.name && record?.shortName) setInstitution(record);
+      })
       .catch(() => showToast('No se pudo conectar con la configuración institucional', 'warning'));
   }, []);
   useEffect(() => {
