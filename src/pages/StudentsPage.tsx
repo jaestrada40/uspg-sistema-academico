@@ -55,6 +55,7 @@ export const StudentsPage: React.FC = () => {
   });
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
   const [academicStructure, setAcademicStructure] = useState<{ campuses: { id: string; code: string; name: string; status: string }[]; plans: { id: string; code: string; name: string; version: string; careerId: string; status: string }[] }>({ campuses: [], plans: [] });
 
   useEffect(() => {
@@ -85,14 +86,14 @@ export const StudentsPage: React.FC = () => {
   const totalPages = Math.ceil(filteredStudents.length / pageSize) || 1;
   const paginatedStudents = filteredStudents.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const validateForm = () => {
+  const validateForm = (editing = false) => {
     const errors: Record<string, string> = {};
-    if (!formData.carnet?.trim()) errors.carnet = 'El carné es obligatorio';
+    if (!editing && !formData.carnet?.trim()) errors.carnet = 'El carné es obligatorio';
     if (!formData.name?.trim()) errors.name = 'El nombre completo es obligatorio';
     const normalizedEmail = formData.email?.trim().toLowerCase();
     if (!normalizedEmail) errors.email = 'El correo electrónico es obligatorio';
     else if (!normalizedEmail.endsWith('@alumno.uspg.edu.gt')) errors.email = 'Debe usar un correo @alumno.uspg.edu.gt';
-    if (!formData.careerId) errors.careerId = 'Debes seleccionar una carrera';
+    if (!editing && !formData.careerId) errors.careerId = 'Debes seleccionar una carrera';
     if (!formData.campusId) errors.campusId = 'Debes seleccionar un campus';
     if (!formData.planId) errors.planId = 'Debes seleccionar un plan académico';
 
@@ -131,17 +132,23 @@ export const StudentsPage: React.FC = () => {
 
   const handleEditStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm() || !selectedStudent) return;
+    if (!validateForm(true) || !selectedStudent) return;
 
-    if (!(await updateStudent(selectedStudent.carnet, { ...formData, email: formData.email?.trim().toLowerCase() }))) return;
+    setIsSaving(true);
+    const updated = await updateStudent(selectedStudent.carnet, { ...formData, email: formData.email?.trim().toLowerCase() });
+    setIsSaving(false);
+    if (!updated) return;
     setShowEditModal(false);
     setSelectedStudent(null);
     resetForm();
   };
 
   const openEdit = (student: Student) => {
+    const campusId = student.campusId || academicStructure.campuses[0]?.id;
+    const planId = student.planId || academicStructure.plans.find((plan) => plan.careerId === student.careerId)?.id;
     setSelectedStudent(student);
-    setFormData(student);
+    setFormData({ ...student, campusId, planId });
+    setFormErrors({});
     setShowEditModal(true);
   };
 
@@ -510,6 +517,7 @@ export const StudentsPage: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333]"
                 />
+                {formErrors.name && <p className="mt-1 text-[10px] font-semibold text-[#C53030]">{formErrors.name}</p>}
               </div>
 
               <div>
@@ -549,11 +557,13 @@ export const StudentsPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-xs font-bold text-[#333333] mb-1">Campus</label>
-                <select value={formData.campusId || ''} onChange={(e) => setFormData({ ...formData, campusId: e.target.value })} className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333]">{academicStructure.campuses.map((campus) => <option key={campus.id} value={campus.id}>{campus.name} ({campus.code})</option>)}</select>
+                <select value={formData.campusId || ''} onChange={(e) => { setFormData({ ...formData, campusId: e.target.value }); setFormErrors((current) => ({ ...current, campusId: '' })); }} className={`w-full rounded-lg border bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333] ${formErrors.campusId ? 'border-[#C53030]' : 'border-[#E2E8F0]'}`}><option value="">Selecciona un campus</option>{academicStructure.campuses.map((campus) => <option key={campus.id} value={campus.id}>{campus.name} ({campus.code})</option>)}</select>
+                {formErrors.campusId && <p className="mt-1 text-[10px] font-semibold text-[#C53030]">{formErrors.campusId}</p>}
               </div>
               <div>
                 <label className="block text-xs font-bold text-[#333333] mb-1">Plan académico / Pensum</label>
-                <select value={formData.planId || ''} onChange={(e) => setFormData({ ...formData, planId: e.target.value })} className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333]">{academicStructure.plans.filter((plan) => plan.careerId === formData.careerId).map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {plan.code}</option>)}</select>
+                <select value={formData.planId || ''} onChange={(e) => { setFormData({ ...formData, planId: e.target.value }); setFormErrors((current) => ({ ...current, planId: '' })); }} className={`w-full rounded-lg border bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333] ${formErrors.planId ? 'border-[#C53030]' : 'border-[#E2E8F0]'}`}><option value="">Selecciona un plan</option>{academicStructure.plans.filter((plan) => plan.careerId === formData.careerId).map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {plan.code}</option>)}</select>
+                {formErrors.planId && <p className="mt-1 text-[10px] font-semibold text-[#C53030]">{formErrors.planId}</p>}
               </div>
             </div>
 
@@ -567,9 +577,10 @@ export const StudentsPage: React.FC = () => {
               </button>
               <button
                 type="submit"
-                className="rounded-lg bg-[#800020] px-5 py-2 text-xs font-bold text-white hover:bg-[#5F0018]"
+                disabled={isSaving}
+                className="rounded-lg bg-[#800020] px-5 py-2 text-xs font-bold text-white hover:bg-[#5F0018] disabled:opacity-50"
               >
-                Actualizar Cambios
+                {isSaving ? 'Actualizando...' : 'Actualizar cambios'}
               </button>
             </div>
           </form>
