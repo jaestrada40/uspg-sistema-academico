@@ -1,0 +1,6 @@
+{
+  "name": "Sistema Académico USPG",
+  "description": "Sistema de Gestión Académica Universitaria para la Universidad de San Pablo de Guatemala (USPG).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

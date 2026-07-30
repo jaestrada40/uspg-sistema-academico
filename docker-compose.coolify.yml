@@ -1,0 +1,50 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      APP_URL: ${APP_URL:?}
+      DATABASE_PROVIDER: postgresql
+      DATABASE_URL: postgresql://uspg:${POSTGRES_PASSWORD:?}@postgres:5432/uspg_academico
+      PARKING_QR_SECRET: ${PARKING_QR_SECRET:?}
+      SMTP_HOST: ${SMTP_HOST:?}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:?}
+      SMTP_PASS: ${SMTP_PASS:?}
+      SMTP_FROM: ${SMTP_FROM:?}
+      GOOGLE_CLASSROOM_CLIENT_ID: ${GOOGLE_CLASSROOM_CLIENT_ID:-}
+      GOOGLE_CLASSROOM_CLIENT_SECRET: ${GOOGLE_CLASSROOM_CLIENT_SECRET:-}
+      GOOGLE_CLASSROOM_REDIRECT_URI: ${GOOGLE_CLASSROOM_REDIRECT_URI:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 3
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: uspg_academico
+      POSTGRES_USER: uspg
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - uspg_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uspg -d uspg_academico"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  uspg_postgres_data:
