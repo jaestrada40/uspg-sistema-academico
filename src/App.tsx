@@ -30,6 +30,7 @@ const StudentRequestsPage = lazyPage(() => import('./pages/StudentRequestsPage')
 const EnrollmentDocumentsPage = lazyPage(() => import('./pages/EnrollmentDocumentsPage'), 'EnrollmentDocumentsPage');
 const CurriculumMapPage = lazyPage(() => import('./pages/CurriculumMapPage'), 'CurriculumMapPage');
 const StudyPlanPage = lazyPage(() => import('./pages/StudyPlanPage'), 'StudyPlanPage');
+const CurriculumOrganizerPage = lazyPage(() => import('./pages/CurriculumOrganizerPage'), 'CurriculumOrganizerPage');
 const AcademicStructurePage = lazyPage(() => import('./pages/AcademicStructurePage'), 'AcademicStructurePage');
 const LibraryPage = lazyPage(() => import('./pages/LibraryPage'), 'LibraryPage');
 const ParkingPage = lazyPage(() => import('./pages/ParkingPage'), 'ParkingPage');
@@ -77,6 +78,7 @@ export default function App() {
           <Route path="/expediente" element={<ProtectedRoute><EnrollmentDocumentsPage /></ProtectedRoute>} />
           <Route path="/malla" element={<ProtectedRoute><CurriculumMapPage /></ProtectedRoute>} />
           <Route path="/plan-estudios" element={<ProtectedRoute><StudyPlanPage /></ProtectedRoute>} />
+          <Route path="/organizar-pensum" element={<ProtectedRoute><CurriculumOrganizerPage /></ProtectedRoute>} />
           <Route path="/estructura-academica" element={<ProtectedRoute><AcademicStructurePage /></ProtectedRoute>} />
           <Route path="/biblioteca" element={<ProtectedRoute><LibraryPage /></ProtectedRoute>} />
           <Route path="/parqueo" element={<ProtectedRoute><ParkingPage /></ProtectedRoute>} />

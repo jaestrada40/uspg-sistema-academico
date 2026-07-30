@@ -40,6 +40,7 @@ export const Sidebar: React.FC = () => {
     { path: '/carreras', label: 'Carreras', icon: BookOpen, roles: ['ADMIN'] },
     { path: '/estructura-academica', label: 'Campus y Planes', icon: Building2, roles: ['ADMIN'] },
     { path: '/cursos', label: 'Cursos y Prerrequisitos', icon: BookCheck, roles: ['ADMIN'] },
+    { path: '/organizar-pensum', label: 'Organizar Pensum', icon: Network, roles: ['ADMIN'] },
     { path: '/ciclos', label: 'Ciclos Académicos', icon: Calendar, roles: ['ADMIN'] },
     { path: '/secciones', label: 'Secciones', icon: Layers, roles: ['ADMIN', 'DOCENTE'] },
     { path: '/inscripcion', label: 'Inscripción de Cursos', icon: ClipboardList, roles: ['ADMIN', 'ESTUDIANTE'] },

@@ -655,6 +655,33 @@ app.patch('/api/academic-structure/plans/:id', requireAdmin, async (req, res) =>
   res.json(plan);
 });
 
+app.get('/api/curriculum-plans/organizer', requireAdmin, async (_req, res) => {
+  const [careers, plans] = await Promise.all([
+    prisma.career.findMany({ where: { status: 'Activo' }, select: { code: true, name: true }, orderBy: { name: 'asc' } }),
+    prisma.curriculumPlan.findMany({ include: { courses: { include: { course: { include: { prerequisites: { include: { prerequisite: { select: { name: true } } } } } } }, orderBy: [{ semester: 'asc' }, { courseCode: 'asc' }] } }, orderBy: [{ careerId: 'asc' }, { effectiveFrom: 'desc' }] }),
+  ]);
+  res.json({ careers, plans: plans.map((plan) => ({ id: plan.id, code: plan.code, name: plan.name, version: plan.version, careerId: plan.careerId, status: plan.status, durationSemesters: plan.durationSemesters, totalCredits: plan.totalCredits, courses: plan.courses.map((item) => ({ code: item.course.code, name: item.course.name, credits: item.course.credits, semester: item.semester, prerequisites: item.course.prerequisites.map((prerequisite) => ({ code: prerequisite.prerequisiteCode, name: prerequisite.prerequisite.name })) })) })) });
+});
+
+app.patch('/api/curriculum-plans/:id/layout', requireAdmin, async (req, res) => {
+  const durationSemesters = Number(req.body.durationSemesters), assignments = Array.isArray(req.body.assignments) ? req.body.assignments : [];
+  if (!Number.isInteger(durationSemesters) || durationSemesters < 1 || durationSemesters > 12) return void res.status(400).json({ message: 'La duración debe estar entre 1 y 12 semestres.' });
+  const plan = await prisma.curriculumPlan.findUnique({ where: { id: req.params.id }, include: { courses: { include: { course: { include: { prerequisites: true } } } } } });
+  if (!plan) return void res.status(404).json({ message: 'Plan académico no encontrado.' });
+  const assignmentMap = new Map<string, number>();
+  for (const item of assignments) { const code = String(item?.courseCode || ''), semester = Number(item?.semester); if (!code || !Number.isInteger(semester) || semester < 1 || semester > durationSemesters || assignmentMap.has(code)) return void res.status(400).json({ message: 'La distribución contiene cursos duplicados o semestres no válidos.' }); assignmentMap.set(code, semester); }
+  const planCodes = new Set(plan.courses.map((item) => item.courseCode));
+  if (assignmentMap.size !== planCodes.size || [...assignmentMap.keys()].some((code) => !planCodes.has(code))) return void res.status(400).json({ message: 'Todos los cursos del pensum deben estar asignados exactamente una vez.' });
+  const issues = plan.courses.flatMap((item) => item.course.prerequisites.flatMap((prerequisite) => { const prerequisiteSemester = assignmentMap.get(prerequisite.prerequisiteCode), courseSemester = assignmentMap.get(item.courseCode)!; return prerequisiteSemester && prerequisiteSemester >= courseSemester ? [{ courseCode: item.courseCode, prerequisiteCode: prerequisite.prerequisiteCode, message: `${prerequisite.prerequisiteCode} debe estar antes que ${item.courseCode}.` }] : []; }));
+  if (issues.length) return void res.status(409).json({ message: 'Corrige los prerrequisitos ubicados en el mismo semestre o en uno posterior.', issues });
+  await prisma.$transaction(async (tx) => {
+    await tx.curriculumPlan.update({ where: { id: plan.id }, data: { durationSemesters } });
+    for (const [courseCode, semester] of assignmentMap) await tx.curriculumPlanCourse.update({ where: { planId_courseCode: { planId: plan.id, courseCode } }, data: { semester } });
+    await tx.auditLog.create({ data: { action: 'ORGANIZE_CURRICULUM_PLAN', entityType: 'CURRICULUM_PLAN', entityId: plan.id, actorId: res.locals.authUser.id, details: JSON.stringify({ durationSemesters, courses: assignmentMap.size }) } });
+  });
+  res.json({ message: 'Distribución del pensum guardada correctamente.', durationSemesters, courses: assignmentMap.size });
+});
+
 app.get('/api/students', requireAdmin, async (_req, res) => {
   const records = await prisma.student.findMany({ include: { campus: true, plan: true }, orderBy: { name: 'asc' } });
   res.json(records.map(studentView));

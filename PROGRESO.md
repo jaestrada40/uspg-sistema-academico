@@ -216,26 +216,23 @@ El despliegue ejecuta automáticamente la verificación de entorno y las migraci
   - El estudiante puede consultar desde el inicio todos los cursos de cada semestre,
     créditos, requisitos previos y materias que se habilitan después.
   - Separación del menú entre `Plan de Estudios` y `Mi Avance Académico`.
+  - Módulo administrativo `Organizar Pensum` con selector de carrera y versión.
+  - Duración configurable de 1 a 12 semestres.
+  - Cursos arrastrables entre columnas con conteo de materias y créditos.
+  - Detección visual y bloqueo de guardado cuando un prerrequisito queda en el
+    mismo semestre o después del curso que lo exige.
+  - Guardado transaccional y auditado de toda la distribución del pensum.
+  - Actualización automática de `Plan de Estudios` para los estudiantes asignados.
 
 ## Próximo paso recomendado
 
-Crear el módulo administrativo **Organizar Pensum**:
-
-1. Seleccionar carrera y versión del plan.
-2. Definir la duración total, por ejemplo 8 semestres.
-3. Mostrar una columna por semestre.
-4. Permitir mover cursos entre semestres con una interfaz cómoda.
-5. Mostrar cantidad de cursos y créditos por semestre.
-6. Detectar prerrequisitos ubicados en el mismo semestre o en uno posterior.
-7. Guardar la distribución completa de una vez.
-8. Agregar posteriormente importación de pensum desde Excel para evitar carga manual.
-
-La distribución guardada alimentará automáticamente la pantalla `Plan de Estudios`
-del estudiante.
+Agregar importación de pensum desde Excel para cargar de una vez código, nombre,
+créditos, semestre y prerrequisitos. La pantalla **Organizar Pensum** ya está
+completada y su distribución alimenta automáticamente `Plan de Estudios`.
 
 ## Pendientes posteriores
 
-1. Módulo administrativo Organizar Pensum e importación desde Excel.
+1. Importación administrativa de pensum desde Excel.
 2. Integración completa con Google Classroom.
 3. Integración física del parqueo con lectores QR, cámaras y barreras.
 4. Planes oficiales para las demás carreras cuando se reciban sus documentos.
@@ -257,6 +254,6 @@ npm run build
 npx prisma migrate status
 ```
 
-Al retomar, leer este archivo y continuar con **Organizar Pensum**.
+Al retomar, leer este archivo y continuar con la **importación de pensum desde Excel**.
 Google Classroom queda en espera de las credenciales de TI y los pagos reales dependen
 de seleccionar una pasarela bancaria.
