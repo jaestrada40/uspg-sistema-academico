@@ -15,6 +15,7 @@ import { useApp } from '../context/AppContext';
 import { PageHeader } from '../components/common/PageHeader';
 import { Tabs } from '../components/common/Tabs';
 import { MfaSettingsCard } from '../components/security/MfaSettingsCard';
+import { PasswordInput } from '../components/common/PasswordInput';
 
 export const ProfileSettingsPage: React.FC = () => {
   const { currentUser, parameters, updateParameters, showToast, institution, saveInstitution, changePassword } = useApp();
@@ -180,8 +181,8 @@ export const ProfileSettingsPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-bold text-[#333333] mb-1">Contraseña Actual</label>
-                  <input
-                    type="password"
+                  <PasswordInput
+                    autoComplete="current-password"
                     value={profileData.currentPassword}
                     onChange={(e) => setProfileData({ ...profileData, currentPassword: e.target.value })}
                     className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium"
@@ -190,8 +191,8 @@ export const ProfileSettingsPage: React.FC = () => {
 
                 <div>
                   <label className="block font-bold text-[#333333] mb-1">Nueva Contraseña</label>
-                  <input
-                    type="password"
+                  <PasswordInput
+                    autoComplete="new-password"
                     value={profileData.newPassword}
                     onChange={(e) => setProfileData({ ...profileData, newPassword: e.target.value })}
                     className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium"
