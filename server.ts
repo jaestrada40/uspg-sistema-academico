@@ -1248,6 +1248,19 @@ app.post('/api/finances/payments', requireAdmin, async (req, res) => {
   res.status(201).json(payment);
 });
 
+app.post('/api/finances/card-payment-demo', requireUser, async (req, res) => {
+  const user = res.locals.authUser;
+  if (user.role !== 'ESTUDIANTE' || !user.carnetOrCode) return void res.status(403).json({ message: 'La demostración debe realizarse desde la cuenta del estudiante.' });
+  const chargeId = String(req.body.chargeId || ''), cardholder = String(req.body.cardholder || '').trim(), last4 = String(req.body.last4 || '').replace(/\D/g, '');
+  if (cardholder.length < 3 || last4.length !== 4) return void res.status(400).json({ message: 'Completa los datos de la tarjeta de demostración.' });
+  const charge = await prisma.financialCharge.findFirst({ where: { id: chargeId, studentCarnet: user.carnetOrCode }, include: { payments: true, adjustments: true } });
+  if (!charge) return void res.status(404).json({ message: 'Cargo no encontrado.' });
+  const balance = Math.max(0, charge.amount - charge.adjustments.reduce((sum, item) => sum + item.amount, 0) - charge.payments.reduce((sum, item) => sum + item.amount, 0));
+  if (balance <= 0) return void res.status(409).json({ message: 'Este cargo ya no tiene saldo pendiente.' });
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  res.json({ demo: true, authorizationCode: `DEMO-${randomBytes(3).toString('hex').toUpperCase()}`, last4, amount: balance, concept: charge.concept, processedAt: new Date() });
+});
+
 app.get('/api/finances/transfer-proofs', requireUser, async (req, res) => {
   const user = res.locals.authUser;
   if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'Acción no permitida.' });
