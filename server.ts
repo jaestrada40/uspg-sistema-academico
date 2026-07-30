@@ -574,7 +574,8 @@ app.get('/api/students', requireAdmin, async (_req, res) => {
 
 app.post('/api/students', requireAdmin, async (req, res) => {
   const data = req.body;
-  if (roleFromEmail(String(data.email || '')) !== 'ESTUDIANTE') {
+  const normalizedEmail = String(data.email || '').trim().toLowerCase();
+  if (roleFromEmail(normalizedEmail) !== 'ESTUDIANTE') {
     return void res.status(400).json({ message: 'El estudiante debe usar un correo @alumno.uspg.edu.gt.' });
   }
   const password = temporaryPassword();
@@ -585,8 +586,8 @@ app.post('/api/students', requireAdmin, async (req, res) => {
     if (!plan || plan.careerId !== data.careerId) return void res.status(400).json({ message: 'Selecciona un plan académico válido para la carrera.' });
     if (!campus) return void res.status(400).json({ message: 'Selecciona un campus válido.' });
     const student = await prisma.$transaction(async (tx) => {
-      await tx.user.create({ data: { id: userId, name: data.name, email: data.email.toLowerCase(), passwordHash: hashPassword(password), role: 'ESTUDIANTE', carnetOrCode: data.carnet, phone: data.phone, department: data.careerName, mustChangePassword: true } });
-      const created = await tx.student.create({ data: { carnet: data.carnet, name: data.name, email: data.email.toLowerCase(), phone: data.phone, careerId: data.careerId, careerName: data.careerName, entryCycle: data.entryCycle, jornada: data.jornada, status: data.status || 'Activo', gpa: data.gpa || 0, creditsEarned: data.creditsEarned || 0, totalCreditsRequired: plan.totalCredits, address: data.address, dpi: data.dpi, campusId: campus.id, planId: plan.id, userId }, include: { campus: true, plan: true } });
+      await tx.user.create({ data: { id: userId, name: data.name, email: normalizedEmail, passwordHash: hashPassword(password), role: 'ESTUDIANTE', carnetOrCode: data.carnet, phone: data.phone, department: data.careerName, mustChangePassword: true } });
+      const created = await tx.student.create({ data: { carnet: data.carnet, name: data.name, email: normalizedEmail, phone: data.phone, careerId: data.careerId, careerName: data.careerName, entryCycle: data.entryCycle, jornada: data.jornada, status: data.status || 'Activo', gpa: data.gpa || 0, creditsEarned: data.creditsEarned || 0, totalCreditsRequired: plan.totalCredits, address: data.address, dpi: data.dpi, campusId: campus.id, planId: plan.id, userId }, include: { campus: true, plan: true } });
       await tx.auditLog.create({ data: { action: 'CREATE', entityType: 'STUDENT', entityId: data.carnet, actorId: res.locals.authUser.id } });
       return created;
     });
@@ -600,15 +601,16 @@ app.patch('/api/students/:carnet', requireAdmin, async (req, res) => {
   const current = await prisma.student.findUnique({ where: { carnet: req.params.carnet } });
   if (!current) return void res.status(404).json({ message: 'Estudiante no encontrado.' });
   const next = { ...current, ...req.body };
-  if (roleFromEmail(String(next.email)) !== 'ESTUDIANTE') return void res.status(400).json({ message: 'El estudiante debe usar un correo @alumno.uspg.edu.gt.' });
+  const normalizedEmail = String(next.email || '').trim().toLowerCase();
+  if (roleFromEmail(normalizedEmail) !== 'ESTUDIANTE') return void res.status(400).json({ message: 'El estudiante debe usar un correo @alumno.uspg.edu.gt.' });
   try {
     const plan = next.planId ? await prisma.curriculumPlan.findUnique({ where: { id: next.planId } }) : null;
     const campus = next.campusId ? await prisma.campus.findUnique({ where: { id: next.campusId } }) : null;
     if (!plan || plan.careerId !== next.careerId) return void res.status(400).json({ message: 'Selecciona un plan académico válido para la carrera.' });
     if (!campus) return void res.status(400).json({ message: 'Selecciona un campus válido.' });
     const student = await prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: current.userId }, data: { name: next.name, email: next.email.toLowerCase(), phone: next.phone, active: next.status === 'Activo' } });
-      const updated = await tx.student.update({ where: { carnet: req.params.carnet }, data: { name: next.name, email: next.email.toLowerCase(), phone: next.phone, careerId: next.careerId, careerName: next.careerName, entryCycle: next.entryCycle, jornada: next.jornada, status: next.status, gpa: next.gpa, creditsEarned: next.creditsEarned, totalCreditsRequired: plan.totalCredits, address: next.address, dpi: next.dpi, campusId: campus.id, planId: plan.id }, include: { campus: true, plan: true } });
+      await tx.user.update({ where: { id: current.userId }, data: { name: next.name, email: normalizedEmail, phone: next.phone, active: next.status === 'Activo' } });
+      const updated = await tx.student.update({ where: { carnet: req.params.carnet }, data: { name: next.name, email: normalizedEmail, phone: next.phone, careerId: next.careerId, careerName: next.careerName, entryCycle: next.entryCycle, jornada: next.jornada, status: next.status, gpa: next.gpa, creditsEarned: next.creditsEarned, totalCreditsRequired: plan.totalCredits, address: next.address, dpi: next.dpi, campusId: campus.id, planId: plan.id }, include: { campus: true, plan: true } });
       await tx.auditLog.create({ data: { action: 'UPDATE', entityType: 'STUDENT', entityId: req.params.carnet, actorId: res.locals.authUser.id } });
       return updated;
     });

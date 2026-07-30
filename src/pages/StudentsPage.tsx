@@ -89,8 +89,9 @@ export const StudentsPage: React.FC = () => {
     const errors: Record<string, string> = {};
     if (!formData.carnet?.trim()) errors.carnet = 'El carné es obligatorio';
     if (!formData.name?.trim()) errors.name = 'El nombre completo es obligatorio';
-    if (!formData.email?.trim()) errors.email = 'El correo electrónico es obligatorio';
-    else if (!formData.email.toLowerCase().endsWith('@alumno.uspg.edu.gt')) errors.email = 'Debe usar un correo @alumno.uspg.edu.gt';
+    const normalizedEmail = formData.email?.trim().toLowerCase();
+    if (!normalizedEmail) errors.email = 'El correo electrónico es obligatorio';
+    else if (!normalizedEmail.endsWith('@alumno.uspg.edu.gt')) errors.email = 'Debe usar un correo @alumno.uspg.edu.gt';
     if (!formData.careerId) errors.careerId = 'Debes seleccionar una carrera';
     if (!formData.campusId) errors.campusId = 'Debes seleccionar un campus';
     if (!formData.planId) errors.planId = 'Debes seleccionar un plan académico';
@@ -107,7 +108,7 @@ export const StudentsPage: React.FC = () => {
     const newStudent: Student = {
       carnet: formData.carnet!,
       name: formData.name!,
-      email: formData.email!,
+      email: formData.email!.trim().toLowerCase(),
       phone: formData.phone || '+502 0000-0000',
       careerId: formData.careerId!,
       careerName: selectedCareer?.name || 'Carrera USPG',
@@ -132,7 +133,7 @@ export const StudentsPage: React.FC = () => {
     e.preventDefault();
     if (!validateForm() || !selectedStudent) return;
 
-    if (!(await updateStudent(selectedStudent.carnet, formData))) return;
+    if (!(await updateStudent(selectedStudent.carnet, { ...formData, email: formData.email?.trim().toLowerCase() }))) return;
     setShowEditModal(false);
     setSelectedStudent(null);
     resetForm();
@@ -399,7 +400,7 @@ export const StudentsPage: React.FC = () => {
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="amorales@estudiantes.uspg.edu.gt"
+                  placeholder="amorales@alumno.uspg.edu.gt"
                   className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333]"
                 />
                 {formErrors.email && <p className="text-[10px] font-semibold text-[#C53030] mt-0.5">{formErrors.email}</p>}
@@ -516,9 +517,11 @@ export const StudentsPage: React.FC = () => {
                 <input
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333]"
+                  onChange={(e) => { setFormData({ ...formData, email: e.target.value }); setFormErrors((current) => ({ ...current, email: '' })); }}
+                  onBlur={() => setFormData((current) => ({ ...current, email: current.email?.trim().toLowerCase() }))}
+                  className={`w-full rounded-lg border bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333] ${formErrors.email ? 'border-[#C53030]' : 'border-[#E2E8F0]'}`}
                 />
+                {formErrors.email && <p className="mt-1 text-[10px] font-semibold text-[#C53030]">{formErrors.email}</p>}
               </div>
 
               <div>
