@@ -47,17 +47,70 @@ const notifyByCarnet = async (carnet: string, title: string, message: string, ty
 };
 
 const app = express();
-if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction) app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  if (isProduction) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('Content-Security-Policy', "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://accounts.google.com https://www.googleapis.com; media-src 'self' blob:; worker-src 'self' blob:");
+  }
   next();
 });
-app.use(express.json({ limit: '8mb' }));
+app.use(express.json({ limit: '5mb', strict: true }));
+
+const configuredOrigin = (() => {
+  try { return process.env.APP_URL ? new URL(process.env.APP_URL).origin : null; } catch { return null; }
+})();
+const developmentOrigins = new Set(['http://localhost:3000', 'http://127.0.0.1:3000']);
+app.use('/api', (req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  const origin = req.get('origin');
+  const fetchSite = req.get('sec-fetch-site');
+  const allowed = origin && (origin === configuredOrigin || (!isProduction && developmentOrigins.has(origin)));
+  if ((origin && !allowed) || fetchSite === 'cross-site') {
+    return void res.status(403).json({ message: 'Origen de solicitud no permitido.' });
+  }
+  next();
+});
+
+type RateBucket = { count: number; resetAt: number };
+const apiRateBuckets = new Map<string, RateBucket>();
+const apiRateWindowMs = 15 * 60 * 1000;
+const apiRateLimit = 600;
+app.use('/api', (req, res, next) => {
+  const now = Date.now();
+  const key = req.ip || req.socket.remoteAddress || 'unknown';
+  const current = apiRateBuckets.get(key);
+  const bucket = !current || current.resetAt <= now ? { count: 0, resetAt: now + apiRateWindowMs } : current;
+  bucket.count += 1;
+  apiRateBuckets.set(key, bucket);
+  res.setHeader('RateLimit-Limit', String(apiRateLimit));
+  res.setHeader('RateLimit-Remaining', String(Math.max(0, apiRateLimit - bucket.count)));
+  res.setHeader('RateLimit-Reset', String(Math.ceil((bucket.resetAt - now) / 1000)));
+  if (bucket.count > apiRateLimit) {
+    res.setHeader('Retry-After', String(Math.ceil((bucket.resetAt - now) / 1000)));
+    return void res.status(429).json({ message: 'Demasiadas solicitudes. Intenta nuevamente más tarde.' });
+  }
+  if (apiRateBuckets.size > 10_000) {
+    for (const [bucketKey, value] of apiRateBuckets) if (value.resetAt <= now) apiRateBuckets.delete(bucketKey);
+  }
+  next();
+});
 
 const sessionCookie = 'uspg_session';
+const sessionCookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: isProduction,
+  path: '/',
+};
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 const parseCookies = (header = '') => Object.fromEntries(
   header.split(';').map((part) => part.trim().split('=').map(decodeURIComponent)).filter(([key]) => key)
@@ -187,11 +240,8 @@ app.post('/api/auth/login', async (req, res) => {
     data: { tokenHash: hashToken(token), userId: user.id, expiresAt: new Date(Date.now() + durationMs) },
   });
   res.cookie(sessionCookie, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    ...sessionCookieOptions,
     maxAge: rememberMe ? durationMs : undefined,
-    path: '/',
   });
   res.json({ user: publicUser(user) });
 });
@@ -208,7 +258,7 @@ app.get('/api/auth/me', async (req, res) => {
   });
   if (!session || session.expiresAt <= new Date() || !session.user.active) {
     if (session) await prisma.session.delete({ where: { id: session.id } });
-    res.clearCookie(sessionCookie, { path: '/' });
+    res.clearCookie(sessionCookie, sessionCookieOptions);
     res.status(401).json({ message: 'La sesión expiró.' });
     return;
   }
@@ -218,7 +268,7 @@ app.get('/api/auth/me', async (req, res) => {
 app.post('/api/auth/logout', async (req, res) => {
   const token = readSessionToken(req);
   if (token) await prisma.session.deleteMany({ where: { tokenHash: hashToken(token) } });
-  res.clearCookie(sessionCookie, { path: '/' });
+  res.clearCookie(sessionCookie, sessionCookieOptions);
   res.json({ ok: true });
 });
 

@@ -83,7 +83,9 @@ Antes de producción se migrará a PostgreSQL.
   - Guía de cambio controlado sin afectar la base local.
 - Seguridad y recuperación:
   - Bloqueo temporal después de cinco intentos fallidos de acceso.
-  - Cabeceras HTTP defensivas y cookies seguras en producción.
+  - Cabeceras HTTP defensivas, CSP, HSTS y cookies seguras en producción.
+  - Protección de operaciones contra solicitudes de origen cruzado y abuso de API.
+  - Validación estricta de HTTPS y longitud de secretos antes del despliegue.
   - Respaldos consistentes para SQLite y PostgreSQL con SHA-256.
   - Verificación de integridad y procedimiento documentado de recuperación.
 - Pruebas por rol:
