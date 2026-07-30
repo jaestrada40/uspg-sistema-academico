@@ -1,15 +1,90 @@
 import 'dotenv/config';
 import express from 'express';
-import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import PDFDocument from 'pdfkit';
 import nodemailer from 'nodemailer';
+import QRCode from 'qrcode';
 import { createReceiptPdf, createStatementPdf } from './src/server/financialPdf';
 import { createPrismaClient } from './src/server/prismaClient';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const prisma = createPrismaClient();
+
+const defaultMfaRequiredRoles = ['ADMIN', 'DOCENTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'];
+const mfaEncryptionKey = (() => {
+  const configured = process.env.MFA_ENCRYPTION_KEY;
+  if (configured) {
+    const decoded = Buffer.from(configured, 'base64');
+    if (decoded.length === 32) return decoded;
+  }
+  if (process.env.NODE_ENV === 'production') throw new Error('MFA_ENCRYPTION_KEY debe contener exactamente 32 bytes codificados en base64.');
+  return createHash('sha256').update('uspg-mfa-development-key').digest();
+})();
+const encryptMfaSecret = (value: string) => {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', mfaEncryptionKey, iv);
+  const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+  return [iv, cipher.getAuthTag(), encrypted].map((part) => part.toString('base64url')).join('.');
+};
+const decryptMfaSecret = (value: string) => {
+  const [iv, tag, encrypted] = value.split('.').map((part) => Buffer.from(part, 'base64url'));
+  if (!iv || !tag || !encrypted) throw new Error('Secreto MFA cifrado inválido.');
+  const decipher = createDecipheriv('aes-256-gcm', mfaEncryptionKey, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
+};
+const base32Alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const encodeBase32 = (input: Buffer) => {
+  let bits = '', output = '';
+  for (const byte of input) bits += byte.toString(2).padStart(8, '0');
+  for (let index = 0; index < bits.length; index += 5) output += base32Alphabet[Number.parseInt(bits.slice(index, index + 5).padEnd(5, '0'), 2)];
+  return output;
+};
+const decodeBase32 = (input: string) => {
+  let bits = '';
+  for (const character of input.toUpperCase().replace(/=|\s|-/g, '')) {
+    const index = base32Alphabet.indexOf(character);
+    if (index < 0) throw new Error('Secreto TOTP inválido.');
+    bits += index.toString(2).padStart(5, '0');
+  }
+  const bytes: number[] = [];
+  for (let index = 0; index + 8 <= bits.length; index += 8) bytes.push(Number.parseInt(bits.slice(index, index + 8), 2));
+  return Buffer.from(bytes);
+};
+const totpAt = (secret: string, timestamp = Date.now()) => {
+  const counter = Math.floor(timestamp / 30_000);
+  const counterBuffer = Buffer.alloc(8);
+  counterBuffer.writeBigUInt64BE(BigInt(counter));
+  const digest = createHmac('sha1', decodeBase32(secret)).update(counterBuffer).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const value = (digest.readUInt32BE(offset) & 0x7fffffff) % 1_000_000;
+  return value.toString().padStart(6, '0');
+};
+const matchingTotpStep = (secret: string, code: string) => {
+  const normalized = code.replace(/\s/g, '');
+  if (!/^\d{6}$/.test(normalized)) return null;
+  for (const window of [-1, 0, 1]) {
+    const expected = Buffer.from(totpAt(secret, Date.now() + window * 30_000));
+    const actual = Buffer.from(normalized);
+    if (expected.length === actual.length && timingSafeEqual(expected, actual)) return Math.floor(Date.now() / 30_000) + window;
+  }
+  return null;
+};
+const verifyTotp = (secret: string, code: string) => matchingTotpStep(secret, code) !== null;
+const recoveryCodeHash = (code: string) => createHmac('sha256', mfaEncryptionKey).update(code.toUpperCase().replace(/[^A-Z2-7]/g, '')).digest('hex');
+const generateRecoveryCodes = () => Array.from({ length: 8 }, () => {
+  const value = encodeBase32(randomBytes(5));
+  return `${value.slice(0, 4)}-${value.slice(4, 8)}`;
+});
+const getMfaRequiredRoles = async () => {
+  const config = await prisma.institutionConfig.findUnique({ where: { id: 1 }, select: { mfaRequiredRoles: true } });
+  try {
+    const parsed = JSON.parse(config?.mfaRequiredRoles || JSON.stringify(defaultMfaRequiredRoles));
+    return Array.isArray(parsed) ? parsed.filter((role): role is string => typeof role === 'string') : defaultMfaRequiredRoles;
+  } catch { return defaultMfaRequiredRoles; }
+};
 
 const smtpPort = Number(process.env.SMTP_PORT || 587);
 const mailTransport = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS ? nodemailer.createTransport({
@@ -117,8 +192,8 @@ const parseCookies = (header = '') => Object.fromEntries(
 );
 const publicUser = (user: {
   id: string; name: string; email: string; role: string; avatar: string | null;
-  carnetOrCode: string | null; phone: string | null; department: string | null; mustChangePassword: boolean;
-}) => ({
+  carnetOrCode: string | null; phone: string | null; department: string | null; mustChangePassword: boolean; mfaEnabled: boolean;
+}, requiredRoles: string[] = defaultMfaRequiredRoles) => ({
   id: user.id,
   name: user.name,
   email: user.email,
@@ -128,6 +203,8 @@ const publicUser = (user: {
   phone: user.phone || undefined,
   department: user.department || undefined,
   mustChangePassword: user.mustChangePassword,
+  mfaEnabled: user.mfaEnabled,
+  mfaEnrollmentRequired: requiredRoles.includes(user.role) && !user.mfaEnabled,
 });
 
 const verifyPassword = (password: string, stored: string) => {
@@ -153,6 +230,13 @@ const roleFromEmail = (email: string) => {
 };
 
 const readSessionToken = (req: express.Request) => parseCookies(req.headers.cookie)[sessionCookie];
+const blockUntilMfaEnrollment = async (req: express.Request, res: express.Response, user: { role: string; mfaEnabled: boolean }) => {
+  if (user.mfaEnabled || req.path.startsWith('/api/auth/mfa/') || req.path === '/api/auth/change-password') return false;
+  const requiredRoles = await getMfaRequiredRoles();
+  if (!requiredRoles.includes(user.role)) return false;
+  res.status(428).json({ message: 'Debes configurar la autenticación multifactor antes de continuar.', code: 'MFA_ENROLLMENT_REQUIRED' });
+  return true;
+};
 const requireAdmin: express.RequestHandler = async (req, res, next) => {
   try {
     const token = readSessionToken(req);
@@ -172,6 +256,7 @@ const requireAdmin: express.RequestHandler = async (req, res, next) => {
       res.status(403).json({ message: 'Solo un administrador puede realizar esta acción.' });
       return;
     }
+    if (await blockUntilMfaEnrollment(req, res, session.user)) return;
     res.locals.authUser = session.user;
     next();
   } catch (error) {
@@ -190,6 +275,7 @@ const requireUser: express.RequestHandler = async (req, res, next) => {
     if (!session || session.expiresAt <= new Date() || !session.user.active) {
       return void res.status(401).json({ message: 'La sesión no es válida.' });
     }
+    if (await blockUntilMfaEnrollment(req, res, session.user)) return;
     res.locals.authUser = session.user;
     next();
   } catch (error) {
@@ -209,6 +295,14 @@ const registerFailedLogin = (key: string) => {
   const current = loginAttempts.get(key);
   const count = (current?.blockedUntil && current.blockedUntil > Date.now() ? current.count : 0) + 1;
   loginAttempts.set(key, { count, blockedUntil: count >= 5 ? Date.now() + 15 * 60 * 1000 : 0 });
+};
+
+const createAuthenticatedSession = async (res: express.Response, userId: string, rememberMe: boolean) => {
+  await prisma.session.deleteMany({ where: { expiresAt: { lte: new Date() } } });
+  const token = randomBytes(32).toString('base64url');
+  const durationMs = (rememberMe ? 30 : 1) * 24 * 60 * 60 * 1000;
+  await prisma.session.create({ data: { tokenHash: hashToken(token), userId, expiresAt: new Date(Date.now() + durationMs) } });
+  res.cookie(sessionCookie, token, { ...sessionCookieOptions, maxAge: rememberMe ? durationMs : undefined });
 };
 
 app.post('/api/auth/login', async (req, res) => {
@@ -233,17 +327,46 @@ app.post('/api/auth/login', async (req, res) => {
 
   loginAttempts.delete(attemptKey);
 
-  await prisma.session.deleteMany({ where: { expiresAt: { lte: new Date() } } });
-  const token = randomBytes(32).toString('base64url');
-  const durationMs = (rememberMe ? 30 : 1) * 24 * 60 * 60 * 1000;
-  await prisma.session.create({
-    data: { tokenHash: hashToken(token), userId: user.id, expiresAt: new Date(Date.now() + durationMs) },
-  });
-  res.cookie(sessionCookie, token, {
-    ...sessionCookieOptions,
-    maxAge: rememberMe ? durationMs : undefined,
-  });
-  res.json({ user: publicUser(user) });
+  if (user.mfaEnabled) {
+    await prisma.mfaChallenge.deleteMany({ where: { OR: [{ expiresAt: { lte: new Date() } }, { userId: user.id }] } });
+    const challengeToken = randomBytes(32).toString('base64url');
+    await prisma.mfaChallenge.create({ data: { tokenHash: hashToken(challengeToken), userId: user.id, rememberMe, expiresAt: new Date(Date.now() + 5 * 60 * 1000) } });
+    return void res.status(202).json({ mfaRequired: true, challengeToken, methods: ['TOTP', 'RECOVERY'] });
+  }
+  await createAuthenticatedSession(res, user.id, rememberMe);
+  const requiredRoles = await getMfaRequiredRoles();
+  res.json({ user: publicUser(user, requiredRoles) });
+});
+
+app.post('/api/auth/mfa/verify', async (req, res) => {
+  const challengeToken = String(req.body?.challengeToken || '');
+  const code = String(req.body?.code || '');
+  const challenge = challengeToken ? await prisma.mfaChallenge.findUnique({ where: { tokenHash: hashToken(challengeToken) }, include: { user: true } }) : null;
+  if (!challenge || challenge.expiresAt <= new Date() || !challenge.user.active || !challenge.user.mfaEnabled || !challenge.user.mfaSecretEncrypted) {
+    if (challenge) await prisma.mfaChallenge.delete({ where: { id: challenge.id } });
+    return void res.status(401).json({ message: 'El desafío MFA expiró. Inicia sesión nuevamente.' });
+  }
+  if (challenge.attempts >= 5) {
+    await prisma.mfaChallenge.delete({ where: { id: challenge.id } });
+    return void res.status(429).json({ message: 'Demasiados intentos MFA. Inicia sesión nuevamente.' });
+  }
+  const secret = decryptMfaSecret(challenge.user.mfaSecretEncrypted);
+  const matchedTotpStep = matchingTotpStep(secret, code);
+  const hashes: string[] = JSON.parse(challenge.user.mfaRecoveryCodeHashes || '[]');
+  const recoveryHash = recoveryCodeHash(code);
+  const recoveryIndex = hashes.findIndex((hash) => hash.length === recoveryHash.length && timingSafeEqual(Buffer.from(hash), Buffer.from(recoveryHash)));
+  if ((matchedTotpStep === null || (challenge.user.mfaLastUsedStep !== null && matchedTotpStep <= challenge.user.mfaLastUsedStep)) && recoveryIndex < 0) {
+    await prisma.mfaChallenge.update({ where: { id: challenge.id }, data: { attempts: { increment: 1 } } });
+    return void res.status(401).json({ message: 'Código de verificación incorrecto.' });
+  }
+  await prisma.$transaction([
+    prisma.mfaChallenge.delete({ where: { id: challenge.id } }),
+    ...(recoveryIndex >= 0 ? [prisma.user.update({ where: { id: challenge.userId }, data: { mfaRecoveryCodeHashes: JSON.stringify(hashes.filter((_, index) => index !== recoveryIndex)) } })] : [prisma.user.update({ where: { id: challenge.userId }, data: { mfaLastUsedStep: matchedTotpStep } })]),
+    prisma.auditLog.create({ data: { action: recoveryIndex >= 0 ? 'LOGIN_MFA_RECOVERY' : 'LOGIN_MFA_TOTP', entityType: 'USER', entityId: challenge.userId, actorId: challenge.userId } }),
+  ]);
+  await createAuthenticatedSession(res, challenge.userId, challenge.rememberMe);
+  const requiredRoles = await getMfaRequiredRoles();
+  res.json({ user: publicUser(challenge.user, requiredRoles), recoveryCodeUsed: recoveryIndex >= 0 });
 });
 
 app.get('/api/auth/me', async (req, res) => {
@@ -262,7 +385,8 @@ app.get('/api/auth/me', async (req, res) => {
     res.status(401).json({ message: 'La sesión expiró.' });
     return;
   }
-  res.json({ user: publicUser(session.user) });
+  const requiredRoles = await getMfaRequiredRoles();
+  res.json({ user: publicUser(session.user, requiredRoles) });
 });
 
 app.post('/api/auth/logout', async (req, res) => {
@@ -284,6 +408,102 @@ app.post('/api/auth/change-password', requireUser, async (req, res) => {
   }
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(newPassword), mustChangePassword: false } });
   await prisma.session.deleteMany({ where: { userId: user.id, tokenHash: { not: hashToken(readSessionToken(req)) } } });
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/mfa/status', requireUser, async (_req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: res.locals.authUser.id } });
+  if (!user) return void res.status(404).json({ message: 'Usuario no encontrado.' });
+  const requiredRoles = await getMfaRequiredRoles();
+  const recoveryCodes: string[] = JSON.parse(user.mfaRecoveryCodeHashes || '[]');
+  res.json({ enabled: user.mfaEnabled, required: requiredRoles.includes(user.role), requiredRoles, recoveryCodesRemaining: recoveryCodes.length });
+});
+
+app.post('/api/auth/mfa/setup', requireUser, async (req, res) => {
+  const user = res.locals.authUser;
+  const currentPassword = String(req.body?.currentPassword || '');
+  if (!verifyPassword(currentPassword, user.passwordHash)) return void res.status(400).json({ message: 'La contraseña actual no es correcta.' });
+  if (user.mfaEnabled) return void res.status(409).json({ message: 'MFA ya está activo en esta cuenta.' });
+  const secret = encodeBase32(randomBytes(20));
+  await prisma.user.update({ where: { id: user.id }, data: { mfaPendingSecretEncrypted: encryptMfaSecret(secret) } });
+  const label = encodeURIComponent(`USPG:${user.email}`);
+  const issuer = encodeURIComponent('Universidad de San Pablo de Guatemala');
+  const otpauthUri = `otpauth://totp/${label}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`;
+  const qrDataUrl = await QRCode.toDataURL(otpauthUri, { errorCorrectionLevel: 'M', margin: 1, width: 280 });
+  await prisma.auditLog.create({ data: { action: 'START_MFA_SETUP', entityType: 'USER', entityId: user.id, actorId: user.id } });
+  res.json({ secret, otpauthUri, qrDataUrl });
+});
+
+app.post('/api/auth/mfa/enable', requireUser, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: res.locals.authUser.id } });
+  if (!user?.mfaPendingSecretEncrypted) return void res.status(409).json({ message: 'Primero inicia la configuración MFA.' });
+  const secret = decryptMfaSecret(user.mfaPendingSecretEncrypted);
+  if (!verifyTotp(secret, String(req.body?.code || ''))) return void res.status(400).json({ message: 'El código no es válido. Verifica la hora del dispositivo.' });
+  const recoveryCodes = generateRecoveryCodes();
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { mfaEnabled: true, mfaSecretEncrypted: user.mfaPendingSecretEncrypted, mfaPendingSecretEncrypted: null, mfaRecoveryCodeHashes: JSON.stringify(recoveryCodes.map(recoveryCodeHash)), mfaLastUsedStep: null } }),
+    prisma.auditLog.create({ data: { action: 'ENABLE_MFA', entityType: 'USER', entityId: user.id, actorId: user.id } }),
+  ]);
+  await notifyUser(user.id, 'Autenticación multifactor activada', 'MFA fue activado en tu cuenta. Si no reconoces este cambio, comunícate con administración.', 'SUCCESS', '/perfil');
+  res.json({ ok: true, recoveryCodes });
+});
+
+app.post('/api/auth/mfa/recovery-codes', requireUser, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: res.locals.authUser.id } });
+  if (!user?.mfaEnabled || !user.mfaSecretEncrypted) return void res.status(409).json({ message: 'MFA no está activo.' });
+  if (!verifyPassword(String(req.body?.currentPassword || ''), user.passwordHash) || !verifyTotp(decryptMfaSecret(user.mfaSecretEncrypted), String(req.body?.code || ''))) return void res.status(400).json({ message: 'Contraseña o código MFA incorrecto.' });
+  const recoveryCodes = generateRecoveryCodes();
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { mfaRecoveryCodeHashes: JSON.stringify(recoveryCodes.map(recoveryCodeHash)) } }),
+    prisma.auditLog.create({ data: { action: 'REGENERATE_MFA_RECOVERY_CODES', entityType: 'USER', entityId: user.id, actorId: user.id } }),
+  ]);
+  res.json({ recoveryCodes });
+});
+
+app.post('/api/auth/mfa/disable', requireUser, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: res.locals.authUser.id } });
+  if (!user?.mfaEnabled || !user.mfaSecretEncrypted) return void res.status(409).json({ message: 'MFA no está activo.' });
+  const requiredRoles = await getMfaRequiredRoles();
+  if (requiredRoles.includes(user.role)) return void res.status(409).json({ message: 'MFA es obligatorio para tu rol. Un administrador debe cambiar primero la política.' });
+  const code = String(req.body?.code || '');
+  const hashes: string[] = JSON.parse(user.mfaRecoveryCodeHashes || '[]');
+  const codeHash = recoveryCodeHash(code);
+  const validRecovery = hashes.some((hash) => hash.length === codeHash.length && timingSafeEqual(Buffer.from(hash), Buffer.from(codeHash)));
+  if (!verifyPassword(String(req.body?.currentPassword || ''), user.passwordHash) || (!verifyTotp(decryptMfaSecret(user.mfaSecretEncrypted), code) && !validRecovery)) return void res.status(400).json({ message: 'Contraseña o código MFA incorrecto.' });
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { mfaEnabled: false, mfaSecretEncrypted: null, mfaPendingSecretEncrypted: null, mfaRecoveryCodeHashes: null, mfaLastUsedStep: null } }),
+    prisma.mfaChallenge.deleteMany({ where: { userId: user.id } }),
+    prisma.auditLog.create({ data: { action: 'DISABLE_MFA', entityType: 'USER', entityId: user.id, actorId: user.id } }),
+  ]);
+  await notifyUser(user.id, 'Autenticación multifactor desactivada', 'MFA fue desactivado en tu cuenta.', 'WARNING', '/perfil');
+  res.json({ ok: true });
+});
+
+app.get('/api/security/mfa-policy', requireAdmin, async (_req, res) => {
+  res.json({ requiredRoles: await getMfaRequiredRoles(), availableRoles: ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'] });
+});
+
+app.put('/api/security/mfa-policy', requireAdmin, async (req, res) => {
+  const availableRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'];
+  const requiredRoles: string[] = Array.isArray(req.body?.requiredRoles) ? [...new Set<string>(req.body.requiredRoles.map((role: unknown) => String(role).toUpperCase()))] : [];
+  if (requiredRoles.some((role) => !availableRoles.includes(role))) return void res.status(400).json({ message: 'La política contiene un rol inválido.' });
+  await prisma.$transaction([
+    prisma.institutionConfig.update({ where: { id: 1 }, data: { mfaRequiredRoles: JSON.stringify(requiredRoles) } }),
+    prisma.auditLog.create({ data: { action: 'UPDATE_MFA_POLICY', entityType: 'INSTITUTION', entityId: '1', actorId: res.locals.authUser.id, details: JSON.stringify({ requiredRoles }) } }),
+  ]);
+  res.json({ requiredRoles });
+});
+
+app.post('/api/security/users/:id/reset-mfa', requireAdmin, async (req, res) => {
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target) return void res.status(404).json({ message: 'Usuario no encontrado.' });
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: target.id }, data: { mfaEnabled: false, mfaSecretEncrypted: null, mfaPendingSecretEncrypted: null, mfaRecoveryCodeHashes: null, mfaLastUsedStep: null } }),
+    prisma.mfaChallenge.deleteMany({ where: { userId: target.id } }),
+    prisma.session.deleteMany({ where: { userId: target.id } }),
+    prisma.auditLog.create({ data: { action: 'ADMIN_RESET_MFA', entityType: 'USER', entityId: target.id, actorId: res.locals.authUser.id } }),
+  ]);
+  await notifyUser(target.id, 'MFA reiniciado por administración', 'Tus métodos MFA fueron eliminados. Deberás configurarlos nuevamente si tu rol lo requiere.', 'WARNING', '/perfil');
   res.json({ ok: true });
 });
 

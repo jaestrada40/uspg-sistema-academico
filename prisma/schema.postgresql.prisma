@@ -22,15 +22,27 @@ model User {
   avatar       String?
   phone        String?
   department   String?
+  librarySuspendedUntil DateTime? @map("library_suspended_until")
+  librarySuspensionReason String? @map("library_suspension_reason")
   active       Boolean   @default(true)
   mustChangePassword Boolean @default(true) @map("must_change_password")
+  mfaEnabled Boolean @default(false) @map("mfa_enabled")
+  mfaSecretEncrypted String? @map("mfa_secret_encrypted")
+  mfaPendingSecretEncrypted String? @map("mfa_pending_secret_encrypted")
+  mfaRecoveryCodeHashes String? @map("mfa_recovery_code_hashes")
+  mfaLastUsedStep Int? @map("mfa_last_used_step")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   sessions     Session[]
+  mfaChallenges MfaChallenge[]
   student      Student?
   teacher      Teacher?
   auditLogs    AuditLog[] @relation("AuditActor")
   appNotifications AppNotification[]
+  libraryLoans LibraryLoan[]
+  libraryReservations LibraryReservation[]
+  parkingVehicles ParkingVehicle[]
+  parkingVisits   ParkingVisit[]
 
   @@map("users")
 }
@@ -51,7 +63,11 @@ model Student {
   address              String?
   dpi                  String?
   userId               String   @unique @map("user_id")
+  campusId             String?  @map("campus_id")
+  planId               String?  @map("plan_id")
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus               Campus?  @relation(fields: [campusId], references: [id], onDelete: Restrict)
+  plan                 CurriculumPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
   enrollments          Enrollment[]
   gradeRecords         GradeRecord[]
   financialCharges     FinancialCharge[]
@@ -116,6 +132,7 @@ model Career {
   updatedAt         DateTime @updatedAt @map("updated_at")
   courses           Course[]
   financialFees     CareerFee[]
+  curriculumPlans   CurriculumPlan[]
 
   @@map("careers")
 }
@@ -133,12 +150,61 @@ model Course {
   career           Career   @relation(fields: [careerId], references: [code], onDelete: Restrict)
   prerequisites    CoursePrerequisite[] @relation("CoursePrerequisites")
   requiredFor      CoursePrerequisite[] @relation("RequiredFor")
+  curriculumPlans  CurriculumPlanCourse[]
   sections         Section[]
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@index([careerId])
   @@map("courses")
+}
+
+model Campus {
+  id        String   @id
+  code      String   @unique
+  name      String
+  address   String?
+  status    String   @default("Activo")
+  students  Student[]
+  financialFees CareerFee[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("campuses")
+}
+
+model CurriculumPlan {
+  id                String   @id
+  code              String   @unique
+  name              String
+  version           String
+  effectiveFrom     DateTime @map("effective_from")
+  effectiveTo       DateTime? @map("effective_to")
+  status            String   @default("Activo")
+  totalCredits      Int      @map("total_credits")
+  durationSemesters Int      @map("duration_semesters")
+  careerId          String   @map("career_id")
+  career            Career   @relation(fields: [careerId], references: [code], onDelete: Restrict)
+  courses           CurriculumPlanCourse[]
+  students          Student[]
+  financialFees     CareerFee[]
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([careerId, status])
+  @@map("curriculum_plans")
+}
+
+model CurriculumPlanCourse {
+  planId     String @map("plan_id")
+  courseCode String @map("course_code")
+  semester   Int
+  plan       CurriculumPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  course     Course @relation(fields: [courseCode], references: [code], onDelete: Restrict)
+
+  @@id([planId, courseCode])
+  @@index([courseCode])
+  @@map("curriculum_plan_courses")
 }
 
 model CoursePrerequisite {
@@ -264,6 +330,7 @@ model FinancialCharge {
   @@index([studentCarnet, status])
   @@index([careerFeeId])
   @@index([agreementId])
+  @@unique([careerFeeId, studentCarnet])
   @@map("financial_charges")
 }
 
@@ -309,12 +376,20 @@ model CareerFee {
   cycleId       String   @map("cycle_id")
   careerId      String   @map("career_id")
   career        Career   @relation(fields: [careerId], references: [code], onDelete: Restrict)
+  campusId      String?  @map("campus_id")
+  planId        String?  @map("plan_id")
+  campus        Campus?  @relation(fields: [campusId], references: [id], onDelete: Restrict)
+  plan          CurriculumPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
+  feeType       String   @default("OTRO") @map("fee_type")
+  installmentNumber Int? @map("installment_number")
+  installmentCount  Int? @map("installment_count")
   charges       FinancialCharge[]
   assignedCount Int      @default(0) @map("assigned_count")
   createdAt     DateTime @default(now()) @map("created_at")
   createdBy     String   @map("created_by")
 
   @@index([careerId, cycleId])
+  @@index([campusId, planId])
   @@map("career_fees")
 }
 
@@ -568,12 +643,238 @@ model Session {
   @@map("sessions")
 }
 
+model MfaChallenge {
+  id          String   @id @default(cuid())
+  tokenHash   String   @unique @map("token_hash")
+  rememberMe  Boolean  @default(false) @map("remember_me")
+  attempts    Int      @default(0)
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("mfa_challenges")
+}
+
 model InstitutionConfig {
   id          Int      @id @default(1)
   name        String
   shortName   String   @map("short_name")
   logoDataUrl String?  @map("logo_data_url")
+  mfaRequiredRoles String @default("[\"ADMIN\",\"DOCENTE\",\"BIBLIOTECA\",\"PARQUEO\",\"EVENTOS\"]") @map("mfa_required_roles")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("institution_config")
+}
+
+model LibraryBook {
+  id            String   @id @default(cuid())
+  isbn          String?  @unique
+  title         String
+  author        String
+  publisher     String?
+  publicationYear Int?   @map("publication_year")
+  category      String
+  description   String?
+  status        String   @default("ACTIVO")
+  copies        LibraryCopy[]
+  reservations  LibraryReservation[]
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([title, author])
+  @@map("library_books")
+}
+
+model LibraryCopy {
+  id          String   @id @default(cuid())
+  barcode     String   @unique
+  location    String
+  status      String   @default("DISPONIBLE")
+  condition   String   @default("BUENO")
+  bookId      String   @map("book_id")
+  book        LibraryBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  loans       LibraryLoan[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([bookId, status])
+  @@map("library_copies")
+}
+
+model LibraryLoan {
+  id            String   @id @default(cuid())
+  loanedAt      DateTime @default(now()) @map("loaned_at")
+  dueAt         DateTime @map("due_at")
+  returnedAt    DateTime? @map("returned_at")
+  status        String   @default("PRESTADO")
+  renewalCount  Int      @default(0) @map("renewal_count")
+  notes         String?
+  dueReminderSentAt DateTime? @map("due_reminder_sent_at")
+  overdueNoticeSentAt DateTime? @map("overdue_notice_sent_at")
+  borrowerId    String   @map("borrower_id")
+  copyId        String   @map("copy_id")
+  borrower      User     @relation(fields: [borrowerId], references: [id], onDelete: Restrict)
+  copy          LibraryCopy @relation(fields: [copyId], references: [id], onDelete: Restrict)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([borrowerId, status])
+  @@index([copyId, status])
+  @@map("library_loans")
+}
+
+model LibraryReservation {
+  id          String   @id @default(cuid())
+  status      String   @default("SOLICITADA")
+  expiresAt   DateTime @map("expires_at")
+  assignedCopyId String? @map("assigned_copy_id")
+  readyAt     DateTime? @map("ready_at")
+  fulfilledAt DateTime? @map("fulfilled_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  userId      String   @map("user_id")
+  bookId      String   @map("book_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book        LibraryBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([bookId, status])
+  @@index([userId, status])
+  @@map("library_reservations")
+}
+
+model ParkingConfig {
+  id              Int      @id @default(1)
+  totalCapacity   Int      @default(200) @map("total_capacity")
+  regularReserve  Int      @default(20) @map("regular_reserve")
+  entry1Name      String   @default("Entrada 1") @map("entry_1_name")
+  entry2Name      String   @default("Entrada 2") @map("entry_2_name")
+  exitName        String   @default("Salida principal") @map("exit_name")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("parking_config")
+}
+
+model ParkingVehicle {
+  id          String   @id @default(cuid())
+  plate       String   @unique
+  make        String
+  model       String
+  color       String
+  type        String   @default("AUTOMOVIL")
+  accessCode  String   @unique @map("access_code")
+  status      String   @default("ACTIVO")
+  ownerId     String   @map("owner_id")
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  visits      ParkingVisit[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([ownerId, status])
+  @@map("parking_vehicles")
+}
+
+model ParkingEvent {
+  id             String   @id @default(cuid())
+  name           String
+  organizer      String
+  startsAt       DateTime @map("starts_at")
+  endsAt         DateTime @map("ends_at")
+  reservedSpaces Int      @map("reserved_spaces")
+  status         String   @default("PLANIFICADO")
+  createdBy      String   @map("created_by")
+  guests         ParkingEventGuest[]
+  visits         ParkingVisit[]
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([startsAt, endsAt])
+  @@map("parking_events")
+}
+
+model ParkingEventGuest {
+  id          String   @id @default(cuid())
+  guestName   String   @map("guest_name")
+  plate       String?
+  accessCode  String   @unique @map("access_code")
+  status      String   @default("AUTORIZADO")
+  eventId     String   @map("event_id")
+  event       ParkingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([eventId, status])
+  @@map("parking_event_guests")
+}
+
+model ParkingVisit {
+  id          String   @id @default(cuid())
+  plate       String
+  accessCode  String?  @map("access_code")
+  visitorName String?  @map("visitor_name")
+  entryGate   String   @map("entry_gate")
+  exitGate    String?  @map("exit_gate")
+  enteredAt   DateTime @default(now()) @map("entered_at")
+  exitedAt    DateTime? @map("exited_at")
+  status      String   @default("DENTRO")
+  vehicleId   String?  @map("vehicle_id")
+  userId      String?  @map("user_id")
+  eventId     String?  @map("event_id")
+  vehicle     ParkingVehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  event       ParkingEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([status, enteredAt])
+  @@index([plate, status])
+  @@index([entryGate, enteredAt])
+  @@map("parking_visits")
+}
+
+model ParkingAccessAttempt {
+  id          String   @id @default(cuid())
+  outcome     String
+  reason      String
+  entryGate   String?  @map("entry_gate")
+  plate       String?
+  codeMasked  String?  @map("code_masked")
+  vehicleId   String?  @map("vehicle_id")
+  operatorId  String?  @map("operator_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([outcome, createdAt])
+  @@index([vehicleId, createdAt])
+  @@map("parking_access_attempts")
+}
+
+model ParkingAlert {
+  id          String   @id @default(cuid())
+  dedupeKey   String   @unique @map("dedupe_key")
+  type        String
+  severity    String
+  message     String
+  status      String   @default("ACTIVA")
+  eventId     String?  @map("event_id")
+  acknowledgedBy String? @map("acknowledged_by")
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("parking_alerts")
+}
+
+model ParkingOfflineOperation {
+  id                String   @id @default(cuid())
+  clientOperationId String   @unique @map("client_operation_id")
+  type              String
+  plate             String
+  gate              String
+  reason            String?
+  recordedAt        DateTime @map("recorded_at")
+  syncedBy          String   @map("synced_by")
+  visitId           String?  @map("visit_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([recordedAt])
+  @@map("parking_offline_operations")
 }

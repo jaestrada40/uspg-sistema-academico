@@ -47,6 +47,9 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   if (currentUser.mustChangePassword && location.pathname !== '/perfil') {
     return <Navigate to="/perfil" replace />;
   }
+  if (currentUser.mfaEnrollmentRequired && location.pathname !== '/perfil') {
+    return <Navigate to="/perfil" replace />;
+  }
   if (currentUser.role === 'BIBLIOTECA' && location.pathname === '/dashboard') return <Navigate to="/biblioteca" replace />;
   if (['PARQUEO', 'EVENTOS'].includes(currentUser.role) && location.pathname === '/dashboard') return <Navigate to="/parqueo" replace />;
   return <AppLayout>{children}</AppLayout>;

@@ -26,9 +26,15 @@ model User {
   librarySuspensionReason String? @map("library_suspension_reason")
   active       Boolean   @default(true)
   mustChangePassword Boolean @default(true) @map("must_change_password")
+  mfaEnabled Boolean @default(false) @map("mfa_enabled")
+  mfaSecretEncrypted String? @map("mfa_secret_encrypted")
+  mfaPendingSecretEncrypted String? @map("mfa_pending_secret_encrypted")
+  mfaRecoveryCodeHashes String? @map("mfa_recovery_code_hashes")
+  mfaLastUsedStep Int? @map("mfa_last_used_step")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   sessions     Session[]
+  mfaChallenges MfaChallenge[]
   student      Student?
   teacher      Teacher?
   auditLogs    AuditLog[] @relation("AuditActor")
@@ -637,11 +643,27 @@ model Session {
   @@map("sessions")
 }
 
+model MfaChallenge {
+  id          String   @id @default(cuid())
+  tokenHash   String   @unique @map("token_hash")
+  rememberMe  Boolean  @default(false) @map("remember_me")
+  attempts    Int      @default(0)
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("mfa_challenges")
+}
+
 model InstitutionConfig {
   id          Int      @id @default(1)
   name        String
   shortName   String   @map("short_name")
   logoDataUrl String?  @map("logo_data_url")
+  mfaRequiredRoles String @default("[\"ADMIN\",\"DOCENTE\",\"BIBLIOTECA\",\"PARQUEO\",\"EVENTOS\"]") @map("mfa_required_roles")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("institution_config")

@@ -10,6 +10,8 @@ export interface User {
   phone?: string;
   department?: string;
   mustChangePassword?: boolean;
+  mfaEnabled?: boolean;
+  mfaEnrollmentRequired?: boolean;
 }
 
 export type StatusType = 'Activo' | 'Inactivo' | 'Egresado' | 'Suspendido' | 'Aprobado' | 'Reprobado' | 'En curso' | 'Retirado' | 'Planificado' | 'Inscripciones abiertas' | 'Finalizado' | 'Disponible' | 'Cerrado' | 'En espera';
@@ -176,4 +178,5 @@ export interface InstitutionConfig {
   shortName: string;
   logoDataUrl: string | null;
   updatedAt?: string;
+  mfaRequiredRoles?: string;
 }

@@ -92,6 +92,12 @@ Antes de producción se migrará a PostgreSQL.
   - React y React DOM actualizados a 19.2.7; Node 22.22 o superior requerido.
   - Rama de respaldo previa: `backup/pre-react-router-8.3.0`.
   - Verificación conjunta disponible con `npm run verify:release`.
+  - MFA TOTP configurable por usuario con QR y clave manual.
+  - Ocho códigos de recuperación de un solo uso, almacenados únicamente como hash.
+  - Secretos MFA cifrados con AES-256-GCM y llave externa administrada en Coolify.
+  - Política obligatoria por rol; administración puede incluir también estudiantes.
+  - Bloqueo real de la API hasta completar MFA para roles obligatorios.
+  - Reinicio administrativo de MFA, revocación de sesiones, avisos y auditoría.
 - Pruebas por rol:
   - Recorrido visual de 20 pantallas administrativas sin errores de consola.
   - Matriz automatizada de permisos para estudiante y catedrático.

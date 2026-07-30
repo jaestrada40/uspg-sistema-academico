@@ -23,6 +23,15 @@ for (const [role, account] of Object.entries(accounts)) {
   if (!login.ok || !cookie) { console.error(`FAIL ${role}: inicio de sesión ${login.status}`); failures++; continue; }
   const profile = await login.json();
   if (profile.user.role !== role) { console.error(`FAIL ${role}: servidor devolvió ${profile.user.role}`); failures++; continue; }
+  if (profile.user.mfaEnrollmentRequired) {
+    const statusResponse = await fetch(`${baseUrl}/api/auth/mfa/status`, { headers: { Cookie: cookie } });
+    const protectedResponse = await fetch(`${baseUrl}${cases[role][0][0]}`, { headers: { Cookie: cookie } });
+    const ok = statusResponse.status === 200 && protectedResponse.status === 428;
+    console.log(`${ok ? 'PASS' : 'FAIL'} ${role} inscripción MFA obligatoria: estado ${statusResponse.status}, módulo protegido ${protectedResponse.status}`);
+    if (!ok) failures++;
+    await fetch(`${baseUrl}/api/auth/logout`, { method: 'POST', headers: { Cookie: cookie } });
+    continue;
+  }
   for (const [path, expected] of cases[role]) {
     const response = await fetch(`${baseUrl}${path}`, { headers: { Cookie: cookie } });
     const ok = response.status === expected;

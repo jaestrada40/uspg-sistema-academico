@@ -42,7 +42,8 @@ interface AppContextType {
   currentUser: User;
   setCurrentUser: (user: User) => void;
   users: User[];
-  login: (username: string, password: string, rememberMe: boolean) => Promise<{ success: boolean; message?: string }>;
+  login: (username: string, password: string, rememberMe: boolean) => Promise<{ success: boolean; message?: string; mfaRequired?: boolean; challengeToken?: string }>;
+  verifyMfa: (challengeToken: string, code: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
 
@@ -154,7 +155,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [institution, setInstitution] = useState<InstitutionConfig>({
     name: 'Universidad de San Pablo de Guatemala',
     shortName: 'USPG',
-    logoDataUrl: null,
+      logoDataUrl: null,
+      mfaRequiredRoles: undefined,
   });
 
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -255,6 +257,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       const result = await response.json();
       if (!response.ok) return { success: false, message: result.message || 'No se pudo iniciar sesión.' };
+      if (result.mfaRequired) return { success: false, mfaRequired: true, challengeToken: result.challengeToken };
       setCurrentUser(result.user);
       setIsAuthenticated(true);
       showToast(`Sesión iniciada como ${result.user.name} (${result.user.role})`, 'success');
@@ -262,6 +265,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       return { success: false, message: 'No se pudo conectar con el servidor.' };
     }
+  };
+
+  const verifyMfa = async (challengeToken: string, code: string) => {
+    try {
+      const response = await fetch('/api/auth/mfa/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeToken, code }) });
+      const result = await response.json();
+      if (!response.ok) return { success: false, message: result.message || 'No se pudo verificar el segundo factor.' };
+      setCurrentUser(result.user);
+      setIsAuthenticated(true);
+      showToast(result.recoveryCodeUsed ? 'Código de recuperación utilizado. Genera códigos nuevos si quedan pocos.' : 'Segundo factor verificado', result.recoveryCodeUsed ? 'warning' : 'success');
+      return { success: true };
+    } catch { return { success: false, message: 'No se pudo conectar con el servidor.' }; }
   };
 
   const logout = async () => {
@@ -636,6 +651,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentUser,
         users,
         login,
+        verifyMfa,
         logout,
         changePassword,
         cycles,

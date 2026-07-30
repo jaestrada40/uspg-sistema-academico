@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Eye, EyeOff, Lock, User, KeyRound } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, KeyRound, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Modal } from '../components/common/Modal';
 import { InstitutionLogo } from '../components/common/InstitutionLogo';
 
 export const LoginPage: React.FC = () => {
-  const { login, institution } = useApp();
+  const { login, verifyMfa, institution } = useApp();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('cmendoza@administrador.uspg.edu.gt');
@@ -18,9 +18,20 @@ export const LoginPage: React.FC = () => {
   const [showRecoverModal, setShowRecoverModal] = useState(false);
   const [recoverEmail, setRecoverEmail] = useState('');
   const [recoverSuccess, setRecoverSuccess] = useState(false);
+  const [mfaChallengeToken, setMfaChallengeToken] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (mfaChallengeToken) {
+      if (!mfaCode.trim()) return setErrorMessage('Ingresa el código de tu aplicación o un código de recuperación.');
+      setIsSubmitting(true);
+      const result = await verifyMfa(mfaChallengeToken, mfaCode);
+      setIsSubmitting(false);
+      if (result.success) navigate('/dashboard');
+      else setErrorMessage(result.message || 'No se pudo verificar el segundo factor.');
+      return;
+    }
     if (!username.trim()) {
       setErrorMessage('Por favor ingresa tu correo institucional o número de carné');
       return;
@@ -33,7 +44,11 @@ export const LoginPage: React.FC = () => {
     setIsSubmitting(true);
     const result = await login(username, password, rememberMe);
     setIsSubmitting(false);
-    if (result.success) {
+    if (result.mfaRequired && result.challengeToken) {
+      setMfaChallengeToken(result.challengeToken);
+      setPassword('');
+      setErrorMessage('');
+    } else if (result.success) {
       navigate('/dashboard');
     } else {
       setErrorMessage(result.message || 'No se pudo iniciar sesión');
@@ -68,8 +83,8 @@ export const LoginPage: React.FC = () => {
 
         {/* Form area */}
         <div className="p-8">
-          <h2 className="text-lg font-bold text-[#333333] mb-1">Iniciar Sesión</h2>
-          <p className="text-xs text-[#64748B] mb-6">Ingresa tus credenciales para acceder a la plataforma.</p>
+          <h2 className="text-lg font-bold text-[#333333] mb-1">{mfaChallengeToken ? 'Verificación en dos pasos' : 'Iniciar Sesión'}</h2>
+          <p className="text-xs text-[#64748B] mb-6">{mfaChallengeToken ? 'Ingresa el código de 6 dígitos o uno de tus códigos de recuperación.' : 'Ingresa tus credenciales para acceder a la plataforma.'}</p>
 
           {errorMessage && (
             <div className="mb-4 rounded-lg bg-[#C53030]/10 border border-[#C53030]/30 p-3 text-xs font-semibold text-[#C53030]">
@@ -78,6 +93,20 @@ export const LoginPage: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {mfaChallengeToken ? (
+              <>
+                <div className="rounded-xl border border-[#800020]/20 bg-[#800020]/5 p-4 text-center">
+                  <ShieldCheck className="mx-auto mb-2 h-8 w-8 text-[#800020]" />
+                  <p className="text-xs font-bold text-[#333333]">Segundo factor requerido</p>
+                  <p className="mt-1 text-[11px] text-[#64748B]">Abre tu aplicación autenticadora. También puedes usar un código de recuperación.</p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-[#333333]">Código MFA</label>
+                  <input autoFocus autoComplete="one-time-code" value={mfaCode} onChange={(e) => { setMfaCode(e.target.value.toUpperCase()); setErrorMessage(''); }} placeholder="000000 o XXXX-XXXX" className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-center font-mono text-base font-bold tracking-[0.2em] focus:border-[#800020] focus:outline-hidden" />
+                </div>
+              </>
+            ) : (
+              <>
             <div>
               <label className="block text-xs font-bold text-[#333333] mb-1">
                 Correo Electrónico o Carné
@@ -139,14 +168,17 @@ export const LoginPage: React.FC = () => {
                 ¿Olvidaste tu contraseña?
               </button>
             </div>
+              </>
+            )}
 
             <button
               type="submit"
               disabled={isSubmitting}
               className="w-full rounded-lg bg-[#800020] py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#5F0018] transition-colors disabled:opacity-60"
             >
-              {isSubmitting ? 'Verificando...' : 'Iniciar Sesión'}
+              {isSubmitting ? 'Verificando...' : mfaChallengeToken ? 'Verificar y continuar' : 'Iniciar Sesión'}
             </button>
+            {mfaChallengeToken && <button type="button" onClick={() => { setMfaChallengeToken(''); setMfaCode(''); setErrorMessage(''); }} className="w-full text-xs font-semibold text-[#64748B] hover:text-[#800020]">Volver al inicio de sesión</button>}
           </form>
 
         </div>

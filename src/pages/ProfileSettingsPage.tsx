@@ -14,6 +14,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { PageHeader } from '../components/common/PageHeader';
 import { Tabs } from '../components/common/Tabs';
+import { MfaSettingsCard } from '../components/security/MfaSettingsCard';
 
 export const ProfileSettingsPage: React.FC = () => {
   const { currentUser, parameters, updateParameters, showToast, institution, saveInstitution, changePassword } = useApp();
@@ -104,6 +105,11 @@ export const ProfileSettingsPage: React.FC = () => {
           Por seguridad debes cambiar la contraseña temporal antes de utilizar el resto del sistema.
         </div>
       )}
+      {currentUser.mfaEnrollmentRequired && (
+        <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-xs font-semibold text-red-900">
+          Tu rol requiere MFA. Configúralo en esta pantalla antes de utilizar el resto del sistema.
+        </div>
+      )}
 
       <Tabs
         tabs={[
@@ -115,7 +121,7 @@ export const ProfileSettingsPage: React.FC = () => {
       />
 
       {activeTab === 'profile' ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="space-y-6"><div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* User Card */}
           <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-xs flex flex-col items-center text-center">
             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#800020] text-white font-black text-2xl shadow-xs mb-3">
@@ -203,7 +209,7 @@ export const ProfileSettingsPage: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div><MfaSettingsCard /></div>
       ) : (
         /* System Parameters */
         <div className="space-y-6 max-w-3xl">

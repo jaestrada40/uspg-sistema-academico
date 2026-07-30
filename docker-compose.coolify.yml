@@ -11,6 +11,7 @@ services:
       DATABASE_PROVIDER: postgresql
       DATABASE_URL: postgresql://uspg:${POSTGRES_PASSWORD:?}@postgres:5432/uspg_academico
       PARKING_QR_SECRET: ${PARKING_QR_SECRET:?}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?}
       SMTP_HOST: ${SMTP_HOST:?}
       SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_USER: ${SMTP_USER:?}

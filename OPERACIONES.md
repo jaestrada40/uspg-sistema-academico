@@ -52,17 +52,17 @@ de respaldo no deben almacenarse en Git.
 - Auditoría para operaciones académicas, financieras y documentales.
 - Validación de tipos, tamaño y acceso en documentos cargados.
 - Cabeceras contra MIME sniffing, iframes y fuga de referencias.
+- MFA con TOTP, secretos cifrados mediante AES-256-GCM y códigos de recuperación de un solo uso.
+- MFA obligatorio por rol y bloqueo de la API hasta completar la inscripción.
+- Desafíos MFA temporales con límite de intentos y auditoría de activación, acceso y reinicio.
 
 ## Antes del despliegue
 
 ```bash
 npm run production:check
-npm run lint
-npm run build
-npm audit --omit=dev
+npm run verify:release
 ```
 
-La alerta actual de React Router corresponde al modo RSC/Server Actions. Esta
-aplicación usa React Router únicamente en modo SPA y no expone esas acciones.
-Debe actualizarse cuando exista una versión compatible corregida y volver a
-ejecutarse la auditoría.
+React Router está actualizado a 8.3.0 en modo SPA, sin React Server Components
+ni acciones del Router. La auditoría de producción debe permanecer en cero antes
+de cada despliegue.
