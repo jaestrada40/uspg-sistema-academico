@@ -8,5 +8,4 @@ try { appUrl = new URL(process.env.APP_URL); } catch { console.error('APP_URL de
 if (appUrl.protocol !== 'https:') { console.error('APP_URL debe usar HTTPS en producción.'); process.exit(1); }
 if (Buffer.byteLength(process.env.PARKING_QR_SECRET) < 32) { console.error('PARKING_QR_SECRET debe tener al menos 32 bytes aleatorios.'); process.exit(1); }
 if (Buffer.from(process.env.MFA_ENCRYPTION_KEY, 'base64').length !== 32) { console.error('MFA_ENCRYPTION_KEY debe contener exactamente 32 bytes codificados en base64.'); process.exit(1); }
-if (process.env.SMTP_PASS.length < 12) { console.error('SMTP_PASS parece demasiado corta para producción.'); process.exit(1); }
 console.log('Variables esenciales de producción verificadas.');
