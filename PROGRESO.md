@@ -1,12 +1,12 @@
 # Progreso del Sistema Académico USPG
 
-Actualizado: 29 de julio de 2026.
+Actualizado: 30 de julio de 2026, cierre de jornada.
 
 ## Estado actual
 
-El proyecto funciona localmente en `http://localhost:3001` con React, Vite,
-Express, Prisma y SQLite. La base de datos tiene 19 migraciones aplicadas.
-Antes de producción se migrará a PostgreSQL.
+El proyecto está publicado desde GitHub en Coolify/Hostinger VPS bajo
+`https://uspg.kynova.tech`, con React, Vite, Express, Prisma y PostgreSQL.
+El despliegue ejecuta automáticamente la verificación de entorno y las migraciones.
 
 ## Funcionalidades completadas
 
@@ -203,21 +203,43 @@ Antes de producción se migrará a PostgreSQL.
   - Validación de autorizaciones antes de aceptar una entrada fuera de línea.
   - Apertura manual de barreras con motivo obligatorio, auditoría y alerta al equipo.
   - Caché de la interfaz para volver a abrir la operación después de una visita en línea.
+  - Confirmación interna y por correo al registrar un vehículo.
+  - Avisos al propietario al bloquear o reactivar su pase.
+  - QR dinámico visible dentro de la sesión y renovado cada cinco minutos.
+- Mejoras finales de pagos y pensum:
+  - Demostración segura de pago con tarjeta sin cobro ni modificación del saldo.
+  - Vista previa visual de tarjeta institucional con datos de prueba.
+  - El servidor recibe solamente los últimos cuatro dígitos durante la demostración.
+  - Migración idempotente que crea planes iniciales faltantes y completa campus/pensum.
+  - Malla por semestre con todos los prerrequisitos, cursos habilitados y estados.
+  - Pantalla independiente `Plan de Estudios`, basada en las tablas de los PDF oficiales.
+  - El estudiante puede consultar desde el inicio todos los cursos de cada semestre,
+    créditos, requisitos previos y materias que se habilitan después.
+  - Separación del menú entre `Plan de Estudios` y `Mi Avance Académico`.
 
 ## Próximo paso recomendado
 
-Crear el repositorio privado `uspg-sistema-academico` en GitHub, conectarlo con Coolify
-y realizar el primer despliegue de validación. Docker, PostgreSQL, volumen persistente,
-variables obligatorias y verificación de salud ya están preparados.
+Crear el módulo administrativo **Organizar Pensum**:
+
+1. Seleccionar carrera y versión del plan.
+2. Definir la duración total, por ejemplo 8 semestres.
+3. Mostrar una columna por semestre.
+4. Permitir mover cursos entre semestres con una interfaz cómoda.
+5. Mostrar cantidad de cursos y créditos por semestre.
+6. Detectar prerrequisitos ubicados en el mismo semestre o en uno posterior.
+7. Guardar la distribución completa de una vez.
+8. Agregar posteriormente importación de pensum desde Excel para evitar carga manual.
+
+La distribución guardada alimentará automáticamente la pantalla `Plan de Estudios`
+del estudiante.
 
 ## Pendientes posteriores
 
-1. Integración completa con Google Classroom.
-2. Migración efectiva a PostgreSQL cuando exista servidor destino.
+1. Módulo administrativo Organizar Pensum e importación desde Excel.
+2. Integración completa con Google Classroom.
 3. Integración física del parqueo con lectores QR, cámaras y barreras.
 4. Planes oficiales para las demás carreras cuando se reciban sus documentos.
-5. Despliegue en un servidor real.
-6. Antes del despliegue, actualización controlada de React Router 7.18.2 a 8.3.0 o superior y ejecución de la lista de validación descrita en `SECURITY.md`.
+5. Integración real de pagos con una pasarela bancaria certificada.
 
 ## Cómo continuar
 
@@ -235,5 +257,6 @@ npm run build
 npx prisma migrate status
 ```
 
-Al retomar, leer este archivo y continuar con la integración física de Parqueo Inteligente.
-Google Classroom queda en espera de las credenciales de TI.
+Al retomar, leer este archivo y continuar con **Organizar Pensum**.
+Google Classroom queda en espera de las credenciales de TI y los pagos reales dependen
+de seleccionar una pasarela bancaria.
