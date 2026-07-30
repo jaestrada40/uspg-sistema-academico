@@ -35,6 +35,7 @@ export const Sidebar: React.FC = () => {
   const navItems = [
     { path: '/dashboard', label: 'Inicio', icon: LayoutDashboard, roles: ['ADMIN', 'DOCENTE', 'ESTUDIANTE'] },
     { path: '/estudiantes', label: 'Estudiantes', icon: Users, roles: ['ADMIN'] },
+    { path: '/usuarios', label: 'Usuarios y Seguridad', icon: Users, roles: ['ADMIN'] },
     { path: '/docentes', label: 'Docentes', icon: GraduationCap, roles: ['ADMIN'] },
     { path: '/carreras', label: 'Carreras', icon: BookOpen, roles: ['ADMIN'] },
     { path: '/estructura-academica', label: 'Campus y Planes', icon: Building2, roles: ['ADMIN'] },

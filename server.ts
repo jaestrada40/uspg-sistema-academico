@@ -218,6 +218,9 @@ const hashPassword = (password: string) => {
   const salt = randomBytes(16).toString('hex');
   return `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
 };
+const passwordPolicyError = (password: string) => password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)
+  ? 'La contraseña debe tener 8 caracteres, mayúscula, minúscula y número.'
+  : null;
 const roleFromEmail = (email: string) => {
   const value = email.trim().toLowerCase();
   if (value.endsWith('@alumno.uspg.edu.gt')) return 'ESTUDIANTE';
@@ -290,6 +293,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 const loginAttempts = new Map<string, { count: number; blockedUntil: number }>();
+const passwordRecoveryRequests = new Map<string, number>();
 const loginAttemptKey = (req: express.Request, username: string) => `${req.ip}:${username.toLowerCase()}`;
 const registerFailedLogin = (key: string) => {
   const current = loginAttempts.get(key);
@@ -396,6 +400,54 @@ app.post('/api/auth/logout', async (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const genericResponse = { message: 'Si el correo está registrado, recibirás un enlace de recuperación.' };
+  const recoveryKey = hashToken(`${req.ip || 'unknown'}:${email}`);
+  const lastRequest = passwordRecoveryRequests.get(recoveryKey) || 0;
+  if (Date.now() - lastRequest < 5 * 60 * 1000) return void res.json(genericResponse);
+  passwordRecoveryRequests.set(recoveryKey, Date.now());
+  const user = email ? await prisma.user.findUnique({ where: { email } }) : null;
+  if (!user || !user.active) return void res.json(genericResponse);
+  await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+  const token = randomBytes(32).toString('base64url');
+  await prisma.passwordResetToken.create({ data: { tokenHash: hashToken(token), userId: user.id, expiresAt: new Date(Date.now() + 30 * 60 * 1000) } });
+  if (mailTransport) {
+    const resetUrl = `${String(process.env.APP_URL).replace(/\/$/, '')}/restablecer-contrasena?token=${encodeURIComponent(token)}`;
+    try {
+      await mailTransport.sendMail({
+        from: process.env.SMTP_FROM || 'Sistema Académico USPG <no-reply@uspg.edu.gt>',
+        to: user.email,
+        subject: 'Restablecimiento de contraseña USPG',
+        text: `Hola ${user.name}. Usa este enlace para restablecer tu contraseña. Vence en 30 minutos y solo funciona una vez:\n\n${resetUrl}\n\nSi no solicitaste el cambio, ignora este mensaje.`,
+      });
+    } catch (error) {
+      console.error('No se pudo enviar la recuperación de contraseña:', error instanceof Error ? error.message : 'Error SMTP');
+    }
+  }
+  res.json(genericResponse);
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const token = String(req.body?.token || '');
+  const newPassword = String(req.body?.newPassword || '');
+  const policyError = passwordPolicyError(newPassword);
+  if (policyError) return void res.status(400).json({ message: policyError });
+  const record = token ? await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) }, include: { user: true } }) : null;
+  if (!record || record.expiresAt <= new Date() || !record.user.active) {
+    if (record) await prisma.passwordResetToken.delete({ where: { id: record.id } });
+    return void res.status(400).json({ message: 'El enlace es inválido o ya venció.' });
+  }
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: record.userId }, data: { passwordHash: hashPassword(newPassword), mustChangePassword: false } }),
+    prisma.session.deleteMany({ where: { userId: record.userId } }),
+    prisma.mfaChallenge.deleteMany({ where: { userId: record.userId } }),
+    prisma.passwordResetToken.deleteMany({ where: { userId: record.userId } }),
+    prisma.auditLog.create({ data: { action: 'PASSWORD_RESET_SELF_SERVICE', entityType: 'USER', entityId: record.userId, actorId: record.userId } }),
+  ]);
+  res.json({ ok: true });
+});
+
 app.post('/api/auth/change-password', requireUser, async (req, res) => {
   const currentPassword = String(req.body?.currentPassword || '');
   const newPassword = String(req.body?.newPassword || '');
@@ -403,11 +455,44 @@ app.post('/api/auth/change-password', requireUser, async (req, res) => {
   if (!verifyPassword(currentPassword, user.passwordHash)) {
     return void res.status(400).json({ message: 'La contraseña actual no es correcta.' });
   }
-  if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword)) {
-    return void res.status(400).json({ message: 'La nueva contraseña debe tener 8 caracteres, mayúscula, minúscula y número.' });
-  }
+  const policyError = passwordPolicyError(newPassword);
+  if (policyError) return void res.status(400).json({ message: policyError });
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(newPassword), mustChangePassword: false } });
   await prisma.session.deleteMany({ where: { userId: user.id, tokenHash: { not: hashToken(readSessionToken(req)) } } });
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/users', requireAdmin, async (_req, res) => {
+  const users = await prisma.user.findMany({
+    select: { id: true, name: true, email: true, role: true, carnetOrCode: true, active: true, mustChangePassword: true, mfaEnabled: true, updatedAt: true },
+    orderBy: [{ role: 'asc' }, { name: 'asc' }],
+  });
+  res.json(users);
+});
+
+app.post('/api/admin/users/:id/reset-password', requireAdmin, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user) return void res.status(404).json({ message: 'Usuario no encontrado.' });
+  const password = temporaryPassword();
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(password), mustChangePassword: true } }),
+    prisma.session.deleteMany({ where: { userId: user.id } }),
+    prisma.mfaChallenge.deleteMany({ where: { userId: user.id } }),
+    prisma.passwordResetToken.deleteMany({ where: { userId: user.id } }),
+    prisma.auditLog.create({ data: { action: 'PASSWORD_RESET_ADMIN', entityType: 'USER', entityId: user.id, actorId: res.locals.authUser.id, details: JSON.stringify({ email: user.email }) } }),
+  ]);
+  res.json({ temporaryPassword: password, mustChangePassword: true });
+});
+
+app.post('/api/admin/users/:id/reset-mfa', requireAdmin, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user) return void res.status(404).json({ message: 'Usuario no encontrado.' });
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { mfaEnabled: false, mfaSecretEncrypted: null, mfaPendingSecretEncrypted: null, mfaRecoveryCodeHashes: null, mfaLastUsedStep: null } }),
+    prisma.session.deleteMany({ where: { userId: user.id } }),
+    prisma.mfaChallenge.deleteMany({ where: { userId: user.id } }),
+    prisma.auditLog.create({ data: { action: 'MFA_RESET_ADMIN', entityType: 'USER', entityId: user.id, actorId: res.locals.authUser.id, details: JSON.stringify({ email: user.email }) } }),
+  ]);
   res.json({ ok: true });
 });
 

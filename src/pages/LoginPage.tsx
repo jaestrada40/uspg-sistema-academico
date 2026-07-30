@@ -55,15 +55,13 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleRecover = (e: React.FormEvent) => {
+  const handleRecover = async (e: React.FormEvent) => {
     e.preventDefault();
     if (recoverEmail) {
+      setIsSubmitting(true);
+      await fetch('/api/auth/forgot-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: recoverEmail }) });
+      setIsSubmitting(false);
       setRecoverSuccess(true);
-      setTimeout(() => {
-        setRecoverSuccess(false);
-        setShowRecoverModal(false);
-        setRecoverEmail('');
-      }, 3000);
     }
   };
 
@@ -202,13 +200,13 @@ export const LoginPage: React.FC = () => {
             </div>
             <h4 className="text-sm font-bold text-[#333333]">Instrucciones Enviadas</h4>
             <p className="text-xs text-[#64748B] mt-1">
-              Se ha enviado un enlace de restauración a tu correo electrónico registrado.
+              Si el correo está registrado, recibirás un enlace de un solo uso válido durante 30 minutos.
             </p>
           </div>
         ) : (
           <form onSubmit={handleRecover} className="space-y-4">
             <p className="text-xs text-[#64748B]">
-              Ingresa tu correo institucional. Te enviaremos un código para restablecer tu acceso.
+              Ingresa tu correo institucional. Te enviaremos un enlace seguro para restablecer tu acceso.
             </p>
             <div>
               <label className="block text-xs font-bold text-[#333333] mb-1">Correo Institucional</label>
@@ -231,9 +229,10 @@ export const LoginPage: React.FC = () => {
               </button>
               <button
                 type="submit"
-                className="rounded-lg bg-[#800020] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#5F0018]"
+                disabled={isSubmitting}
+                className="rounded-lg bg-[#800020] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#5F0018] disabled:opacity-50"
               >
-                Enviar Código
+                {isSubmitting ? 'Enviando...' : 'Enviar enlace'}
               </button>
             </div>
           </form>

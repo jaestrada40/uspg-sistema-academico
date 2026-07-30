@@ -5,6 +5,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { NotificationToastContainer } from './components/common/NotificationToast';
 
 import { LoginPage } from './pages/LoginPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 const lazyPage = <T extends Record<string, React.ComponentType>>(loader: () => Promise<T>, name: keyof T) => lazy(async () => ({ default: (await loader())[name] }));
 const DashboardPage = lazyPage(() => import('./pages/DashboardPage'), 'DashboardPage');
 const StudentsPage = lazyPage(() => import('./pages/StudentsPage'), 'StudentsPage');
@@ -31,6 +32,7 @@ const CurriculumMapPage = lazyPage(() => import('./pages/CurriculumMapPage'), 'C
 const AcademicStructurePage = lazyPage(() => import('./pages/AcademicStructurePage'), 'AcademicStructurePage');
 const LibraryPage = lazyPage(() => import('./pages/LibraryPage'), 'LibraryPage');
 const ParkingPage = lazyPage(() => import('./pages/ParkingPage'), 'ParkingPage');
+const UsersPage = lazyPage(() => import('./pages/UsersPage'), 'UsersPage');
 
 const PageLoader = () => <div className="flex min-h-[40vh] items-center justify-center text-sm font-semibold text-[#64748B]">Cargando módulo...</div>;
 
@@ -62,6 +64,8 @@ export default function App() {
         <NotificationToastContainer />
         <Suspense fallback={<PageLoader />}><Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/restablecer-contrasena" element={<ResetPasswordPage />} />
+          <Route path="/usuarios" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
           <Route path="/aulas-virtuales" element={<ProtectedRoute><VirtualClassroomsPage /></ProtectedRoute>} />
           <Route path="/pagos" element={<ProtectedRoute><FinancesPage /></ProtectedRoute>} />
           <Route path="/asistencia" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />
