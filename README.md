@@ -1,12 +1,10 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+  <img src="docs/assets/uspg-sistema-academico-banner.png" alt="Sistema Académico USPG" width="1200" />
 </div>
 
 # Sistema Académico USPG
 
 Sistema académico por roles con React, Express, Prisma y SQLite para desarrollo local.
-
-View your app in AI Studio: https://ai.studio/apps/e4d97e24-8a8f-49c7-bdea-70d00ba72687
 
 ## Run Locally
 
