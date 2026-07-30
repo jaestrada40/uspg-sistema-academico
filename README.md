@@ -56,11 +56,9 @@ npm run db:postgres:generate
 npm run db:seed
 ```
 
-`db:postgres:push` es únicamente para preparar una base vacía de prueba. En el
-servidor real primero se debe respaldar SQLite, generar una migración PostgreSQL
-versionada, importar los datos, comparar conteos y totales financieros, y luego
-cambiar el tráfico. Nunca debe ejecutarse `db push` sobre una base PostgreSQL de
-producción que ya contenga información.
+`db:postgres:push` es únicamente para preparar una base vacía de prueba. El
+servidor usa migraciones PostgreSQL versionadas mediante
+`db:postgres:migrate:deploy`; nunca ejecuta `db push` durante un reinicio.
 
 Para volver al desarrollo SQLite se restauran las variables de `.env` y se corre:
 
@@ -93,3 +91,7 @@ El servicio expone el puerto `3000` y publica su verificación de salud en
 `/api/health`. Las credenciales de Google Classroom pueden quedar vacías inicialmente.
 Los archivos `.env` nunca deben subirse; configure los secretos como variables de
 ejecución en Coolify.
+
+En el primer despliegue, abra la terminal del servicio `app` en Coolify y ejecute
+una sola vez `npm run db:seed` para cargar la institución y los usuarios iniciales.
+Después del primer acceso, cambie inmediatamente todas las contraseñas temporales.
