@@ -8,6 +8,7 @@ import {
   MapPin,
   Calendar,
   CheckCircle2,
+  Edit2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Section } from '../types';
@@ -30,6 +31,7 @@ export const SectionsPage: React.FC = () => {
     currentCycle,
     enrollments,
     addSection,
+    updateSection,
     deleteSection,
     showToast,
   } = useApp();
@@ -42,6 +44,7 @@ export const SectionsPage: React.FC = () => {
   const pageSize = 5;
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showStudentsModal, setShowStudentsModal] = useState(false);
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
 
@@ -142,6 +145,26 @@ export const SectionsPage: React.FC = () => {
 
     setShowAddModal(false);
     setConflictWarning(null);
+  };
+
+  const handleEditSection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSection) return;
+    const conflict = validateConflicts(formData.teacherId, formData.classroomId, formData.scheduleDays, formData.scheduleTime);
+    if (conflict && conflict !== `Conflicto de Aula: ${selectedSection.classroomName} ya está ocupada por la sección ${selectedSection.code} en este horario.`) {
+      setConflictWarning(conflict);
+      return;
+    }
+    if (!(await updateSection(selectedSection.id, formData))) return;
+    setShowEditModal(false);
+    setSelectedSection(null);
+  };
+
+  const openEdit = (sec: Section) => {
+    setSelectedSection(sec);
+    setFormData({ code: sec.code, courseCode: sec.courseCode, teacherId: sec.teacherId, classroomId: sec.classroomId, scheduleTime: sec.scheduleTime, scheduleDays: sec.scheduleDays, capacity: sec.capacity, modality: sec.modality, jornada: sec.jornada });
+    setConflictWarning(null);
+    setShowEditModal(true);
   };
 
   const openStudentsList = (sec: Section) => {
@@ -278,6 +301,7 @@ export const SectionsPage: React.FC = () => {
                             <Users className="h-3.5 w-3.5" />
                             <span>{sec.enrolledCount}</span>
                           </button>
+                          <button onClick={() => openEdit(sec)} className="rounded-md p-1.5 text-[#64748B] hover:bg-slate-100" title="Editar sección"><Edit2 className="h-4 w-4" /></button>
                           <button
                             onClick={() => deleteSection(sec.id)}
                             className="rounded-md p-1.5 text-[#C53030] hover:bg-red-50"
@@ -428,6 +452,22 @@ export const SectionsPage: React.FC = () => {
                 Crear Sección
               </button>
             </div>
+          </form>
+        </Modal>
+
+        <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Editar sección">
+          <form onSubmit={handleEditSection} className="space-y-4 text-xs">
+            {conflictWarning && <div className="rounded-lg border border-red-200 bg-red-50 p-3 font-semibold text-red-700">{conflictWarning}</div>}
+            <p className="rounded-lg bg-blue-50 p-3 text-blue-800">Puedes cambiar docente, horario, aula, modalidad, jornada y cupo. El curso y el ciclo quedan protegidos para conservar el historial.</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="font-bold">Código<input value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="mt-1 w-full rounded-lg border px-3 py-2 font-normal" required /></label>
+              <label className="font-bold">Docente<select value={formData.teacherId} onChange={(e) => setFormData({ ...formData, teacherId: e.target.value })} className="mt-1 w-full rounded-lg border px-3 py-2 font-normal">{teachers.map((teacher) => <option key={teacher.code} value={teacher.code}>{teacher.name}</option>)}</select></label>
+              <label className="font-bold">Horario<input value={formData.scheduleTime} onChange={(e) => setFormData({ ...formData, scheduleTime: e.target.value })} className="mt-1 w-full rounded-lg border px-3 py-2 font-normal" required /></label>
+              <label className="font-bold">Aula<select value={formData.classroomId} onChange={(e) => setFormData({ ...formData, classroomId: e.target.value })} className="mt-1 w-full rounded-lg border px-3 py-2 font-normal">{classrooms.map((room) => <option key={room.id} value={room.id}>{room.code}</option>)}</select></label>
+              <label className="font-bold">Cupo<input type="number" min={selectedSection?.enrolledCount || 1} value={formData.capacity} onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })} className="mt-1 w-full rounded-lg border px-3 py-2 font-normal" required /></label>
+              <label className="font-bold">Modalidad<select value={formData.modality} onChange={(e) => setFormData({ ...formData, modality: e.target.value as typeof formData.modality })} className="mt-1 w-full rounded-lg border px-3 py-2 font-normal"><option>Presencial</option><option>Virtual</option><option>Híbrida</option></select></label>
+            </div>
+            <div className="flex justify-end gap-2"><button type="button" onClick={() => setShowEditModal(false)} className="rounded-lg border px-4 py-2">Cancelar</button><button className="rounded-lg bg-[#800020] px-4 py-2 font-bold text-white">Guardar cambios</button></div>
           </form>
         </Modal>
 

@@ -481,7 +481,8 @@ app.post('/api/admin/users/:id/reset-password', requireAdmin, async (req, res) =
     prisma.passwordResetToken.deleteMany({ where: { userId: user.id } }),
     prisma.auditLog.create({ data: { action: 'PASSWORD_RESET_ADMIN', entityType: 'USER', entityId: user.id, actorId: res.locals.authUser.id, details: JSON.stringify({ email: user.email }) } }),
   ]);
-  res.json({ temporaryPassword: password, mustChangePassword: true });
+  await notifyUser(user.id, 'Cambio de contraseña · Sistema Académico USPG', `Hola ${user.name},\n\nUn administrador restableció tu acceso.\n\nCorreo: ${user.email}\nContraseña temporal: ${password}\n\nIngresa al sistema y cambia esta contraseña cuando se te solicite. Por seguridad, no compartas este correo.`, 'WARNING', '/login');
+  res.json({ temporaryPassword: password, mustChangePassword: true, emailQueued: true });
 });
 
 app.post('/api/admin/users/:id/reset-mfa', requireAdmin, async (req, res) => {
@@ -1416,7 +1417,7 @@ app.get('/api/parking', requireUser, async (_req, res) => {
 app.post('/api/parking/staff', requireUser, requireAdmin, async (req, res) => {
   const name = String(req.body.name || '').trim(), email = String(req.body.email || '').trim().toLowerCase(), code = String(req.body.code || '').trim().toUpperCase(), role = String(req.body.role || 'PARQUEO');
   if (name.length < 3 || !['PARQUEO', 'EVENTOS'].includes(role) || roleFromEmail(email) !== role || code.length < 3) return void res.status(400).json({ message: `Usa un correo @${role === 'PARQUEO' ? 'parqueo' : 'eventos'}.uspg.edu.gt.` }); const password = temporaryPassword();
-  try { const created = await prisma.user.create({ data: { id: randomUUID(), name, email, role, carnetOrCode: code, passwordHash: hashPassword(password), department: role === 'PARQUEO' ? 'Seguridad y Parqueo' : 'Gestión de Eventos', mustChangePassword: true } }); res.status(201).json({ user: { name: created.name, email: created.email, role }, temporaryPassword: password }); } catch (error) { if (!handleUniqueError(error, res)) throw error; }
+  try { const created = await prisma.user.create({ data: { id: randomUUID(), name, email, role, carnetOrCode: code, passwordHash: hashPassword(password), department: role === 'PARQUEO' ? 'Seguridad y Parqueo' : 'Gestión de Eventos', mustChangePassword: true } }); await notifyUser(created.id, 'Tu acceso operativo USPG está listo', `Hola ${created.name},\n\nSe creó tu acceso de ${role === 'PARQUEO' ? 'Parqueo' : 'Eventos'}.\n\nCorreo: ${created.email}\nContraseña temporal: ${password}\n\nAl ingresar deberás cambiarla.`, 'INFO', '/login'); res.status(201).json({ user: { name: created.name, email: created.email, role }, temporaryPassword: password, emailQueued: true }); } catch (error) { if (!handleUniqueError(error, res)) throw error; }
 });
 
 app.post('/api/parking/vehicles', requireUser, async (req, res) => {
@@ -1432,6 +1433,14 @@ app.post('/api/parking/vehicles/:id/pass', requireUser, async (req, res) => {
 
 app.patch('/api/parking/vehicles/:id/status', requireUser, async (req, res) => {
   const vehicle = await prisma.parkingVehicle.findUnique({ where: { id: req.params.id } }); if (!vehicle) return void res.status(404).json({ message: 'Vehículo no encontrado.' }); if (!['ADMIN', 'PARQUEO'].includes(res.locals.authUser.role) && vehicle.ownerId !== res.locals.authUser.id) return void res.status(403).json({ message: 'No puedes modificar este vehículo.' }); const status = String(req.body.status); if (!['ACTIVO', 'BLOQUEADO'].includes(status)) return void res.status(400).json({ message: 'Estado no válido.' }); const saved = await prisma.parkingVehicle.update({ where: { id: vehicle.id }, data: { status } }); await notifyUser(vehicle.ownerId, status === 'ACTIVO' ? 'Pase de parqueo reactivado' : 'Pase de parqueo bloqueado', status === 'ACTIVO' ? `El pase digital del vehículo ${vehicle.plate} está activo nuevamente.` : `El pase digital del vehículo ${vehicle.plate} fue bloqueado y ya no permitirá ingresos.`, status === 'ACTIVO' ? 'SUCCESS' : 'WARNING', '/parqueo'); res.json(saved);
+});
+app.delete('/api/parking/vehicles/:id', requireUser, async (req, res) => {
+  const vehicle = await prisma.parkingVehicle.findUnique({ where: { id: req.params.id } });
+  if (!vehicle) return void res.status(404).json({ message: 'Vehículo no encontrado.' });
+  if (!['ADMIN', 'PARQUEO'].includes(res.locals.authUser.role) && vehicle.ownerId !== res.locals.authUser.id) return void res.status(403).json({ message: 'No puedes quitar este vehículo.' });
+  if (await prisma.parkingVisit.findFirst({ where: { vehicleId: vehicle.id, status: 'DENTRO' } })) return void res.status(409).json({ message: 'No puedes quitar un vehículo mientras aparece dentro del campus.' });
+  await prisma.parkingVehicle.delete({ where: { id: vehicle.id } });
+  res.json({ ok: true });
 });
 
 app.patch('/api/parking/config', requireUser, requireAdmin, async (req, res) => {
@@ -1499,7 +1508,7 @@ app.post('/api/library/staff', requireUser, requireAdmin, async (req, res) => {
   const name = String(req.body.name || '').trim(), email = String(req.body.email || '').trim().toLowerCase(), code = String(req.body.code || '').trim().toUpperCase();
   if (name.length < 3 || roleFromEmail(email) !== 'BIBLIOTECA' || code.length < 3) return void res.status(400).json({ message: 'Indica nombre, código y correo @biblioteca.uspg.edu.gt.' });
   const password = temporaryPassword();
-  try { const user = await prisma.user.create({ data: { id: randomUUID(), name, email, role: 'BIBLIOTECA', carnetOrCode: code, passwordHash: hashPassword(password), department: 'Biblioteca', mustChangePassword: true } }); res.status(201).json({ user: { id: user.id, name: user.name, email: user.email, role: user.role }, temporaryPassword: password }); } catch (error) { if (!handleUniqueError(error, res)) throw error; }
+  try { const user = await prisma.user.create({ data: { id: randomUUID(), name, email, role: 'BIBLIOTECA', carnetOrCode: code, passwordHash: hashPassword(password), department: 'Biblioteca', mustChangePassword: true } }); await notifyUser(user.id, 'Tu acceso a Biblioteca USPG está listo', `Hola ${user.name},\n\nSe creó tu acceso al módulo de Biblioteca USPG.\n\nCorreo: ${user.email}\nContraseña temporal: ${password}\n\nAl ingresar deberás cambiarla.`, 'INFO', '/login'); res.status(201).json({ user: { id: user.id, name: user.name, email: user.email, role: user.role }, temporaryPassword: password, emailQueued: true }); } catch (error) { if (!handleUniqueError(error, res)) throw error; }
 });
 
 const evaluateLibraryAlerts = async () => { const now = new Date(), tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000); const [dueSoon, overdue] = await Promise.all([prisma.libraryLoan.findMany({ where: { status: 'PRESTADO', dueAt: { gte: now, lte: tomorrow }, dueReminderSentAt: null }, include: { copy: { include: { book: true } } }, take: 100 }), prisma.libraryLoan.findMany({ where: { status: 'PRESTADO', dueAt: { lt: now }, overdueNoticeSentAt: null }, include: { copy: { include: { book: true } } }, take: 100 })]); for (const loan of dueSoon) { await notifyUser(loan.borrowerId, 'Recordatorio de devolución', `${loan.copy.book.title} vence el ${loan.dueAt.toLocaleString('es-GT')}.`, 'WARNING', '/biblioteca'); await prisma.libraryLoan.update({ where: { id: loan.id }, data: { dueReminderSentAt: new Date() } }); } for (const loan of overdue) { await notifyUser(loan.borrowerId, 'Préstamo vencido', `${loan.copy.book.title} está vencido desde el ${loan.dueAt.toLocaleDateString('es-GT')}. Devuélvelo a Biblioteca.`, 'ERROR', '/biblioteca'); await prisma.libraryLoan.update({ where: { id: loan.id }, data: { overdueNoticeSentAt: new Date() } }); } };
