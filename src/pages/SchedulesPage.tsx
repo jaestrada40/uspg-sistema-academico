@@ -15,7 +15,7 @@ import { Modal } from '../components/common/Modal';
 import { RoleGuard } from '../components/common/RoleGuard';
 
 export const SchedulesPage: React.FC = () => {
-  const { sections, classrooms, currentCycle, addClassroom, showToast } = useApp();
+  const { currentUser, sections, classrooms, currentCycle, enrollments, addClassroom, showToast } = useApp();
 
   const [activeTab, setActiveTab] = useState<'grid' | 'classrooms'>('grid');
   const [selectedDay, setSelectedDay] = useState<string>('ALL');
@@ -29,7 +29,9 @@ export const SchedulesPage: React.FC = () => {
   });
 
   const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-  const timeSlots = Array.from(new Set(sections.map((section) => section.scheduleTime).filter(Boolean))).sort((a, b) => {
+  const enrolledSectionIds = new Set(enrollments.filter((item) => item.studentCarnet === currentUser.carnetOrCode && item.cycleId === currentCycle.id && item.status === 'Inscrito').map((item) => item.sectionId));
+  const visibleSections = currentUser.role === 'ESTUDIANTE' ? sections.filter((section) => enrolledSectionIds.has(section.id)) : sections;
+  const timeSlots = Array.from(new Set(visibleSections.map((section) => section.scheduleTime).filter(Boolean))).sort((a, b) => {
     const minutes = (value: string) => { const match = value.match(/(\d{1,2}):(\d{2})/); return match ? Number(match[1]) * 60 + Number(match[2]) : Number.MAX_SAFE_INTEGER; };
     return minutes(a) - minutes(b);
   });
@@ -68,13 +70,13 @@ export const SchedulesPage: React.FC = () => {
           ]}
           actions={
             <div className="flex items-center gap-2">
-              <button
+              {currentUser.role === 'ADMIN' && <button
                 onClick={handlePrintSchedule}
                 className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-semibold text-[#333333] hover:bg-slate-50 transition-colors shadow-xs"
               >
                 <Printer className="h-4 w-4 text-[#800020]" />
                 Imprimir Horario
-              </button>
+              </button>}
 
               <button
                 onClick={() => setShowAddClassroomModal(true)}
@@ -136,7 +138,7 @@ export const SchedulesPage: React.FC = () => {
                         </td>
 
                         {days.map((day) => {
-                          const matchingSections = sections.filter(
+                            const matchingSections = visibleSections.filter(
                             (s) => s.scheduleDays.includes(day) && s.scheduleTime === time
                           );
 
