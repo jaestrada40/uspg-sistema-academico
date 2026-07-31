@@ -969,9 +969,19 @@ app.patch('/api/cycles/:id', requireAdmin, async (req, res) => {
   const current = await prisma.academicCycle.findUnique({ where: { id: req.params.id } });
   if (!current) return void res.status(404).json({ message: 'Ciclo no encontrado.' });
   const data = req.body;
+  if (current.status === 'Finalizado') return void res.status(409).json({ message: 'Un ciclo finalizado no puede editarse.' });
+  const start = data.startDate ? new Date(data.startDate) : current.startDate;
+  const end = data.endDate ? new Date(data.endDate) : current.endDate;
+  const enrollmentStart = data.enrollmentStartDate ? new Date(data.enrollmentStartDate) : current.enrollmentStartDate;
+  const enrollmentEnd = data.enrollmentEndDate ? new Date(data.enrollmentEndDate) : current.enrollmentEndDate;
+  const gradeDeadline = data.gradeSubmissionDeadline ? new Date(data.gradeSubmissionDeadline) : current.gradeSubmissionDeadline;
+  if ([start, end, enrollmentStart, enrollmentEnd, gradeDeadline].some((date) => Number.isNaN(date.getTime())) || start >= end || enrollmentStart > enrollmentEnd || gradeDeadline < end) return void res.status(400).json({ message: 'Revisa las fechas: las clases, inscripciones y límite de actas deben mantener un orden válido.' });
+  if (data.status === 'Finalizado' && current.isCurrent) return void res.status(409).json({ message: 'Primero establece otro ciclo como activo antes de finalizar este ciclo.' });
   const cycle = await prisma.$transaction(async (tx) => {
     if (data.isCurrent) await tx.academicCycle.updateMany({ where: { id: { not: current.id } }, data: { isCurrent: false } });
-    return tx.academicCycle.update({ where: { id: current.id }, data: { ...data, id: undefined, startDate: data.startDate ? new Date(data.startDate) : undefined, endDate: data.endDate ? new Date(data.endDate) : undefined, enrollmentStartDate: data.enrollmentStartDate ? new Date(data.enrollmentStartDate) : undefined, enrollmentEndDate: data.enrollmentEndDate ? new Date(data.enrollmentEndDate) : undefined, gradeSubmissionDeadline: data.gradeSubmissionDeadline ? new Date(data.gradeSubmissionDeadline) : undefined } });
+    const saved = await tx.academicCycle.update({ where: { id: current.id }, data: { ...data, id: undefined, startDate: data.startDate ? new Date(data.startDate) : undefined, endDate: data.endDate ? new Date(data.endDate) : undefined, enrollmentStartDate: data.enrollmentStartDate ? new Date(data.enrollmentStartDate) : undefined, enrollmentEndDate: data.enrollmentEndDate ? new Date(data.enrollmentEndDate) : undefined, gradeSubmissionDeadline: data.gradeSubmissionDeadline ? new Date(data.gradeSubmissionDeadline) : undefined } });
+    await tx.auditLog.create({ data: { action: 'UPDATE', entityType: 'CYCLE', entityId: current.id, actorId: res.locals.authUser.id, details: JSON.stringify({ before: current.status, after: saved.status }) } });
+    return saved;
   });
   res.json(cycleView(cycle));
 });
@@ -984,16 +994,20 @@ app.post('/api/classrooms', requireAdmin, async (req, res) => {
 app.patch('/api/classrooms/:id', requireAdmin, async (req, res) => res.json(await prisma.classroom.update({ where: { id: req.params.id }, data: req.body })));
 
 const sectionView = (section: any) => ({ id: section.id, code: section.code, courseCode: section.courseCode, courseName: section.course.name, teacherId: section.teacherId, teacherName: section.teacher.name, cycleId: section.cycleId, scheduleDays: JSON.parse(section.scheduleDays), scheduleTime: section.scheduleTime, classroomId: section.classroomId, classroomName: section.classroom.code, modality: section.modality, jornada: section.jornada, capacity: section.capacity, enrolledCount: section.enrolledCount, status: section.status });
+const timeRange = (value: string) => { const parts = String(value || '').match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/); if (!parts) return null; const start = Number(parts[1]) * 60 + Number(parts[2]); const end = Number(parts[3]) * 60 + Number(parts[4]); return start < end && start >= 0 && end <= 24 * 60 ? { start, end } : null; };
+const schedulesOverlap = (a: string, b: string) => { const first = timeRange(a); const second = timeRange(b); return Boolean(first && second && first.start < second.end && second.start < first.end); };
 app.get('/api/sections', requireUser, async (_req, res) => res.json((await prisma.section.findMany({ include: { course: true, teacher: true, classroom: true } })).map(sectionView)));
 app.post('/api/sections', requireAdmin, async (req, res) => {
   const data = req.body;
+  const range = timeRange(data.scheduleTime); if (!range || !Array.isArray(data.scheduleDays) || data.scheduleDays.length === 0) return void res.status(400).json({ message: 'Indica un horario válido (ej. 07:45 - 10:00) y al menos un día.' });
   const classroom = await prisma.classroom.findUnique({ where: { id: data.classroomId } });
   if (!classroom || classroom.status === 'Mantenimiento') return void res.status(400).json({ message: 'El aula no está disponible.' });
   if (data.modality !== 'Virtual' && data.capacity > classroom.capacity) return void res.status(400).json({ message: 'El cupo supera la capacidad del aula.' });
   const days = data.scheduleDays || [];
-  const candidates = await prisma.section.findMany({ where: { cycleId: data.cycleId, scheduleTime: data.scheduleTime }, include: { teacher: true, classroom: true } });
+  const candidates = await prisma.section.findMany({ where: { cycleId: data.cycleId }, include: { teacher: true, classroom: true } });
   for (const section of candidates) {
     if (!JSON.parse(section.scheduleDays).some((day: string) => days.includes(day))) continue;
+    if (!schedulesOverlap(section.scheduleTime, data.scheduleTime)) continue;
     if (section.teacherId === data.teacherId) return void res.status(409).json({ message: `El catedrático ya tiene la sección ${section.code} en ese horario.` });
     if (data.modality !== 'Virtual' && section.classroomId === data.classroomId) return void res.status(409).json({ message: `El aula ya está ocupada por la sección ${section.code}.` });
   }
@@ -1008,7 +1022,12 @@ app.post('/api/sections', requireAdmin, async (req, res) => {
   } catch (error) { if (!handleUniqueError(error, res)) throw error; }
 });
 app.patch('/api/sections/:id', requireAdmin, async (req, res) => {
-  const data = { ...req.body, scheduleDays: req.body.scheduleDays ? JSON.stringify(req.body.scheduleDays) : undefined };
+  const current = await prisma.section.findUnique({ where: { id: req.params.id } }); if (!current) return void res.status(404).json({ message: 'Sección no encontrada.' });
+  const nextDays = Array.isArray(req.body.scheduleDays) ? req.body.scheduleDays : JSON.parse(current.scheduleDays); const nextTime = req.body.scheduleTime || current.scheduleTime; const range = timeRange(nextTime); if (!range || !nextDays.length) return void res.status(400).json({ message: 'Indica un horario válido y al menos un día.' });
+  if (req.body.capacity !== undefined && Number(req.body.capacity) < current.enrolledCount) return void res.status(400).json({ message: `El cupo no puede ser menor que los ${current.enrolledCount} estudiantes inscritos.` });
+  const candidates = await prisma.section.findMany({ where: { id: { not: current.id }, cycleId: current.cycleId }, select: { scheduleDays: true, scheduleTime: true, teacherId: true, classroomId: true, modality: true, code: true } });
+  for (const candidate of candidates) { if (!JSON.parse(candidate.scheduleDays).some((day: string) => nextDays.includes(day)) || !schedulesOverlap(candidate.scheduleTime, nextTime)) continue; if (candidate.teacherId === (req.body.teacherId || current.teacherId)) return void res.status(409).json({ message: `El catedrático ya tiene la sección ${candidate.code} en ese horario.` }); if ((req.body.modality || current.modality) !== 'Virtual' && candidate.classroomId === (req.body.classroomId || current.classroomId) && candidate.modality !== 'Virtual') return void res.status(409).json({ message: `El aula ya está ocupada por la sección ${candidate.code}.` }); }
+  const data = { ...req.body, scheduleDays: Array.isArray(req.body.scheduleDays) ? JSON.stringify(req.body.scheduleDays) : undefined };
   const section = await prisma.section.update({ where: { id: req.params.id }, data, include: { course: true, teacher: true, classroom: true } });
   res.json(sectionView(section));
 });
