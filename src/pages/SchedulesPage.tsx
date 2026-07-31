@@ -35,6 +35,8 @@ export const SchedulesPage: React.FC = () => {
     const minutes = (value: string) => { const match = value.match(/(\d{1,2}):(\d{2})/); return match ? Number(match[1]) * 60 + Number(match[2]) : Number.MAX_SAFE_INTEGER; };
     return minutes(a) - minutes(b);
   });
+  const calendarStart = 7 * 60, calendarEnd = 22 * 60, slot = 30;
+  const parseRange = (value: string) => { const match = value.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/); return match ? { start: Number(match[1]) * 60 + Number(match[2]), end: Number(match[3]) * 60 + Number(match[4]) } : null; };
 
   const handleCreateClassroom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,13 +80,13 @@ export const SchedulesPage: React.FC = () => {
                 Imprimir Horario
               </button>}
 
-              <button
+              {currentUser.role === 'ADMIN' && <button
                 onClick={() => setShowAddClassroomModal(true)}
                 className="flex items-center gap-2 rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white hover:bg-[#5F0018] transition-colors shadow-xs"
               >
                 <Plus className="h-4 w-4" />
                 Nueva Aula
-              </button>
+              </button>}
             </div>
           }
         />
@@ -116,6 +118,15 @@ export const SchedulesPage: React.FC = () => {
         {activeTab === 'grid' ? (
           /* Weekly Schedule Matrix */
           <div className="schedule-print-area space-y-4">
+            <div className="overflow-x-auto rounded-xl border border-[#E2E8F0] bg-white shadow-xs">
+              <div className="min-w-[980px]">
+                <div className="grid grid-cols-[80px_repeat(6,minmax(145px,1fr))] border-b bg-[#1E293B] text-[10px] font-bold text-white"><div className="p-3">Hora</div>{days.map((day) => <div key={day} className="border-l border-white/10 p-3 text-center">{day}</div>)}</div>
+                <div className="relative grid grid-cols-[80px_repeat(6,minmax(145px,1fr))]" style={{ height: `${((calendarEnd - calendarStart) / slot) * 32}px` }}>
+                  <div className="relative border-r bg-[#F8FAFC]">{Array.from({ length: (calendarEnd - calendarStart) / slot }, (_, index) => { const minute = calendarStart + index * slot; return <div key={minute} className="h-8 border-b px-2 pt-1 text-[9px] font-bold text-[#64748B]">{String(Math.floor(minute / 60)).padStart(2, '0')}:{String(minute % 60).padStart(2, '0')}</div>; })}</div>
+                  {days.map((day) => <div key={day} className="relative border-r" style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 31px, #E2E8F0 31px, #E2E8F0 32px)' }}>{visibleSections.filter((section) => section.scheduleDays.includes(day)).map((section) => { const range = parseRange(section.scheduleTime); if (!range) return null; const top = ((range.start - calendarStart) / slot) * 32; const height = Math.max(28, ((range.end - range.start) / slot) * 32 - 4); return <div key={`${day}-${section.id}`} className="absolute left-1 right-1 z-10 overflow-hidden rounded-md border border-[#800020]/30 bg-[#800020]/10 p-1.5 text-[9px] leading-tight shadow-sm" style={{ top, height }} title={`${section.courseName} · ${section.scheduleTime}`}><strong className="block text-[#800020]">{section.code}</strong><span className="block font-bold">{section.courseName}</span><span className="block text-[#475569]">{section.scheduleTime} · {section.classroomName}</span></div>; })}</div>)}
+                </div>
+              </div>
+            </div>
             <div className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-xs">
               <div className="flex flex-wrap gap-3 border-b bg-[#F8FAFC] p-4 text-xs text-[#475569]"><span><strong>Vista por bloques reales:</strong> cada fila corresponde al horario configurado en la sección.</span><span className="rounded-full bg-white px-3 py-1 font-semibold">Ejemplo: 07:00–09:00</span><span className="rounded-full bg-white px-3 py-1 font-semibold">Ejemplo: 07:45–10:00</span></div>
               <div className="overflow-x-auto">

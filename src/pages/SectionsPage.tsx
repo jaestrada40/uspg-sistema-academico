@@ -24,6 +24,7 @@ import { RoleGuard } from '../components/common/RoleGuard';
 
 export const SectionsPage: React.FC = () => {
   const {
+    currentUser,
     sections,
     courses,
     teachers,
@@ -183,7 +184,7 @@ export const SectionsPage: React.FC = () => {
             { label: 'Secciones', active: true },
           ]}
           actions={
-            <button
+            currentUser.role === 'ADMIN' && <button
               onClick={() => {
                 setConflictWarning(null);
                 setShowAddModal(true);
@@ -301,14 +302,14 @@ export const SectionsPage: React.FC = () => {
                             <Users className="h-3.5 w-3.5" />
                             <span>{sec.enrolledCount}</span>
                           </button>
-                          <button onClick={() => openEdit(sec)} className="rounded-md p-1.5 text-[#64748B] hover:bg-slate-100" title="Editar sección"><Edit2 className="h-4 w-4" /></button>
-                          <button
+                          {currentUser.role === 'ADMIN' && <button onClick={() => openEdit(sec)} className="rounded-md p-1.5 text-[#64748B] hover:bg-slate-100" title="Editar sección"><Edit2 className="h-4 w-4" /></button>}
+                          {currentUser.role === 'ADMIN' && <button
                             onClick={() => deleteSection(sec.id)}
                             className="rounded-md p-1.5 text-[#C53030] hover:bg-red-50"
                             title="Eliminar Sección"
                           >
                             ×
-                          </button>
+                          </button>}
                         </div>
                       </td>
                     </tr>
