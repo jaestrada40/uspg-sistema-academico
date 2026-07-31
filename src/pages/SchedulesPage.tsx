@@ -29,7 +29,10 @@ export const SchedulesPage: React.FC = () => {
   });
 
   const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-  const timeSlots = Array.from(new Set(sections.map((section) => section.scheduleTime).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const timeSlots = Array.from(new Set(sections.map((section) => section.scheduleTime).filter(Boolean))).sort((a, b) => {
+    const minutes = (value: string) => { const match = value.match(/(\d{1,2}):(\d{2})/); return match ? Number(match[1]) * 60 + Number(match[2]) : Number.MAX_SAFE_INTEGER; };
+    return minutes(a) - minutes(b);
+  });
 
   const handleCreateClassroom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,6 +115,7 @@ export const SchedulesPage: React.FC = () => {
           /* Weekly Schedule Matrix */
           <div className="schedule-print-area space-y-4">
             <div className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-xs">
+              <div className="flex flex-wrap gap-3 border-b bg-[#F8FAFC] p-4 text-xs text-[#475569]"><span><strong>Vista por bloques reales:</strong> cada fila corresponde al horario configurado en la sección.</span><span className="rounded-full bg-white px-3 py-1 font-semibold">Ejemplo: 07:00–09:00</span><span className="rounded-full bg-white px-3 py-1 font-semibold">Ejemplo: 07:45–10:00</span></div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
