@@ -114,7 +114,7 @@ const deliverOutboxEmail = async (outboxId: string) => {
   try {
     const institution = await prisma.institutionConfig.findUnique({ where: { id: 1 }, select: { logoDataUrl: true } });
     const fallbackLogo = (() => { try { return `data:image/png;base64,${readFileSync(path.join(rootDir, 'public/logo-uspg-wordmark.png')).toString('base64')}`; } catch { return null; } })();
-    const logoAttachment = (institution?.logoDataUrl || fallbackLogo)?.match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/);
+    const logoAttachment = (fallbackLogo || institution?.logoDataUrl)?.match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/);
     await mailTransport.sendMail({ from: process.env.SMTP_FROM || 'Sistema Académico USPG <no-reply@uspg.edu.gt>', to: email.recipientEmail, subject: email.subject, text: email.textBody, html: emailHtml(email.subject, email.textBody, undefined, Boolean(logoAttachment)), attachments: logoAttachment ? [{ filename: 'logo-uspg', content: logoAttachment[2], encoding: 'base64', cid: 'uspg-logo', contentType: logoAttachment[1] }] : undefined });
     await prisma.emailOutbox.update({ where: { id: outboxId }, data: { status: 'SENT', sentAt: new Date(), attempts: { increment: 1 }, lastError: null } });
   } catch (error) {
