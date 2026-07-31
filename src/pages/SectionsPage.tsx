@@ -411,16 +411,8 @@ export const SectionsPage: React.FC = () => {
 
               <div>
                 <label className="block font-bold text-[#333333] mb-1">Horario de Clase</label>
-                <select
-                  value={formData.scheduleTime}
-                  onChange={(e) => setFormData({ ...formData, scheduleTime: e.target.value })}
-                  className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium"
-                >
-                  <option value="07:00 - 09:00">07:00 - 09:00</option>
-                  <option value="09:15 - 11:15">09:15 - 11:15</option>
-                  <option value="11:30 - 13:30">11:30 - 13:30</option>
-                  <option value="18:00 - 20:00">18:00 - 20:00</option>
-                </select>
+                <input type="text" required value={formData.scheduleTime} onChange={(e) => setFormData({ ...formData, scheduleTime: e.target.value })} placeholder="07:45 - 10:00" className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium" />
+                <p className="mt-1 text-[10px] text-[#64748B]">Escribe el rango real, por ejemplo 07:45 - 10:00.</p>
               </div>
 
               <div>
@@ -436,6 +428,8 @@ export const SectionsPage: React.FC = () => {
                 </select>
               </div>
             </div>
+
+            <div><label className="block font-bold text-[#333333] mb-2">Días de clase</label><div className="flex flex-wrap gap-2">{['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'].map((day) => <label key={day} className="flex items-center gap-1 rounded-lg border px-3 py-2"><input type="checkbox" checked={formData.scheduleDays.includes(day)} onChange={(e) => setFormData({ ...formData, scheduleDays: e.target.checked ? [...formData.scheduleDays, day] : formData.scheduleDays.filter((item) => item !== day) })} />{day}</label>)}</div></div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-[#E2E8F0]">
               <button
@@ -467,6 +461,7 @@ export const SectionsPage: React.FC = () => {
               <label className="font-bold">Cupo<input type="number" min={selectedSection?.enrolledCount || 1} value={formData.capacity} onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })} className="mt-1 w-full rounded-lg border px-3 py-2 font-normal" required /></label>
               <label className="font-bold">Modalidad<select value={formData.modality} onChange={(e) => setFormData({ ...formData, modality: e.target.value as typeof formData.modality })} className="mt-1 w-full rounded-lg border px-3 py-2 font-normal"><option>Presencial</option><option>Virtual</option><option>Híbrida</option></select></label>
             </div>
+            <div><label className="block font-bold mb-2">Días de clase</label><div className="flex flex-wrap gap-2">{['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'].map((day) => <label key={day} className="flex items-center gap-1 rounded-lg border px-3 py-2"><input type="checkbox" checked={formData.scheduleDays.includes(day)} onChange={(e) => setFormData({ ...formData, scheduleDays: e.target.checked ? [...formData.scheduleDays, day] : formData.scheduleDays.filter((item) => item !== day) })} />{day}</label>)}</div></div>
             <div className="flex justify-end gap-2"><button type="button" onClick={() => setShowEditModal(false)} className="rounded-lg border px-4 py-2">Cancelar</button><button className="rounded-lg bg-[#800020] px-4 py-2 font-bold text-white">Guardar cambios</button></div>
           </form>
         </Modal>

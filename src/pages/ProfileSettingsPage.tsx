@@ -267,6 +267,8 @@ export const ProfileSettingsPage: React.FC = () => {
             Parámetros de Evaluación y Matrícula
           </h4>
 
+          <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs text-blue-900"><p className="font-bold">Configuración de Google Classroom</p><p className="mt-1">La conexión no se ingresa en un formulario público: TI debe colocar estas variables en el servidor y reiniciar la aplicación:</p><code className="mt-2 block rounded-lg bg-white p-3 font-mono text-[11px]">GOOGLE_CLASSROOM_CLIENT_ID<br />GOOGLE_CLASSROOM_CLIENT_SECRET<br />GOOGLE_CLASSROOM_REDIRECT_URI=https://tu-dominio/api/google/callback</code><p className="mt-2">En Google Cloud Console crea un cliente OAuth tipo aplicación web, agrega exactamente esa URL como URI autorizado y luego entra a <strong>Mis Clases → Configurar con Google</strong>.</p></div>
+
           <form onSubmit={handleSaveParameters} className="space-y-4 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
