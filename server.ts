@@ -94,6 +94,14 @@ const mailTransport = process.env.SMTP_HOST && process.env.SMTP_USER && process.
   auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
 }) : null;
 
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] || character));
+const emailHtml = (title: string, message: string, link?: string) => {
+  const safeMessage = escapeHtml(message).replace(/\n/g, '<br>');
+  const destination = link?.startsWith('http') ? link : `${String(process.env.APP_URL || '').replace(/\/$/, '')}${link ? (link.startsWith('/') ? link : `/${link}`) : ''}`;
+  const button = link ? `<a href="${escapeHtml(destination || link)}" style="display:inline-block;background:#8b0028;color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:8px;margin-top:20px">Abrir Sistema Académico</a>` : '';
+  return `<!doctype html><html lang="es"><body style="margin:0;background:#f4f6f9;font-family:Arial,Helvetica,sans-serif;color:#263244"><div style="max-width:620px;margin:30px auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 8px 24px rgba(15,23,42,.08)"><div style="background:#1d2a3d;padding:28px 34px;color:#fff"><div style="font-size:13px;letter-spacing:2px;font-weight:700;color:#f4c7d4">USPG · UNIVERSIDAD DE SAN PABLO</div><div style="font-size:24px;font-weight:700;margin-top:10px">Sistema Académico</div></div><div style="padding:34px"><h1 style="font-size:22px;margin:0 0 22px;color:#1d2a3d">${escapeHtml(title)}</h1><div style="font-size:15px;line-height:1.7;color:#475569">${safeMessage}</div>${button}<div style="margin-top:30px;padding:14px 16px;background:#fff8e8;border-left:4px solid #d39a20;border-radius:6px;font-size:12px;line-height:1.5;color:#795b18"><strong>Recomendación de seguridad</strong><br>No compartas tus credenciales. El equipo de USPG nunca te solicitará tu contraseña por correo.</div></div><div style="padding:18px 34px;background:#f8fafc;color:#64748b;font-size:11px;line-height:1.5">Este correo fue enviado automáticamente por el Sistema Académico USPG.<br>Universidad de San Pablo de Guatemala</div></div></body></html>`;
+};
+
 const deliverOutboxEmail = async (outboxId: string) => {
   const email = await prisma.emailOutbox.findUnique({ where: { id: outboxId } });
   if (!email || email.status === 'SENT') return;
@@ -102,7 +110,7 @@ const deliverOutboxEmail = async (outboxId: string) => {
     return;
   }
   try {
-    await mailTransport.sendMail({ from: process.env.SMTP_FROM || 'Sistema Académico USPG <no-reply@uspg.edu.gt>', to: email.recipientEmail, subject: email.subject, text: email.textBody });
+    await mailTransport.sendMail({ from: process.env.SMTP_FROM || 'Sistema Académico USPG <no-reply@uspg.edu.gt>', to: email.recipientEmail, subject: email.subject, text: email.textBody, html: emailHtml(email.subject, email.textBody) });
     await prisma.emailOutbox.update({ where: { id: outboxId }, data: { status: 'SENT', sentAt: new Date(), attempts: { increment: 1 }, lastError: null } });
   } catch (error) {
     await prisma.emailOutbox.update({ where: { id: outboxId }, data: { status: 'FAILED', attempts: { increment: 1 }, lastError: error instanceof Error ? error.message.slice(0, 500) : 'Error SMTP' } });
@@ -420,6 +428,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
         to: user.email,
         subject: 'Restablecimiento de contraseña USPG',
         text: `Hola ${user.name}. Usa este enlace para restablecer tu contraseña. Vence en 30 minutos y solo funciona una vez:\n\n${resetUrl}\n\nSi no solicitaste el cambio, ignora este mensaje.`,
+        html: emailHtml('Restablecimiento de contraseña', `Hola ${user.name},\n\nUsa el botón para crear una nueva contraseña. El enlace vence en 30 minutos y solo funciona una vez.\n\nSi no solicitaste este cambio, puedes ignorar este mensaje.`, resetUrl),
       });
     } catch (error) {
       console.error('No se pudo enviar la recuperación de contraseña:', error instanceof Error ? error.message : 'Error SMTP');
