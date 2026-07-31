@@ -30,6 +30,12 @@ if (renewResponse.status !== 200) throw new Error(`Renovación falló: ${renewRe
 const returnResponse = await request(`/api/library/loans/${loan.id}/return`, { method: 'POST', headers, body: JSON.stringify({ condition: 'BUENO' }) });
 if (returnResponse.status !== 200) throw new Error(`Devolución falló: ${returnResponse.status} ${await returnResponse.text()}`);
 
+const incidentLoanResponse = await request('/api/library/loans', { method: 'POST', headers, body: JSON.stringify({ borrowerCode, barcode: copy.barcode, days: 7 }) });
+if (incidentLoanResponse.status !== 201) throw new Error(`Préstamo de incidencia falló: ${incidentLoanResponse.status} ${await incidentLoanResponse.text()}`);
+const incidentLoan = await incidentLoanResponse.json();
+const incidentResponse = await request(`/api/library/loans/${incidentLoan.id}/incident`, { method: 'POST', headers, body: JSON.stringify({ type: 'DANADO', notes: 'Prueba controlada de incidencia bibliotecaria.', suspensionDays: 0 }) });
+if (incidentResponse.status !== 200) throw new Error(`Incidencia falló: ${incidentResponse.status} ${await incidentResponse.text()}`);
+
 let reservationStatus = 'omitida: requiere sesión de estudiante/docente';
 if (process.env.TEST_LIBRARY_BORROWER_EMAIL && process.env.TEST_LIBRARY_BORROWER_PASSWORD) {
   const borrowerLogin = await request('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: process.env.TEST_LIBRARY_BORROWER_EMAIL, password: process.env.TEST_LIBRARY_BORROWER_PASSWORD }) });
@@ -38,6 +44,5 @@ if (process.env.TEST_LIBRARY_BORROWER_EMAIL && process.env.TEST_LIBRARY_BORROWER
   if (![201, 409].includes(reservationResponse.status)) throw new Error(`Reserva falló: ${reservationResponse.status} ${await reservationResponse.text()}`);
   reservationStatus = reservationResponse.status === 201 ? 'creada' : 'ya existente';
 }
-console.log(`PASS Biblioteca: préstamo, renovación, devolución y reserva (${reservationStatus}).`);
-console.log('La incidencia requiere un ejemplar/usuario de prueba separado para no marcar datos reales como perdido o dañado.');
+console.log(`PASS Biblioteca: préstamo, renovación, devolución, incidencia DANADO y reserva (${reservationStatus}).`);
 await request('/api/auth/logout', { method: 'POST', headers });
