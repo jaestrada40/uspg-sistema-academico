@@ -16,6 +16,7 @@ import { FilterBar } from '../components/common/FilterBar';
 import { ProgressBar } from '../components/common/ProgressBar';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { RoleGuard } from '../components/common/RoleGuard';
+import { StudentPicker } from '../components/common/StudentPicker';
 
 export const EnrollmentPage: React.FC = () => {
   const {
@@ -32,9 +33,11 @@ export const EnrollmentPage: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [jornadaFilter, setJornadaFilter] = useState('ALL');
+  const [selectedStudent, setSelectedStudent] = useState(currentUser.carnetOrCode || '');
+  const { students } = useApp();
 
   // Student details
-  const studentCarnet = currentUser.carnetOrCode || '20230142';
+  const studentCarnet = currentUser.role === 'ESTUDIANTE' ? currentUser.carnetOrCode || '' : selectedStudent;
 
   // Active student enrollments
   const myEnrollments = enrollments.filter(
@@ -79,6 +82,8 @@ export const EnrollmentPage: React.FC = () => {
             { label: 'Inscripción de Cursos', active: true },
           ]}
         />
+
+        {currentUser.role === 'ADMIN' && <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs"><StudentPicker students={students} value={selectedStudent} onChange={setSelectedStudent} label="Asignar cursos a estudiante" /><p className="mt-3 flex items-start gap-2 text-xs text-[#64748B]"><Info className="mt-0.5 h-4 w-4 shrink-0 text-[#800020]" />Esta pantalla permite inscribir o retirar cursos en el ciclo activo. El sistema valida automáticamente cupo, prerrequisitos, límite de créditos y saldos vencidos.</p></div>}
 
         {/* Credit Limit Summary Banner */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs">
