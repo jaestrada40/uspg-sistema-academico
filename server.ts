@@ -1990,7 +1990,8 @@ app.get('/api/enrollment-documents', requireUser, async (req, res) => {
 
 app.post('/api/enrollment-documents', requireUser, async (req, res) => {
   const user = res.locals.authUser;
-  if (user.role !== 'ESTUDIANTE') return void res.status(403).json({ message: 'El archivo debe cargarse desde la cuenta del estudiante.' });
+  if (!['ESTUDIANTE', 'ADMIN'].includes(user.role)) return void res.status(403).json({ message: 'El archivo debe cargarse desde la cuenta del estudiante o administración.' });
+  const targetCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode || '' : String(req.body.studentCarnet || '').trim();
   const type = String(req.body.type || '').trim().toUpperCase();
   const fileName = String(req.body.fileName || '').trim().slice(0, 180);
   const dataUrl = String(req.body.dataUrl || '');
@@ -1998,12 +1999,12 @@ app.post('/api/enrollment-documents', requireUser, async (req, res) => {
   if (!enrollmentDocumentTypes[type] || !fileName || !match) return void res.status(400).json({ message: 'Selecciona un requisito y carga un archivo PDF, PNG o JPG válido.' });
   if (Buffer.byteLength(match[2], 'base64') > 3 * 1024 * 1024) return void res.status(400).json({ message: 'El archivo no puede superar 3 MB.' });
   const document = await prisma.$transaction(async (tx) => {
-    const saved = await tx.enrollmentDocument.upsert({ where: { studentCarnet_type: { studentCarnet: user.carnetOrCode || '', type } }, update: { fileName, mimeType: match[1], fileData: match[2], status: 'PENDIENTE', reviewNote: null, reviewedBy: null, reviewedAt: null }, create: { studentCarnet: user.carnetOrCode || '', type, fileName, mimeType: match[1], fileData: match[2] } });
+    const saved = await tx.enrollmentDocument.upsert({ where: { studentCarnet_type: { studentCarnet: targetCarnet, type } }, update: { fileName, mimeType: match[1], fileData: match[2], status: 'PENDIENTE', reviewNote: null, reviewedBy: null, reviewedAt: null }, create: { studentCarnet: targetCarnet, type, fileName, mimeType: match[1], fileData: match[2] } });
     await tx.auditLog.create({ data: { action: 'UPLOAD_ENROLLMENT_DOCUMENT', entityType: 'ENROLLMENT_DOCUMENT', entityId: saved.id, actorId: user.id, details: JSON.stringify({ type, fileName }) } });
     return saved;
   });
-  const admins = await prisma.user.findMany({ where: { role: 'ADMIN', active: true }, select: { id: true } });
-  for (const admin of admins) await notifyUser(admin.id, 'Documento pendiente de revisión', `${user.name} cargó ${enrollmentDocumentTypes[type]}.`, 'INFO', '/expediente');
+  if (user.role === 'ESTUDIANTE') { const admins = await prisma.user.findMany({ where: { role: 'ADMIN', active: true }, select: { id: true } }); for (const admin of admins) await notifyUser(admin.id, 'Documento pendiente de revisión', `${user.name} cargó ${enrollmentDocumentTypes[type]}.`, 'INFO', '/expediente'); }
+  else await notifyByCarnet(targetCarnet, 'Documento cargado en tu expediente', `Administración cargó ${enrollmentDocumentTypes[type]} en tu expediente.`, 'INFO', '/expediente');
   res.status(201).json({ id: document.id, status: document.status });
 });
 
