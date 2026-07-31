@@ -14,6 +14,7 @@ export const UsersPage: React.FC = () => {
   const [busyId, setBusyId] = useState('');
   const [credential, setCredential] = useState<{ name: string; password: string } | null>(null);
   const [pendingReset, setPendingReset] = useState<ManagedUser | null>(null);
+  const [pendingMfa, setPendingMfa] = useState<ManagedUser | null>(null);
   const load = async () => { const response = await fetch('/api/admin/users'); if (response.ok) setUsers(await response.json()); };
   useEffect(() => { void load(); }, []);
   const filtered = useMemo(() => { const value = search.toLowerCase(); return users.filter((user) => [user.name, user.email, user.role, user.carnetOrCode || ''].some((field) => field.toLowerCase().includes(value))); }, [users, search]);
@@ -23,7 +24,6 @@ export const UsersPage: React.FC = () => {
     setCredential({ name: user.name, password: result.temporaryPassword }); showToast('Contraseña temporal generada y sesiones cerradas', 'success'); await load();
   };
   const resetMfa = async (user: ManagedUser) => {
-    if (!window.confirm(`Se eliminará el MFA de ${user.name} y se cerrarán sus sesiones. ¿Continuar?`)) return;
     setBusyId(user.id); const response = await fetch(`/api/admin/users/${user.id}/reset-mfa`, { method: 'POST' }); const result = await response.json(); setBusyId('');
     if (!response.ok) return showToast(result.message, 'error'); showToast('MFA restablecido; deberá configurarse nuevamente si su rol lo exige', 'success'); await load();
   };

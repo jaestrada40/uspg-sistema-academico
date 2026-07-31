@@ -315,11 +315,11 @@ export const CoursesPage: React.FC = () => {
 
         {/* Modal: Add Course */}
         <Modal
-          isOpen={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          title="Crear Nueva Asignatura"
+          isOpen={showAddModal || showEditModal}
+          onClose={() => { setShowAddModal(false); setShowEditModal(false); }}
+          title={showEditModal ? 'Editar Curso y Prerrequisitos' : 'Crear Nueva Asignatura'}
         >
-          <form onSubmit={handleCreateCourse} className="space-y-4">
+          <form onSubmit={showEditModal ? handleEditCourse : handleCreateCourse} className="space-y-4">
             {circularError && (
               <div className="rounded-lg bg-[#C53030]/10 border border-[#C53030]/30 p-3 text-xs font-semibold text-[#C53030] flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -422,7 +422,7 @@ export const CoursesPage: React.FC = () => {
                 type="submit"
                 className="rounded-lg bg-[#800020] px-5 py-2 text-xs font-bold text-white hover:bg-[#5F0018]"
               >
-                Guardar Curso
+                {showEditModal ? 'Guardar cambios' : 'Guardar Curso'}
               </button>
             </div>
           </form>

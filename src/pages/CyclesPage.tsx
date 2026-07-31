@@ -169,11 +169,11 @@ export const CyclesPage: React.FC = () => {
 
         {/* Modal: Create Cycle */}
         <Modal
-          isOpen={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          title="Crear Ciclo Académico"
+          isOpen={showAddModal || showEditModal}
+          onClose={() => { setShowAddModal(false); setShowEditModal(false); }}
+          title={showEditModal ? 'Editar Ciclo Académico' : 'Crear Ciclo Académico'}
         >
-          <form onSubmit={handleCreateCycle} className="space-y-4 text-xs">
+          <form onSubmit={showEditModal ? handleEditCycle : handleCreateCycle} className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block font-bold text-[#333333] mb-1">Año Lectivo</label>
@@ -260,7 +260,7 @@ export const CyclesPage: React.FC = () => {
                 type="submit"
                 className="rounded-lg bg-[#800020] px-5 py-2 font-bold text-white hover:bg-[#5F0018]"
               >
-                Guardar Ciclo
+                {showEditModal ? 'Guardar cambios' : 'Guardar Ciclo'}
               </button>
             </div>
           </form>

@@ -29,12 +29,7 @@ export const SchedulesPage: React.FC = () => {
   });
 
   const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-  const timeSlots = [
-    '07:00 - 09:00',
-    '09:15 - 11:15',
-    '11:30 - 13:30',
-    '18:00 - 20:00',
-  ];
+  const timeSlots = Array.from(new Set(sections.map((section) => section.scheduleTime).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
   const handleCreateClassroom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +55,7 @@ export const SchedulesPage: React.FC = () => {
 
   return (
     <RoleGuard allowedRoles={['ADMIN', 'DOCENTE', 'ESTUDIANTE']}>
-      <div className="space-y-6">
+      <div className="schedule-page space-y-6">
         <PageHeader
           title="Horarios y Aulas Universitarias"
           description={`Programación de recintos, aulas físicas y matriz de distribución horaria - ${currentCycle.name}`}
@@ -115,7 +110,7 @@ export const SchedulesPage: React.FC = () => {
 
         {activeTab === 'grid' ? (
           /* Weekly Schedule Matrix */
-          <div className="space-y-4">
+          <div className="schedule-print-area space-y-4">
             <div className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-xs">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">

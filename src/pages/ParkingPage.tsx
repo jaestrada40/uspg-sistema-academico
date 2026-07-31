@@ -5,11 +5,12 @@ import { PageHeader } from '../components/common/PageHeader';
 import { RoleGuard } from '../components/common/RoleGuard';
 import { QrCode } from '../components/common/QrCode';
 import { QrScanner } from '../components/common/QrScanner';
+import { ConfirmationDialog } from '../components/common/ConfirmationDialog';
 import { PasswordInput } from '../components/common/PasswordInput';
 
 export const ParkingPage: React.FC = () => {
   const { currentUser, showToast } = useApp(); const staff = ['ADMIN', 'PARQUEO', 'EVENTOS'].includes(currentUser.role);
-  const [data, setData] = useState<any>(null), [panel, setPanel] = useState<'VEHICLE' | 'ACCESS' | 'EVENT' | 'GUEST' | 'EVENT_DASH' | 'CONTINGENCY' | 'CONFIG' | 'STAFF' | null>(null), [credential, setCredential] = useState<any>(null);
+  const [data, setData] = useState<any>(null), [panel, setPanel] = useState<'VEHICLE' | 'ACCESS' | 'EVENT' | 'GUEST' | 'EVENT_DASH' | 'CONTINGENCY' | 'CONFIG' | 'STAFF' | null>(null), [credential, setCredential] = useState<any>(null), [pendingRemove, setPendingRemove] = useState<any>(null);
   const [vehicle, setVehicle] = useState({ ownerCode: '', plate: '', make: '', model: '', color: '', type: 'AUTOMOVIL' }); const [access, setAccess] = useState({ code: '', plate: '', entryGate: 'ENTRADA_1' }); const [event, setEvent] = useState({ name: '', organizer: '', startsAt: '', endsAt: '', reservedSpaces: '20' }); const [staffForm, setStaffForm] = useState({ name: '', email: '', code: '', role: 'PARQUEO' });
   const [selectedEvent, setSelectedEvent] = useState<any>(null), [guest, setGuest] = useState({ guestName: '', plate: '' }), [guestPass, setGuestPass] = useState<any>(null); const [config, setConfig] = useState({ totalCapacity: '200', regularReserve: '20' });
   const [scanning, setScanning] = useState(false);
@@ -29,7 +30,7 @@ export const ParkingPage: React.FC = () => {
   const refreshPass = useCallback(async (vehicleId: string) => { const response = await fetch(`/api/parking/vehicles/${vehicleId}/pass`, { method: 'POST' }); if (!response.ok) return; const result = await response.json(); setPasses((current)=>({...current,[vehicleId]:result})); }, []);
   useEffect(() => { if (!data) return; const ownVehicles = data.vehicles.filter((item:any)=>item.ownerId === currentUser.id && item.status === 'ACTIVO'); ownVehicles.forEach((item:any)=>refreshPass(item.id)); const timer = window.setInterval(()=>ownVehicles.forEach((item:any)=>refreshPass(item.id)), 4 * 60 * 1000); return ()=>window.clearInterval(timer); }, [data, currentUser.id, refreshPass]);
   const changeVehicleStatus = async (item:any) => { const status = item.status === 'ACTIVO' ? 'BLOQUEADO' : 'ACTIVO'; if (!(await post(`/api/parking/vehicles/${item.id}/status`, { status }, 'PATCH'))) return; showToast(status === 'BLOQUEADO' ? 'Pase bloqueado inmediatamente' : 'Vehículo reactivado', 'success'); await load(); };
-  const removeVehicle = async (item:any) => { if (!window.confirm(`¿Quitar el vehículo ${item.plate} y revocar su pase digital?`)) return; if (!(await post(`/api/parking/vehicles/${item.id}`, {}, 'DELETE'))) return; showToast('Vehículo y pase digital quitados', 'success'); await load(); };
+  const removeVehicle = async (item:any) => { if (!(await post(`/api/parking/vehicles/${item.id}`, {}, 'DELETE'))) return; showToast('Vehículo y pase digital quitados', 'success'); await load(); };
   const changeGuest = async (item:any, action:'reissue'|'cancel') => { const result = await post(`/api/parking/events/${selectedEvent.id}/guests/${item.id}/${action === 'reissue' ? 'reissue' : 'status'}`, action === 'cancel' ? { status: 'CANCELADO' } : {}, action === 'cancel' ? 'PATCH' : 'POST'); if (!result) return; if (action === 'reissue') setGuestPass({ name: item.guestName, event: selectedEvent.name, code: result.accessCode }); showToast(action === 'reissue' ? 'Pase regenerado; el anterior quedó invalidado' : 'Pase cancelado', 'success'); await loadEvent(selectedEvent); };
   const closeEvent = async () => { if (!(await post(`/api/parking/events/${selectedEvent.id}/status`, { status: 'CERRADO' }, 'PATCH'))) return; showToast('Evento cerrado y cupo liberado', 'success'); setPanel(null); setEventDetail(null); await load(); };
   const acknowledgeAlert = async (id:string) => { if (!(await post(`/api/parking/alerts/${id}/acknowledge`, {}, 'PATCH'))) return; showToast('Alerta marcada como atendida', 'success'); await load(); };

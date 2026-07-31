@@ -277,11 +277,11 @@ export const CareersPage: React.FC = () => {
 
         {/* Modal: Add Career */}
         <Modal
-          isOpen={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          title="Crear Nueva Carrera Académica"
+          isOpen={showAddModal || showEditModal}
+          onClose={() => { setShowAddModal(false); setShowEditModal(false); }}
+          title={showEditModal ? 'Editar Carrera Académica' : 'Crear Nueva Carrera Académica'}
         >
-          <form onSubmit={handleCreateCareer} className="space-y-4">
+          <form onSubmit={showEditModal ? handleEditCareer : handleCreateCareer} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-[#333333] mb-1">Código de Carrera *</label>
@@ -368,7 +368,7 @@ export const CareersPage: React.FC = () => {
                 type="submit"
                 className="rounded-lg bg-[#800020] px-5 py-2 text-xs font-bold text-white hover:bg-[#5F0018]"
               >
-                Guardar Carrera
+                {showEditModal ? 'Guardar cambios' : 'Guardar Carrera'}
               </button>
             </div>
           </form>
