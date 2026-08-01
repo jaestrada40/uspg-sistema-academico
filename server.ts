@@ -2205,10 +2205,11 @@ app.post('/api/assistant', requireUser, async (req, res) => {
   const question = String(req.body?.question || '').trim().toLowerCase();
   if (!question) return void res.status(400).json({ message: 'Escribe una pregunta.' });
   if (user.role === 'ESTUDIANTE') {
-    const student = await prisma.student.findUnique({ where: { userId: user.id }, include: { enrollments: { where: { status: 'Inscrito' }, include: { section: { include: { course: true, teacher: true, classroom: true, cycle: true } } } }, gradeRecords: { include: { section: { include: { course: true } } } }, financialCharges: { include: { payments: true } } } });
+    const currentCycle = await prisma.academicCycle.findFirst({ where: { isCurrent: true } });
+    const student = await prisma.student.findUnique({ where: { userId: user.id }, include: { enrollments: { where: { status: 'Inscrito', ...(currentCycle ? { section: { cycleId: currentCycle.id } } : {}) }, include: { section: { include: { course: true, teacher: true, classroom: true, cycle: true } } } }, gradeRecords: { include: { section: { include: { course: true } } } }, financialCharges: { include: { payments: true } } } });
     if (!student) return void res.json({ answer: 'No encontré tu expediente de estudiante asociado a esta cuenta.' });
     if (/horario|clase|hoy|curso|llevo|inscrit/.test(question)) {
-      const lines = student.enrollments.map((item) => `${item.section.course.code} ${item.section.course.name}: ${item.section.scheduleDays} ${item.section.scheduleTime}, aula ${item.section.classroom.code}, docente ${item.section.teacher.name}`);
+      const lines = student.enrollments.map((item) => { let days = item.section.scheduleDays; try { days = JSON.parse(days).join(', '); } catch { /* legacy plain text */ } return `• ${item.section.course.code} · ${item.section.course.name}\n  ${days} · ${item.section.scheduleTime}\n  Aula: ${item.section.classroom.code} · Docente: ${item.section.teacher.name}`; });
       return void res.json({ answer: lines.length ? `Estos son tus cursos inscritos:\n${lines.join('\n')}` : 'No tienes cursos inscritos actualmente.' });
     }
     if (/nota|promedio|calificacion|calificación/.test(question)) {
@@ -2230,7 +2231,11 @@ app.post('/api/assistant', requireUser, async (req, res) => {
   }
   if (user.role === 'ADMIN') {
     const [students, teachers, courses, sections, careers, pendingDocuments, pendingCharges] = await Promise.all([prisma.student.count(), prisma.teacher.count(), prisma.course.count(), prisma.section.count(), prisma.career.count(), prisma.enrollmentDocument.count({ where: { status: 'PENDIENTE' } }), prisma.financialCharge.count({ where: { status: { in: ['PENDIENTE', 'VENCIDO'] } } })]);
-    if (/estudiante/.test(question)) return void res.json({ answer: `Estudiantes registrados: ${students}. Puedes abrir el módulo Estudiantes para consultar fichas, estado, carrera y datos de contacto.` });
+    if (/listado|lista|alumno|estudiante|usuario/.test(question)) {
+      const search = question.replace(/.*(?:de|del|alumno|estudiante|usuario)\s+/i, '').trim();
+      const records = await prisma.student.findMany({ where: search && search.length > 2 ? { OR: [{ name: { contains: search } }, { carnet: { contains: search } }] } : undefined, orderBy: { name: 'asc' }, take: 50, select: { carnet: true, name: true, careerName: true, status: true } });
+      return void res.json({ answer: records.length ? `Listado de estudiantes${search ? ` para “${search}”` : ''}:\n${records.map((item) => `• ${item.carnet} · ${item.name}\n  ${item.careerName || 'Sin carrera'} · ${item.status}`).join('\n')}` : 'No encontré estudiantes con ese criterio.' });
+    }
     if (/docente|catedr/.test(question)) return void res.json({ answer: `Docentes registrados: ${teachers}. Puedes revisar sus asignaciones desde el módulo Docentes.` });
     if (/curso/.test(question)) return void res.json({ answer: `Cursos activos en el catálogo: ${courses}. Puedes administrar cursos y prerrequisitos desde Cursos y Prerrequisitos.` });
     if (/seccion|sección|horario/.test(question)) return void res.json({ answer: `Secciones registradas: ${sections}. Puedes revisar cupos, docentes, aulas y horarios desde Secciones.` });
