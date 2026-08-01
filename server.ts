@@ -2229,8 +2229,15 @@ app.post('/api/assistant', requireUser, async (req, res) => {
     return void res.json({ answer: /horario|seccion|sección|curso|clase/.test(question) ? `Tus secciones asignadas:\n${lines.join('\n') || 'No tienes secciones asignadas.'}` : `Tienes ${teacher.sections.length} secciones asignadas. Puedo mostrarte horarios, cursos e inscritos.` });
   }
   if (user.role === 'ADMIN') {
-    const [students, teachers, courses, sections] = await Promise.all([prisma.student.count(), prisma.teacher.count(), prisma.course.count(), prisma.section.count()]);
-    return void res.json({ answer: `Resumen administrativo: ${students} estudiantes, ${teachers} docentes, ${courses} cursos y ${sections} secciones. También puedo ayudarte a revisar ciclos, carreras y operaciones.` });
+    const [students, teachers, courses, sections, careers, pendingDocuments, pendingCharges] = await Promise.all([prisma.student.count(), prisma.teacher.count(), prisma.course.count(), prisma.section.count(), prisma.career.count(), prisma.enrollmentDocument.count({ where: { status: 'PENDIENTE' } }), prisma.financialCharge.count({ where: { status: { in: ['PENDIENTE', 'VENCIDO'] } } })]);
+    if (/estudiante/.test(question)) return void res.json({ answer: `Estudiantes registrados: ${students}. Puedes abrir el módulo Estudiantes para consultar fichas, estado, carrera y datos de contacto.` });
+    if (/docente|catedr/.test(question)) return void res.json({ answer: `Docentes registrados: ${teachers}. Puedes revisar sus asignaciones desde el módulo Docentes.` });
+    if (/curso/.test(question)) return void res.json({ answer: `Cursos activos en el catálogo: ${courses}. Puedes administrar cursos y prerrequisitos desde Cursos y Prerrequisitos.` });
+    if (/seccion|sección|horario/.test(question)) return void res.json({ answer: `Secciones registradas: ${sections}. Puedes revisar cupos, docentes, aulas y horarios desde Secciones.` });
+    if (/carrera/.test(question)) return void res.json({ answer: `Carreras registradas: ${careers}. Puedes consultar pensums y cursos desde Carreras.` });
+    if (/expediente|document/.test(question)) return void res.json({ answer: `Expedientes pendientes de revisión: ${pendingDocuments}. Puedes validarlos desde Expediente.` });
+    if (/pago|saldo|mora|finanz/.test(question)) return void res.json({ answer: `Cargos pendientes o vencidos: ${pendingCharges}. Puedes revisarlos desde Pagos y Solvencias.` });
+    return void res.json({ answer: `Resumen administrativo:\n• Estudiantes: ${students}\n• Docentes: ${teachers}\n• Carreras: ${careers}\n• Cursos: ${courses}\n• Secciones: ${sections}\n• Expedientes pendientes: ${pendingDocuments}\n• Cargos pendientes o vencidos: ${pendingCharges}` });
   }
   return void res.json({ answer: `Hola ${user.name}. Puedo orientarte sobre los módulos disponibles para tu rol.` });
 });
