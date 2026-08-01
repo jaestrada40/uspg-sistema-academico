@@ -17,7 +17,21 @@ export const EnrollmentDocumentsPage: React.FC = () => {
   const [uploading, setUploading] = useState('');
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [previewDocument, setPreviewDocument] = useState<DocumentRecord | null>(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
   const documentUrl = (document: DocumentRecord) => `/api/enrollment-documents/${document.id}/file?v=${encodeURIComponent(document.updatedAt || document.createdAt)}`;
+  useEffect(() => {
+    let objectUrl = '';
+    if (!previewDocument) { setPreviewUrl(''); return undefined; }
+    setPreviewLoading(true);
+    fetch(documentUrl(previewDocument), { credentials: 'include', cache: 'no-store' }).then(async (response) => {
+      if (!response.ok) throw new Error('No se pudo cargar la vista previa.');
+      const blob = await response.blob();
+      objectUrl = URL.createObjectURL(blob);
+      setPreviewUrl(objectUrl);
+    }).catch((error) => showToast(error instanceof Error ? error.message : 'No se pudo cargar la vista previa', 'error')).finally(() => setPreviewLoading(false));
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [previewDocument]);
   const load = useCallback(async () => { if (!studentCarnet) return; setLoading(true); try { const query = currentUser.role === 'ADMIN' ? `?studentCarnet=${encodeURIComponent(studentCarnet)}` : ''; const response = await fetch(`/api/enrollment-documents${query}`); const result = await response.json(); if (!response.ok) throw new Error(result.message); setRequirements(result.requirements); setSummary(result.summary); } catch (error) { showToast(error instanceof Error ? error.message : 'No se pudo cargar el expediente', 'error'); } finally { setLoading(false); } }, [studentCarnet, currentUser.role]);
   useEffect(() => { load(); }, [load]);
   const upload = (type: string, file?: File) => { if (!file) return; if (file.size > 3 * 1024 * 1024) return showToast('El archivo no puede superar 3 MB', 'error'); setUploading(type); const reader = new FileReader(); reader.onload = async () => { const response = await fetch('/api/enrollment-documents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, studentCarnet, fileName: file.name, dataUrl: reader.result }) }); const result = await response.json(); setUploading(''); if (!response.ok) return showToast(result.message, 'error'); showToast('Documento cargado para revisión', 'success'); await load(); }; reader.onerror = () => { setUploading(''); showToast('No se pudo leer el archivo', 'error'); }; reader.readAsDataURL(file); };
@@ -26,7 +40,7 @@ export const EnrollmentDocumentsPage: React.FC = () => {
   return <RoleGuard allowedRoles={['ADMIN', 'ESTUDIANTE']}><div className="space-y-6"><PageHeader title="Expediente de Inscripción" description="Carga, validación y seguimiento de documentos requeridos" breadcrumbs={[{ label: 'Inicio', href: '/dashboard' }, { label: 'Expediente', active: true }]} />
     <Modal isOpen={Boolean(previewDocument)} onClose={() => setPreviewDocument(null)} title={previewDocument?.fileName || 'Vista previa del documento'} subtitle="Documento del expediente de inscripción" maxWidth="4xl">
       {previewDocument && <div className="space-y-4">
-        {previewDocument.mimeType === 'application/pdf' ? <iframe key={documentUrl(previewDocument)} title={previewDocument.fileName} src={documentUrl(previewDocument)} className="h-[65vh] w-full rounded-lg border border-[#E2E8F0]" /> : <div className="flex max-h-[65vh] justify-center overflow-auto rounded-lg border border-[#E2E8F0] bg-slate-50 p-3"><img key={documentUrl(previewDocument)} src={documentUrl(previewDocument)} alt={previewDocument.fileName} className="max-h-[62vh] max-w-full object-contain" /></div>}
+        {previewLoading ? <div className="flex h-[65vh] items-center justify-center rounded-lg border border-[#E2E8F0] bg-slate-50 text-sm text-[#64748B]">Cargando documento...</div> : previewUrl && (previewDocument.mimeType === 'application/pdf' ? <iframe key={previewUrl} title={previewDocument.fileName} src={previewUrl} className="h-[65vh] w-full rounded-lg border border-[#E2E8F0]" /> : <div className="flex max-h-[65vh] justify-center overflow-auto rounded-lg border border-[#E2E8F0] bg-slate-50 p-3"><img key={previewUrl} src={previewUrl} alt={previewDocument.fileName} className="max-h-[62vh] max-w-full object-contain" /></div>)}
         <div className="flex justify-end"><a href={documentUrl(previewDocument)} download={previewDocument.fileName} className="rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white">Descargar documento</a></div>
       </div>}
     </Modal>
