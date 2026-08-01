@@ -357,7 +357,7 @@ export const CoursesPage: React.FC = () => {
         {/* Modal: Add Course */}
         <Modal
           isOpen={showAddModal || showEditModal}
-          onClose={() => { setShowAddModal(false); setShowEditModal(false); }}
+          onClose={() => { setShowAddModal(false); setShowEditModal(false); setSelectedCourse(null); setCircularError(''); }}
           title={showEditModal ? 'Editar Curso y Prerrequisitos' : 'Crear Nueva Asignatura'}
         >
           <form onSubmit={showEditModal ? handleEditCourse : handleCreateCourse} className="space-y-4">
@@ -454,7 +454,7 @@ export const CoursesPage: React.FC = () => {
             <div className="flex justify-end gap-3 pt-4 border-t border-[#E2E8F0]">
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={() => { setShowAddModal(false); setShowEditModal(false); setSelectedCourse(null); setCircularError(''); }}
                 className="rounded-lg border border-[#E2E8F0] px-4 py-2 text-xs font-medium text-[#333333]"
               >
                 Cancelar
