@@ -6,7 +6,7 @@ import { useApp } from '../context/AppContext';
 import { StudentPicker } from '../components/common/StudentPicker';
 import { Modal } from '../components/common/Modal';
 
-interface DocumentRecord { id: string; type: string; fileName: string; mimeType: string; status: string; reviewNote?: string; reviewedBy?: string; createdAt: string; }
+interface DocumentRecord { id: string; type: string; fileName: string; mimeType: string; status: string; reviewNote?: string; reviewedBy?: string; createdAt: string; updatedAt?: string; }
 interface Requirement { type: string; label: string; document: DocumentRecord | null; }
 export const EnrollmentDocumentsPage: React.FC = () => {
   const { currentUser, students, showToast } = useApp();
@@ -17,6 +17,7 @@ export const EnrollmentDocumentsPage: React.FC = () => {
   const [uploading, setUploading] = useState('');
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [previewDocument, setPreviewDocument] = useState<DocumentRecord | null>(null);
+  const documentUrl = (document: DocumentRecord) => `/api/enrollment-documents/${document.id}/file?v=${encodeURIComponent(document.updatedAt || document.createdAt)}`;
   const load = useCallback(async () => { if (!studentCarnet) return; setLoading(true); try { const query = currentUser.role === 'ADMIN' ? `?studentCarnet=${encodeURIComponent(studentCarnet)}` : ''; const response = await fetch(`/api/enrollment-documents${query}`); const result = await response.json(); if (!response.ok) throw new Error(result.message); setRequirements(result.requirements); setSummary(result.summary); } catch (error) { showToast(error instanceof Error ? error.message : 'No se pudo cargar el expediente', 'error'); } finally { setLoading(false); } }, [studentCarnet, currentUser.role]);
   useEffect(() => { load(); }, [load]);
   const upload = (type: string, file?: File) => { if (!file) return; if (file.size > 3 * 1024 * 1024) return showToast('El archivo no puede superar 3 MB', 'error'); setUploading(type); const reader = new FileReader(); reader.onload = async () => { const response = await fetch('/api/enrollment-documents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, studentCarnet, fileName: file.name, dataUrl: reader.result }) }); const result = await response.json(); setUploading(''); if (!response.ok) return showToast(result.message, 'error'); showToast('Documento cargado para revisión', 'success'); await load(); }; reader.onerror = () => { setUploading(''); showToast('No se pudo leer el archivo', 'error'); }; reader.readAsDataURL(file); };
@@ -25,8 +26,8 @@ export const EnrollmentDocumentsPage: React.FC = () => {
   return <RoleGuard allowedRoles={['ADMIN', 'ESTUDIANTE']}><div className="space-y-6"><PageHeader title="Expediente de Inscripción" description="Carga, validación y seguimiento de documentos requeridos" breadcrumbs={[{ label: 'Inicio', href: '/dashboard' }, { label: 'Expediente', active: true }]} />
     <Modal isOpen={Boolean(previewDocument)} onClose={() => setPreviewDocument(null)} title={previewDocument?.fileName || 'Vista previa del documento'} subtitle="Documento del expediente de inscripción" maxWidth="4xl">
       {previewDocument && <div className="space-y-4">
-        {previewDocument.mimeType === 'application/pdf' ? <iframe title={previewDocument.fileName} src={`/api/enrollment-documents/${previewDocument.id}/file`} className="h-[65vh] w-full rounded-lg border border-[#E2E8F0]" /> : <div className="flex max-h-[65vh] justify-center overflow-auto rounded-lg border border-[#E2E8F0] bg-slate-50 p-3"><img src={`/api/enrollment-documents/${previewDocument.id}/file`} alt={previewDocument.fileName} className="max-h-[62vh] max-w-full object-contain" /></div>}
-        <div className="flex justify-end"><a href={`/api/enrollment-documents/${previewDocument.id}/file`} download={previewDocument.fileName} className="rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white">Descargar documento</a></div>
+        {previewDocument.mimeType === 'application/pdf' ? <iframe key={documentUrl(previewDocument)} title={previewDocument.fileName} src={documentUrl(previewDocument)} className="h-[65vh] w-full rounded-lg border border-[#E2E8F0]" /> : <div className="flex max-h-[65vh] justify-center overflow-auto rounded-lg border border-[#E2E8F0] bg-slate-50 p-3"><img key={documentUrl(previewDocument)} src={documentUrl(previewDocument)} alt={previewDocument.fileName} className="max-h-[62vh] max-w-full object-contain" /></div>}
+        <div className="flex justify-end"><a href={documentUrl(previewDocument)} download={previewDocument.fileName} className="rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white">Descargar documento</a></div>
       </div>}
     </Modal>
     {currentUser.role === 'ADMIN' && <div className="rounded-xl border border-[#E2E8F0] bg-white p-5"><StudentPicker students={students} value={studentCarnet} onChange={setStudentCarnet} label="Expediente del estudiante" /></div>}

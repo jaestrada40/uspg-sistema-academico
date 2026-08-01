@@ -2045,6 +2045,7 @@ app.get('/api/enrollment-documents/:id/file', requireUser, async (req, res) => {
   const user = res.locals.authUser;
   const document = await prisma.enrollmentDocument.findUnique({ where: { id: req.params.id } });
   if (!document || user.role === 'DOCENTE' || (user.role === 'ESTUDIANTE' && document.studentCarnet !== user.carnetOrCode)) return void res.status(404).json({ message: 'Documento no encontrado.' });
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
   res.setHeader('Content-Type', document.mimeType);
   res.setHeader('Content-Disposition', `inline; filename="${document.fileName.replace(/["\r\n]/g, '')}"`);
   res.send(Buffer.from(document.fileData, 'base64'));
