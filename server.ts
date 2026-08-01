@@ -8,11 +8,23 @@ import PDFDocument from 'pdfkit';
 import nodemailer from 'nodemailer';
 import QRCode from 'qrcode';
 import XLSX from 'xlsx';
+import { GoogleGenAI } from '@google/genai';
 import { createReceiptPdf, createStatementPdf } from './src/server/financialPdf';
 import { createPrismaClient } from './src/server/prismaClient';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const prisma = createPrismaClient();
+const gemini = process.env.AI_PROVIDER === 'gemini' && process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+const improveAssistantAnswer = async (question: string, role: string, answer: string) => {
+  if (!gemini) return answer;
+  try {
+    const response = await gemini.models.generateContent({ model: 'gemini-2.5-flash', contents: `Eres el asistente académico de USPG. Rol del usuario: ${role}. Pregunta: ${question}\nDatos verificados del sistema:\n${answer}\nReescribe únicamente la respuesta usando español claro, títulos breves y viñetas. No inventes datos, no agregues información que no esté en los datos y no uses Markdown complejo.` });
+    return response.text?.trim() || answer;
+  } catch (error) {
+    console.error('Gemini assistant fallback:', error);
+    return answer;
+  }
+};
 
 const defaultMfaRequiredRoles = ['ADMIN', 'DOCENTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'];
 const mfaEncryptionKey = (() => {
@@ -2204,47 +2216,48 @@ app.post('/api/assistant', requireUser, async (req, res) => {
   const user = res.locals.authUser as { id: string; role: string; name: string; carnetOrCode: string | null };
   const question = String(req.body?.question || '').trim().toLowerCase();
   if (!question) return void res.status(400).json({ message: 'Escribe una pregunta.' });
+  const reply = async (answer: string) => res.json({ answer: await improveAssistantAnswer(question, user.role, answer) });
   if (user.role === 'ESTUDIANTE') {
     const currentCycle = await prisma.academicCycle.findFirst({ where: { isCurrent: true } });
     const student = await prisma.student.findUnique({ where: { userId: user.id }, include: { enrollments: { where: { status: 'Inscrito', ...(currentCycle ? { section: { cycleId: currentCycle.id } } : {}) }, include: { section: { include: { course: true, teacher: true, classroom: true, cycle: true } } } }, gradeRecords: { include: { section: { include: { course: true } } } }, financialCharges: { include: { payments: true } } } });
-    if (!student) return void res.json({ answer: 'No encontré tu expediente de estudiante asociado a esta cuenta.' });
+    if (!student) return void reply('No encontré tu expediente de estudiante asociado a esta cuenta.');
     if (/horario|clase|hoy|curso|llevo|inscrit/.test(question)) {
       const lines = student.enrollments.map((item) => { let days = item.section.scheduleDays; try { days = JSON.parse(days).join(', '); } catch { /* legacy plain text */ } return `• ${item.section.course.code} · ${item.section.course.name}\n  ${days} · ${item.section.scheduleTime}\n  Aula: ${item.section.classroom.code} · Docente: ${item.section.teacher.name}`; });
-      return void res.json({ answer: lines.length ? `Estos son tus cursos inscritos:\n${lines.join('\n')}` : 'No tienes cursos inscritos actualmente.' });
+      return void reply(lines.length ? `Estos son tus cursos inscritos:\n${lines.join('\n')}` : 'No tienes cursos inscritos actualmente.');
     }
     if (/nota|promedio|calificacion|calificación/.test(question)) {
       const lines = student.gradeRecords.filter((item) => item.isPublished).map((item) => `${item.section.course.code} ${item.section.course.name}: ${item.total}`);
-      return void res.json({ answer: lines.length ? `Tus notas publicadas son:\n${lines.join('\n')}\nPromedio general: ${student.gpa}` : 'Todavía no tienes notas publicadas.' });
+      return void reply(lines.length ? `Tus notas publicadas son:\n${lines.join('\n')}\nPromedio general: ${student.gpa}` : 'Todavía no tienes notas publicadas.');
     }
     if (/debo|pago|saldo|finanz/.test(question)) {
       const balance = student.financialCharges.reduce((sum, charge) => sum + Math.max(0, charge.amount - charge.payments.reduce((paid, payment) => paid + payment.amount, 0)), 0);
-      return void res.json({ answer: `Tu saldo pendiente registrado es Q${balance.toFixed(2)}.` });
+      return void reply(`Tu saldo pendiente registrado es Q${balance.toFixed(2)}.`);
     }
-    if (/pensum|avance|credit/.test(question)) return void res.json({ answer: `Llevas ${student.creditsEarned} de ${student.totalCreditsRequired} créditos (${Math.round(student.creditsEarned / Math.max(1, student.totalCreditsRequired) * 100)}%).` });
-    return void res.json({ answer: 'Puedo ayudarte con tus cursos, horarios, notas, pagos y avance del pensum. Pregunta, por ejemplo: “¿Qué clases llevo?”' });
+    if (/pensum|avance|credit/.test(question)) return void reply(`Llevas ${student.creditsEarned} de ${student.totalCreditsRequired} créditos (${Math.round(student.creditsEarned / Math.max(1, student.totalCreditsRequired) * 100)}%).`);
+    return void reply('Puedo ayudarte con tus cursos, horarios, notas, pagos y avance del pensum. Pregunta, por ejemplo: “¿Qué clases llevo?”');
   }
   if (user.role === 'DOCENTE') {
     const teacher = await prisma.teacher.findUnique({ where: { userId: user.id }, include: { sections: { include: { course: true, classroom: true, cycle: true } } } });
-    if (!teacher) return void res.json({ answer: 'No encontré tus secciones asignadas.' });
+    if (!teacher) return void reply('No encontré tus secciones asignadas.');
     const lines = teacher.sections.map((item) => `${item.code} · ${item.course.code} ${item.course.name}: ${item.scheduleDays} ${item.scheduleTime}, aula ${item.classroom.code}, inscritos ${item.enrolledCount}`);
-    return void res.json({ answer: /horario|seccion|sección|curso|clase/.test(question) ? `Tus secciones asignadas:\n${lines.join('\n') || 'No tienes secciones asignadas.'}` : `Tienes ${teacher.sections.length} secciones asignadas. Puedo mostrarte horarios, cursos e inscritos.` });
+    return void reply(/horario|seccion|sección|curso|clase/.test(question) ? `Tus secciones asignadas:\n${lines.join('\n') || 'No tienes secciones asignadas.'}` : `Tienes ${teacher.sections.length} secciones asignadas. Puedo mostrarte horarios, cursos e inscritos.`);
   }
   if (user.role === 'ADMIN') {
     const [students, teachers, courses, sections, careers, pendingDocuments, pendingCharges] = await Promise.all([prisma.student.count(), prisma.teacher.count(), prisma.course.count(), prisma.section.count(), prisma.career.count(), prisma.enrollmentDocument.count({ where: { status: 'PENDIENTE' } }), prisma.financialCharge.count({ where: { status: { in: ['PENDIENTE', 'VENCIDO'] } } })]);
     if (/listado|lista|alumno|estudiante|usuario/.test(question)) {
       const search = question.replace(/.*(?:de|del|alumno|estudiante|usuario)\s+/i, '').trim();
       const records = await prisma.student.findMany({ where: search && search.length > 2 ? { OR: [{ name: { contains: search } }, { carnet: { contains: search } }] } : undefined, orderBy: { name: 'asc' }, take: 50, select: { carnet: true, name: true, careerName: true, status: true } });
-      return void res.json({ answer: records.length ? `Listado de estudiantes${search ? ` para “${search}”` : ''}:\n${records.map((item) => `• ${item.carnet} · ${item.name}\n  ${item.careerName || 'Sin carrera'} · ${item.status}`).join('\n')}` : 'No encontré estudiantes con ese criterio.' });
+      return void reply(records.length ? `Listado de estudiantes${search ? ` para “${search}”` : ''}:\n${records.map((item) => `• ${item.carnet} · ${item.name}\n  ${item.careerName || 'Sin carrera'} · ${item.status}`).join('\n')}` : 'No encontré estudiantes con ese criterio.');
     }
-    if (/docente|catedr/.test(question)) return void res.json({ answer: `Docentes registrados: ${teachers}. Puedes revisar sus asignaciones desde el módulo Docentes.` });
-    if (/curso/.test(question)) return void res.json({ answer: `Cursos activos en el catálogo: ${courses}. Puedes administrar cursos y prerrequisitos desde Cursos y Prerrequisitos.` });
-    if (/seccion|sección|horario/.test(question)) return void res.json({ answer: `Secciones registradas: ${sections}. Puedes revisar cupos, docentes, aulas y horarios desde Secciones.` });
-    if (/carrera/.test(question)) return void res.json({ answer: `Carreras registradas: ${careers}. Puedes consultar pensums y cursos desde Carreras.` });
-    if (/expediente|document/.test(question)) return void res.json({ answer: `Expedientes pendientes de revisión: ${pendingDocuments}. Puedes validarlos desde Expediente.` });
-    if (/pago|saldo|mora|finanz/.test(question)) return void res.json({ answer: `Cargos pendientes o vencidos: ${pendingCharges}. Puedes revisarlos desde Pagos y Solvencias.` });
-    return void res.json({ answer: `Resumen administrativo:\n• Estudiantes: ${students}\n• Docentes: ${teachers}\n• Carreras: ${careers}\n• Cursos: ${courses}\n• Secciones: ${sections}\n• Expedientes pendientes: ${pendingDocuments}\n• Cargos pendientes o vencidos: ${pendingCharges}` });
+    if (/docente|catedr/.test(question)) return void reply(`Docentes registrados: ${teachers}. Puedes revisar sus asignaciones desde el módulo Docentes.`);
+    if (/curso/.test(question)) return void reply(`Cursos activos en el catálogo: ${courses}. Puedes administrar cursos y prerrequisitos desde Cursos y Prerrequisitos.`);
+    if (/seccion|sección|horario/.test(question)) return void reply(`Secciones registradas: ${sections}. Puedes revisar cupos, docentes, aulas y horarios desde Secciones.`);
+    if (/carrera/.test(question)) return void reply(`Carreras registradas: ${careers}. Puedes consultar pensums y cursos desde Carreras.`);
+    if (/expediente|document/.test(question)) return void reply(`Expedientes pendientes de revisión: ${pendingDocuments}. Puedes validarlos desde Expediente.`);
+    if (/pago|saldo|mora|finanz/.test(question)) return void reply(`Cargos pendientes o vencidos: ${pendingCharges}. Puedes revisarlos desde Pagos y Solvencias.`);
+    return void reply(`Resumen administrativo:\n• Estudiantes: ${students}\n• Docentes: ${teachers}\n• Carreras: ${careers}\n• Cursos: ${courses}\n• Secciones: ${sections}\n• Expedientes pendientes: ${pendingDocuments}\n• Cargos pendientes o vencidos: ${pendingCharges}`);
   }
-  return void res.json({ answer: `Hola ${user.name}. Puedo orientarte sobre los módulos disponibles para tu rol.` });
+  return void reply(`Hola ${user.name}. Puedo orientarte sobre los módulos disponibles para tu rol.`);
 });
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
