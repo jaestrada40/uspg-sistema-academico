@@ -2241,6 +2241,27 @@ app.post('/api/assistant', requireUser, async (req, res) => {
       return void reply(`Tu saldo pendiente registrado es Q${balance.toFixed(2)}.`);
     }
     if (/pensum|avance|credit/.test(question)) return void reply(`Llevas ${student.creditsEarned} de ${student.totalCreditsRequired} créditos (${Math.round(student.creditsEarned / Math.max(1, student.totalCreditsRequired) * 100)}%).`);
+    if (/asistencia|faltas|presencia/.test(question)) {
+      const records = await prisma.attendanceRecord.findMany({ where: { studentCarnet: student.carnet }, select: { status: true } });
+      const present = records.filter((item) => item.status === 'PRESENTE').length;
+      return void reply(`Asistencia registrada: ${present} presente(s), ${records.length - present} ausencia(s) o tardanza(s), de ${records.length} registro(s).`);
+    }
+    if (/recuperaci|examen de recuper/.test(question)) {
+      const recoveries = await prisma.recoveryExam.findMany({ where: { gradeRecord: { studentCarnet: student.carnet } }, include: { gradeRecord: { include: { section: { include: { course: true } } } } } });
+      return void reply(recoveries.length ? `Recuperaciones:\n${recoveries.map((item) => `• ${item.gradeRecord.section.course.name}: ${item.status}${item.recoveryScore != null ? ` · nota ${item.recoveryScore}` : ''}`).join('\n')}` : 'No tienes recuperaciones registradas.');
+    }
+    if (/solicitud|trámite|tramite|constancia/.test(question)) {
+      const requests = await prisma.studentServiceRequest.findMany({ where: { studentCarnet: student.carnet }, orderBy: { createdAt: 'desc' }, take: 10, select: { type: true, status: true, purpose: true } });
+      return void reply(requests.length ? `Tus solicitudes recientes:\n${requests.map((item) => `• ${item.type} · ${item.status} · ${item.purpose}`).join('\n')}` : 'No tienes solicitudes registradas.');
+    }
+    if (/notificaci|aviso/.test(question)) {
+      const notifications = await prisma.appNotification.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 10, select: { title: true, message: true, isRead: true } });
+      return void reply(notifications.length ? `Tus notificaciones recientes:\n${notifications.map((item) => `• ${item.title}${item.isRead ? ' · leída' : ' · pendiente'}\n  ${item.message}`).join('\n')}` : 'No tienes notificaciones.');
+    }
+    if (/biblioteca|libro|préstamo|prestamo/.test(question)) {
+      const loans = await prisma.libraryLoan.findMany({ where: { borrowerId: user.id, status: { not: 'DEVUELTO' } }, include: { copy: { include: { book: true } } } });
+      return void reply(loans.length ? `Tus préstamos de biblioteca:\n${loans.map((item) => `• ${item.copy.book.title} · vence ${item.dueAt.toLocaleDateString('es-GT')} · ${item.status}`).join('\n')}` : 'No tienes préstamos activos en biblioteca.');
+    }
     const context = JSON.stringify({ estudiante: { nombre: student.name, carrera: student.careerName, promedio: student.gpa, creditosAprobados: student.creditsEarned, creditosRequeridos: student.totalCreditsRequired }, cursosInscritos: student.enrollments.map((item) => ({ codigo: item.section.course.code, nombre: item.section.course.name, horario: item.section.scheduleDays, hora: item.section.scheduleTime, docente: item.section.teacher.name })), notasPublicadas: student.gradeRecords.filter((item) => item.isPublished).map((item) => ({ curso: item.section.course.name, nota: item.total })), cargos: student.financialCharges.map((charge) => ({ concepto: charge.concept, monto: charge.amount, pagos: charge.payments.reduce((sum, payment) => sum + payment.amount, 0) })) });
     return void reply(await answerWithGemini(question, user.role, context, 'Puedo ayudarte con cursos, horarios, notas, asistencia, pagos, recuperaciones y avance del pensum.'));
   }
@@ -2252,8 +2273,13 @@ app.post('/api/assistant', requireUser, async (req, res) => {
     return void reply(await answerWithGemini(question, user.role, context, /horario|seccion|sección|curso|clase/.test(question) ? `Tus secciones asignadas:\n${lines.join('\n') || 'No tienes secciones asignadas.'}` : `Tienes ${teacher.sections.length} secciones asignadas.`));
   }
   if (user.role === 'ADMIN') {
-    const [students, teachers, courses, sections, careers, pendingDocuments, pendingCharges, parkingConfig, vehiclesInside, activeEvents] = await Promise.all([prisma.student.count(), prisma.teacher.count(), prisma.course.count(), prisma.section.count(), prisma.career.count(), prisma.enrollmentDocument.count({ where: { status: 'PENDIENTE' } }), prisma.financialCharge.count({ where: { status: { in: ['PENDIENTE', 'VENCIDO'] } } }), prisma.parkingConfig.findUnique({ where: { id: 1 } }), prisma.parkingVisit.count({ where: { status: 'DENTRO' } }), prisma.parkingEvent.count({ where: { status: { in: ['PLANIFICADO', 'EN_CURSO'] } } })]);
+    const [students, teachers, courses, sections, careers, pendingDocuments, pendingCharges, parkingConfig, vehiclesInside, activeEvents, pendingRequests, unreadNotifications, activeLoans, attendanceSessions, recoveryExams] = await Promise.all([prisma.student.count(), prisma.teacher.count(), prisma.course.count(), prisma.section.count(), prisma.career.count(), prisma.enrollmentDocument.count({ where: { status: 'PENDIENTE' } }), prisma.financialCharge.count({ where: { status: { in: ['PENDIENTE', 'VENCIDO'] } } }), prisma.parkingConfig.findUnique({ where: { id: 1 } }), prisma.parkingVisit.count({ where: { status: 'DENTRO' } }), prisma.parkingEvent.count({ where: { status: { in: ['PLANIFICADO', 'EN_CURSO'] } } }), prisma.studentServiceRequest.count({ where: { status: { in: ['SOLICITADA', 'EN_REVISION'] } } }), prisma.appNotification.count({ where: { isRead: false } }), prisma.libraryLoan.count({ where: { status: 'PRESTADO' } }), prisma.attendanceSession.count(), prisma.recoveryExam.count({ where: { status: { not: 'CERRADA' } } })]);
     if (/parqueo|estacionamiento|vehículo|vehiculo/.test(question)) return void reply(`Parqueo: ${vehiclesInside} vehículo(s) dentro de ${parkingConfig?.totalCapacity || 0} espacios. Eventos activos o planificados: ${activeEvents}.`);
+    if (/biblioteca|préstamo|prestamo|libro/.test(question)) return void reply(`Biblioteca: ${activeLoans} préstamo(s) activo(s).`);
+    if (/solicitud|trámite|tramite/.test(question)) return void reply(`Solicitudes pendientes: ${pendingRequests}.`);
+    if (/notificaci|aviso/.test(question)) return void reply(`Notificaciones no leídas: ${unreadNotifications}.`);
+    if (/asistencia/.test(question)) return void reply(`Sesiones de asistencia registradas: ${attendanceSessions}.`);
+    if (/recuperaci/.test(question)) return void reply(`Recuperaciones abiertas: ${recoveryExams}.`);
     if (/cuánt|cuant|total|cantidad/.test(question) && /estudiante|alumno/.test(question) && !/expediente|document/.test(question)) return void reply(`Hay ${students} estudiantes registrados en el sistema.`);
     if (/listado|lista|alumno|estudiante|usuario/.test(question)) {
       const searchMatch = question.match(/(?:buscar|busca|nombre|carné|carne|de la carrera|de sistemas|de informática)\s+(.+)/i);
