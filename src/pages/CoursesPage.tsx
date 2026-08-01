@@ -6,6 +6,9 @@ import {
   Power,
   GitBranch,
   AlertCircle,
+  FileSpreadsheet,
+  Upload,
+  Download,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Course } from '../types';
@@ -47,6 +50,12 @@ export const CoursesPage: React.FC = () => {
   });
 
   const [circularError, setCircularError] = useState('');
+  const [importModal, setImportModal] = useState(false);
+  const [importDataUrl, setImportDataUrl] = useState('');
+  const [importFileName, setImportFileName] = useState('');
+  const [importPreview, setImportPreview] = useState<any[]>([]);
+  const [importErrors, setImportErrors] = useState<Array<{ row: number; message: string }>>([]);
+  const [importing, setImporting] = useState(false);
 
   const filteredCourses = useMemo(() => {
     return courses.filter((c) => {
@@ -154,6 +163,34 @@ export const CoursesPage: React.FC = () => {
     setCircularError('');
   };
 
+  const handleImportFile = (file?: File) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.xlsx')) return showToast('Selecciona un archivo Excel .xlsx', 'error');
+    if (file.size > 5 * 1024 * 1024) return showToast('El archivo no puede superar 5 MB', 'error');
+    const reader = new FileReader();
+    reader.onload = () => { setImportDataUrl(String(reader.result)); setImportFileName(file.name); setImportPreview([]); setImportErrors([]); };
+    reader.readAsDataURL(file);
+  };
+
+  const validateImport = async (commit = false) => {
+    if (!importDataUrl) return showToast('Selecciona primero un archivo Excel', 'error');
+    setImporting(true);
+    try {
+      const response = await fetch('/api/courses/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dataUrl: importDataUrl, commit }) });
+      const result = await response.json();
+      setImportPreview(result.preview || []);
+      setImportErrors(result.errors || []);
+      if (!response.ok) return showToast(result.message || 'El archivo contiene errores', 'error');
+      if (commit) { showToast(result.message, 'success'); setImportModal(false); setImportDataUrl(''); setImportPreview([]); setImportErrors([]); window.location.reload(); }
+      else showToast('Archivo validado. Revisa la vista previa antes de importar.', 'success');
+    } catch { showToast('No se pudo procesar el archivo Excel', 'error'); } finally { setImporting(false); }
+  };
+
+  const downloadTemplate = () => {
+    const content = 'codigo,nombre,creditos,semestre,carrera,prerrequisitos,horas_teoricas,horas_practicas,area\nINF-101,Introducción a Sistemas,4,1,SIS,,3,2,Básica\nINF-201,Programación I,5,2,SIS,INF-101,3,2,Especialidad\n';
+    const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' })); link.download = 'plantilla-cursos-prerrequisitos.csv'; link.click(); URL.revokeObjectURL(link.href);
+  };
+
   return (
     <RoleGuard allowedRoles={['ADMIN']}>
       <div className="space-y-6">
@@ -165,18 +202,22 @@ export const CoursesPage: React.FC = () => {
             { label: 'Cursos', active: true },
           ]}
           actions={
-            <button
-              onClick={() => {
-                resetForm();
-                setShowAddModal(true);
-              }}
-              className="flex items-center gap-2 rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white hover:bg-[#5F0018] transition-colors shadow-xs"
-            >
-              <Plus className="h-4 w-4" />
-              Nuevo Curso
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setImportModal(true)} className="flex items-center gap-2 rounded-lg border border-[#800020] bg-white px-4 py-2 text-xs font-bold text-[#800020] hover:bg-[#800020]/5"><FileSpreadsheet className="h-4 w-4" />Importar Excel</button>
+              <button onClick={() => { resetForm(); setShowAddModal(true); }} className="flex items-center gap-2 rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white hover:bg-[#5F0018] transition-colors shadow-xs"><Plus className="h-4 w-4" />Nuevo Curso</button>
+            </div>
           }
         />
+
+        <Modal isOpen={importModal} onClose={() => setImportModal(false)} title="Importar cursos desde Excel" subtitle="Carga cursos y prerrequisitos sin guardar hasta validar el archivo." maxWidth="2xl">
+          <div className="space-y-4 text-xs">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-blue-900">Usa las columnas: <strong>codigo, nombre, creditos, semestre, carrera, prerrequisitos</strong>. Los prerrequisitos deben ser códigos separados por coma.</div>
+            <div className="flex flex-wrap items-center gap-2"><label className="flex cursor-pointer items-center gap-2 rounded-lg bg-[#800020] px-4 py-2 font-bold text-white"><Upload className="h-4 w-4" />{importFileName || 'Seleccionar .xlsx'}<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(event) => handleImportFile(event.target.files?.[0])} /></label><button type="button" onClick={downloadTemplate} className="flex items-center gap-2 rounded-lg border px-4 py-2 font-bold text-[#800020]"><Download className="h-4 w-4" />Descargar plantilla</button></div>
+            {importErrors.length > 0 && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-800"><p className="font-bold">Errores encontrados</p>{importErrors.map((error) => <p key={`${error.row}-${error.message}`}>Fila {error.row}: {error.message}</p>)}</div>}
+            {importPreview.length > 0 && <div className="overflow-x-auto rounded-lg border"><table className="w-full text-left"><thead className="bg-[#F8FAFC]"><tr><th className="p-2">Código</th><th className="p-2">Nombre</th><th className="p-2">Carrera</th><th className="p-2">Semestre</th><th className="p-2">Prerrequisitos</th></tr></thead><tbody className="divide-y">{importPreview.slice(0, 12).map((row) => <tr key={row.rowNumber}><td className="p-2 font-bold">{row.code}</td><td className="p-2">{row.name}</td><td className="p-2">{row.careerId}</td><td className="p-2">{row.semester}</td><td className="p-2">{row.prerequisiteCodes?.join(', ') || '—'}</td></tr>)}</tbody></table>{importPreview.length > 12 && <p className="p-2 text-[#64748B]">Mostrando 12 de {importPreview.length} filas.</p>}</div>}
+            <div className="flex justify-end gap-2 border-t pt-4"><button type="button" onClick={() => setImportModal(false)} className="rounded-lg border px-4 py-2 font-bold">Cancelar</button><button type="button" disabled={importing || !importDataUrl} onClick={() => validateImport(false)} className="rounded-lg border border-[#800020] px-4 py-2 font-bold text-[#800020] disabled:opacity-50">{importing ? 'Validando...' : 'Validar archivo'}</button><button type="button" disabled={importing || !importDataUrl || importPreview.length === 0 || importErrors.length > 0} onClick={() => validateImport(true)} className="rounded-lg bg-[#800020] px-4 py-2 font-bold text-white disabled:opacity-50">Importar cursos</button></div>
+          </div>
+        </Modal>
 
         {/* Filters */}
         <div className="space-y-3">

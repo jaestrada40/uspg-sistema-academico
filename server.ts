@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import PDFDocument from 'pdfkit';
 import nodemailer from 'nodemailer';
 import QRCode from 'qrcode';
+import XLSX from 'xlsx';
 import { createReceiptPdf, createStatementPdf } from './src/server/financialPdf';
 import { createPrismaClient } from './src/server/prismaClient';
 
@@ -860,6 +861,53 @@ const validatePrerequisites = async (courseCode: string, prerequisiteCodes: stri
   for (const code of graph.keys()) if (visit(code)) return 'Los prerrequisitos crearían una dependencia circular.';
   return null;
 };
+
+const normalizeImportHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
+const parseCourseImport = (dataUrl: string) => {
+  const match = String(dataUrl || '').match(/^data:application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet;base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) throw new Error('Carga un archivo Excel .xlsx válido.');
+  const workbook = XLSX.read(Buffer.from(match[1], 'base64'), { type: 'buffer' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) throw new Error('El archivo no contiene hojas.');
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+  const aliases: Record<string, string> = { codigo: 'code', nombre: 'name', creditos: 'credits', semestre: 'semester', carrera: 'career', prerrequisitos: 'prerequisites', horas_teoricas: 'theoreticalHours', horas_practicas: 'practicalHours', area: 'area' };
+  return rows.map((row, index) => ({ ...Object.fromEntries(Object.entries(row).map(([key, value]) => [aliases[normalizeImportHeader(key)] || normalizeImportHeader(key), value])), rowNumber: index + 2 }));
+};
+
+app.post('/api/courses/import', requireAdmin, async (req, res) => {
+  let rows: any[];
+  try { rows = parseCourseImport(req.body.dataUrl); } catch (error) { return void res.status(400).json({ message: error instanceof Error ? error.message : 'No se pudo leer el archivo Excel.' }); }
+  if (!rows.length) return void res.status(400).json({ message: 'El archivo Excel no contiene cursos.' });
+  const careers = await prisma.career.findMany({ select: { code: true } });
+  const careerCodes = new Set(careers.map((career) => career.code));
+  const existing = await prisma.course.findMany({ select: { code: true } });
+  const codes = new Set(existing.map((course) => course.code));
+  const errors: Array<{ row: number; message: string }> = [];
+  const normalizedRows = rows.map((row) => {
+    const code = String(row.code || '').trim().toUpperCase();
+    const name = String(row.name || '').trim();
+    const careerId = String(row.career || '').trim().toUpperCase();
+    const credits = Number(row.credits), semester = Number(row.semester);
+    const prerequisiteCodes = String(row.prerequisites || '').split(',').map((item) => item.trim().toUpperCase()).filter(Boolean);
+    if (!code || !name || !careerId || !Number.isInteger(credits) || credits < 1 || !Number.isInteger(semester) || semester < 1) errors.push({ row: row.rowNumber, message: 'Código, nombre, carrera, créditos y semestre son obligatorios y válidos.' });
+    if (careerId && !careerCodes.has(careerId)) errors.push({ row: row.rowNumber, message: `La carrera ${careerId} no existe.` });
+    if (codes.has(code) && !codes.has(`IMPORT:${code}`)) errors.push({ row: row.rowNumber, message: `El código ${code} ya existe; usa la edición manual o elimina el duplicado.` });
+    codes.add(`IMPORT:${code}`);
+    return { code, name, careerId, credits, semester, prerequisiteCodes, theoreticalHours: Number(row.theoreticalHours || 0), practicalHours: Number(row.practicalHours || 0), area: String(row.area || 'Básica'), status: 'Activo', rowNumber: row.rowNumber };
+  });
+  const incomingCodes = new Set(normalizedRows.map((row) => row.code));
+  for (const row of normalizedRows) for (const prerequisite of row.prerequisiteCodes) if (!incomingCodes.has(prerequisite) && !existing.some((course) => course.code === prerequisite)) errors.push({ row: row.rowNumber, message: `El prerrequisito ${prerequisite} no existe.` });
+  if (errors.length) return void res.status(400).json({ message: 'Corrige los errores antes de importar.', errors, preview: normalizedRows });
+  if (req.body.commit !== true) return res.json({ message: 'Validación completada. Confirma la importación para guardar.', preview: normalizedRows });
+  await prisma.$transaction(async (tx) => {
+    for (const row of normalizedRows) {
+      await tx.course.create({ data: { code: row.code, name: row.name, credits: row.credits, semester: row.semester, careerId: row.careerId, theoreticalHours: row.theoreticalHours, practicalHours: row.practicalHours, area: row.area, status: row.status } });
+      if (row.prerequisiteCodes.length) await tx.coursePrerequisite.createMany({ data: row.prerequisiteCodes.map((prerequisiteCode: string) => ({ courseCode: row.code, prerequisiteCode })) });
+      await tx.auditLog.create({ data: { action: 'IMPORT', entityType: 'COURSE', entityId: row.code, actorId: res.locals.authUser.id, details: JSON.stringify({ row: row.rowNumber, source: 'xlsx' }) } });
+    }
+  });
+  res.status(201).json({ message: `Se importaron ${normalizedRows.length} cursos correctamente.`, imported: normalizedRows.length });
+});
 
 app.get('/api/courses', requireAdmin, async (_req, res) => {
   const records = await prisma.course.findMany({ include: { career: true, prerequisites: true }, orderBy: [{ careerId: 'asc' }, { semester: 'asc' }, { code: 'asc' }] });
