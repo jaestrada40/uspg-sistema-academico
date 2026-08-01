@@ -25,6 +25,13 @@ const improveAssistantAnswer = async (question: string, role: string, answer: st
     return answer;
   }
 };
+const answerWithGemini = async (question: string, role: string, context: string, fallback: string) => {
+  if (!gemini) return fallback;
+  try {
+    const response = await gemini.models.generateContent({ model: 'gemini-2.5-flash', contents: `Eres el asistente académico de USPG. Responde en español claro y breve. Rol: ${role}. Pregunta: ${question}\nContexto verificado del sistema:\n${context}\nResponde solo con la información del contexto. Si no existe el dato, dilo claramente. Organiza listas con viñetas y no inventes información.` });
+    return response.text?.trim() || fallback;
+  } catch (error) { console.error('Gemini context fallback:', error); return fallback; }
+};
 
 const defaultMfaRequiredRoles = ['ADMIN', 'DOCENTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'];
 const mfaEncryptionKey = (() => {
@@ -2225,7 +2232,7 @@ app.post('/api/assistant', requireUser, async (req, res) => {
       const lines = student.enrollments.map((item) => { let days = item.section.scheduleDays; try { days = JSON.parse(days).join(', '); } catch { /* legacy plain text */ } return `• ${item.section.course.code} · ${item.section.course.name}\n  ${days} · ${item.section.scheduleTime}\n  Aula: ${item.section.classroom.code} · Docente: ${item.section.teacher.name}`; });
       return void reply(lines.length ? `Estos son tus cursos inscritos:\n${lines.join('\n')}` : 'No tienes cursos inscritos actualmente.');
     }
-    if (/nota|promedio|calificacion|calificación/.test(question)) {
+    if (/nota|promedio|calificacion|calificación|ganad|aprob/.test(question)) {
       const lines = student.gradeRecords.filter((item) => item.isPublished).map((item) => `${item.section.course.code} ${item.section.course.name}: ${item.total}`);
       return void reply(lines.length ? `Tus notas publicadas son:\n${lines.join('\n')}\nPromedio general: ${student.gpa}` : 'Todavía no tienes notas publicadas.');
     }
@@ -2234,13 +2241,15 @@ app.post('/api/assistant', requireUser, async (req, res) => {
       return void reply(`Tu saldo pendiente registrado es Q${balance.toFixed(2)}.`);
     }
     if (/pensum|avance|credit/.test(question)) return void reply(`Llevas ${student.creditsEarned} de ${student.totalCreditsRequired} créditos (${Math.round(student.creditsEarned / Math.max(1, student.totalCreditsRequired) * 100)}%).`);
-    return void reply('Puedo ayudarte con tus cursos, horarios, notas, pagos y avance del pensum. Pregunta, por ejemplo: “¿Qué clases llevo?”');
+    const context = JSON.stringify({ estudiante: { nombre: student.name, carrera: student.careerName, promedio: student.gpa, creditosAprobados: student.creditsEarned, creditosRequeridos: student.totalCreditsRequired }, cursosInscritos: student.enrollments.map((item) => ({ codigo: item.section.course.code, nombre: item.section.course.name, horario: item.section.scheduleDays, hora: item.section.scheduleTime, docente: item.section.teacher.name })), notasPublicadas: student.gradeRecords.filter((item) => item.isPublished).map((item) => ({ curso: item.section.course.name, nota: item.total })), cargos: student.financialCharges.map((charge) => ({ concepto: charge.concept, monto: charge.amount, pagos: charge.payments.reduce((sum, payment) => sum + payment.amount, 0) })) });
+    return void reply(await answerWithGemini(question, user.role, context, 'Puedo ayudarte con cursos, horarios, notas, asistencia, pagos, recuperaciones y avance del pensum.'));
   }
   if (user.role === 'DOCENTE') {
     const teacher = await prisma.teacher.findUnique({ where: { userId: user.id }, include: { sections: { include: { course: true, classroom: true, cycle: true } } } });
     if (!teacher) return void reply('No encontré tus secciones asignadas.');
     const lines = teacher.sections.map((item) => `${item.code} · ${item.course.code} ${item.course.name}: ${item.scheduleDays} ${item.scheduleTime}, aula ${item.classroom.code}, inscritos ${item.enrolledCount}`);
-    return void reply(/horario|seccion|sección|curso|clase/.test(question) ? `Tus secciones asignadas:\n${lines.join('\n') || 'No tienes secciones asignadas.'}` : `Tienes ${teacher.sections.length} secciones asignadas. Puedo mostrarte horarios, cursos e inscritos.`);
+    const context = JSON.stringify({ docente: teacher.name, secciones: teacher.sections.map((item) => ({ codigo: item.code, curso: item.course.name, horario: item.scheduleDays, hora: item.scheduleTime, inscritos: item.enrolledCount })) });
+    return void reply(await answerWithGemini(question, user.role, context, /horario|seccion|sección|curso|clase/.test(question) ? `Tus secciones asignadas:\n${lines.join('\n') || 'No tienes secciones asignadas.'}` : `Tienes ${teacher.sections.length} secciones asignadas.`));
   }
   if (user.role === 'ADMIN') {
     const [students, teachers, courses, sections, careers, pendingDocuments, pendingCharges] = await Promise.all([prisma.student.count(), prisma.teacher.count(), prisma.course.count(), prisma.section.count(), prisma.career.count(), prisma.enrollmentDocument.count({ where: { status: 'PENDIENTE' } }), prisma.financialCharge.count({ where: { status: { in: ['PENDIENTE', 'VENCIDO'] } } })]);
@@ -2255,7 +2264,8 @@ app.post('/api/assistant', requireUser, async (req, res) => {
     if (/carrera/.test(question)) return void reply(`Carreras registradas: ${careers}. Puedes consultar pensums y cursos desde Carreras.`);
     if (/expediente|document/.test(question)) return void reply(`Expedientes pendientes de revisión: ${pendingDocuments}. Puedes validarlos desde Expediente.`);
     if (/pago|saldo|mora|finanz/.test(question)) return void reply(`Cargos pendientes o vencidos: ${pendingCharges}. Puedes revisarlos desde Pagos y Solvencias.`);
-    return void reply(`Resumen administrativo:\n• Estudiantes: ${students}\n• Docentes: ${teachers}\n• Carreras: ${careers}\n• Cursos: ${courses}\n• Secciones: ${sections}\n• Expedientes pendientes: ${pendingDocuments}\n• Cargos pendientes o vencidos: ${pendingCharges}`);
+    const context = JSON.stringify({ estudiantes: students, docentes: teachers, carreras: careers, cursos: courses, secciones: sections, expedientesPendientes: pendingDocuments, cargosPendientesOVencidos: pendingCharges });
+    return void reply(await answerWithGemini(question, user.role, context, `Resumen administrativo:\n• Estudiantes: ${students}\n• Docentes: ${teachers}\n• Carreras: ${careers}\n• Cursos: ${courses}\n• Secciones: ${sections}\n• Expedientes pendientes: ${pendingDocuments}\n• Cargos pendientes o vencidos: ${pendingCharges}`));
   }
   return void reply(`Hola ${user.name}. Puedo orientarte sobre los módulos disponibles para tu rol.`);
 });
