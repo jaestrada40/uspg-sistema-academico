@@ -902,11 +902,13 @@ app.post('/api/courses/import', requireAdmin, async (req, res) => {
   for (const row of normalizedRows) for (const prerequisite of row.prerequisiteCodes) if (!incomingCodes.has(prerequisite) && !existing.some((course) => course.code === prerequisite)) errors.push({ row: row.rowNumber, message: `El prerrequisito ${prerequisite} no existe.` });
   if (errors.length) return void res.status(400).json({ message: 'Corrige los errores antes de importar.', errors, preview: normalizedRows });
   if (req.body.commit !== true) return res.json({ message: 'Validación completada. Confirma la importación para guardar.', preview: normalizedRows });
+  const activePlan = await prisma.curriculumPlan.findFirst({ where: { careerId: normalizedRows[0].careerId, status: 'Activo' }, select: { id: true } });
   await prisma.$transaction(async (tx) => {
     for (const row of normalizedRows) {
       await tx.course.upsert({ where: { code: row.code }, update: { name: row.name, credits: row.credits, semester: row.semester, careerId: row.careerId, theoreticalHours: row.theoreticalHours, practicalHours: row.practicalHours, area: row.area, status: row.status }, create: { code: row.code, name: row.name, credits: row.credits, semester: row.semester, careerId: row.careerId, theoreticalHours: row.theoreticalHours, practicalHours: row.practicalHours, area: row.area, status: row.status } });
       await tx.coursePrerequisite.deleteMany({ where: { courseCode: row.code } });
       if (row.prerequisiteCodes.length) await tx.coursePrerequisite.createMany({ data: row.prerequisiteCodes.map((prerequisiteCode: string) => ({ courseCode: row.code, prerequisiteCode })) });
+      if (activePlan) await tx.curriculumPlanCourse.upsert({ where: { planId_courseCode: { planId: activePlan.id, courseCode: row.code } }, update: { semester: row.semester }, create: { planId: activePlan.id, courseCode: row.code, semester: row.semester } });
       await tx.auditLog.create({ data: { action: 'IMPORT', entityType: 'COURSE', entityId: row.code, actorId: res.locals.authUser.id, details: JSON.stringify({ row: row.rowNumber, source: 'xlsx' }) } });
     }
   });
