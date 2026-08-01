@@ -2252,8 +2252,9 @@ app.post('/api/assistant', requireUser, async (req, res) => {
     return void reply(await answerWithGemini(question, user.role, context, /horario|seccion|sección|curso|clase/.test(question) ? `Tus secciones asignadas:\n${lines.join('\n') || 'No tienes secciones asignadas.'}` : `Tienes ${teacher.sections.length} secciones asignadas.`));
   }
   if (user.role === 'ADMIN') {
-    const [students, teachers, courses, sections, careers, pendingDocuments, pendingCharges] = await Promise.all([prisma.student.count(), prisma.teacher.count(), prisma.course.count(), prisma.section.count(), prisma.career.count(), prisma.enrollmentDocument.count({ where: { status: 'PENDIENTE' } }), prisma.financialCharge.count({ where: { status: { in: ['PENDIENTE', 'VENCIDO'] } } })]);
-    if (/cuánt|cuant|total|cantidad/.test(question) && /estudiante|alumno/.test(question)) return void reply(`Hay ${students} estudiantes registrados en el sistema.`);
+    const [students, teachers, courses, sections, careers, pendingDocuments, pendingCharges, parkingConfig, vehiclesInside, activeEvents] = await Promise.all([prisma.student.count(), prisma.teacher.count(), prisma.course.count(), prisma.section.count(), prisma.career.count(), prisma.enrollmentDocument.count({ where: { status: 'PENDIENTE' } }), prisma.financialCharge.count({ where: { status: { in: ['PENDIENTE', 'VENCIDO'] } } }), prisma.parkingConfig.findUnique({ where: { id: 1 } }), prisma.parkingVisit.count({ where: { status: 'DENTRO' } }), prisma.parkingEvent.count({ where: { status: { in: ['PLANIFICADO', 'EN_CURSO'] } } })]);
+    if (/parqueo|estacionamiento|vehículo|vehiculo/.test(question)) return void reply(`Parqueo: ${vehiclesInside} vehículo(s) dentro de ${parkingConfig?.totalCapacity || 0} espacios. Eventos activos o planificados: ${activeEvents}.`);
+    if (/cuánt|cuant|total|cantidad/.test(question) && /estudiante|alumno/.test(question) && !/expediente|document/.test(question)) return void reply(`Hay ${students} estudiantes registrados en el sistema.`);
     if (/listado|lista|alumno|estudiante|usuario/.test(question)) {
       const searchMatch = question.match(/(?:buscar|busca|nombre|carné|carne|de la carrera|de sistemas|de informática)\s+(.+)/i);
       const search = searchMatch?.[1]?.trim() || '';
