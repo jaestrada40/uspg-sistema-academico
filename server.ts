@@ -880,19 +880,22 @@ app.post('/api/courses/import', requireAdmin, async (req, res) => {
   if (!rows.length) return void res.status(400).json({ message: 'El archivo Excel no contiene cursos.' });
   const careers = await prisma.career.findMany({ select: { code: true } });
   const careerCodes = new Set(careers.map((career) => career.code));
-  const existing = await prisma.course.findMany({ select: { code: true } });
-  const codes = new Set(existing.map((course) => course.code));
+  const existing = await prisma.course.findMany({ select: { code: true, careerId: true } });
+  const existingByCode = new Map(existing.map((course) => [course.code, course.careerId]));
+  const codes = new Set<string>();
   const errors: Array<{ row: number; message: string }> = [];
   const normalizedRows = rows.map((row) => {
     const code = String(row.code || '').trim().toUpperCase();
     const name = String(row.name || '').trim();
-    const careerId = String(row.career || '').trim().toUpperCase();
+    const rawCareerId = String(row.career || '').trim().toUpperCase();
+    const careerId = rawCareerId === 'CC' && careerCodes.has('CAR-ITI') ? 'CAR-ITI' : rawCareerId;
     const credits = Number(row.credits), semester = Number(row.semester);
     const prerequisiteCodes = String(row.prerequisites || '').split(',').map((item) => item.trim().toUpperCase()).filter(Boolean);
     if (!code || !name || !careerId || !Number.isInteger(credits) || credits < 1 || !Number.isInteger(semester) || semester < 1) errors.push({ row: row.rowNumber, message: 'Código, nombre, carrera, créditos y semestre son obligatorios y válidos.' });
     if (careerId && !careerCodes.has(careerId)) errors.push({ row: row.rowNumber, message: `La carrera ${careerId} no existe.` });
-    if (codes.has(code) && !codes.has(`IMPORT:${code}`)) errors.push({ row: row.rowNumber, message: `El código ${code} ya existe; usa la edición manual o elimina el duplicado.` });
-    codes.add(`IMPORT:${code}`);
+    if (codes.has(code)) errors.push({ row: row.rowNumber, message: `El código ${code} está repetido dentro del archivo.` });
+    if (existingByCode.has(code) && existingByCode.get(code) !== careerId) errors.push({ row: row.rowNumber, message: `El curso ${code} ya pertenece a otra carrera.` });
+    codes.add(code);
     return { code, name, careerId, credits, semester, prerequisiteCodes, theoreticalHours: Number(row.theoreticalHours || 0), practicalHours: Number(row.practicalHours || 0), area: String(row.area || 'Básica'), status: 'Activo', rowNumber: row.rowNumber };
   });
   const incomingCodes = new Set(normalizedRows.map((row) => row.code));
@@ -901,7 +904,8 @@ app.post('/api/courses/import', requireAdmin, async (req, res) => {
   if (req.body.commit !== true) return res.json({ message: 'Validación completada. Confirma la importación para guardar.', preview: normalizedRows });
   await prisma.$transaction(async (tx) => {
     for (const row of normalizedRows) {
-      await tx.course.create({ data: { code: row.code, name: row.name, credits: row.credits, semester: row.semester, careerId: row.careerId, theoreticalHours: row.theoreticalHours, practicalHours: row.practicalHours, area: row.area, status: row.status } });
+      await tx.course.upsert({ where: { code: row.code }, update: { name: row.name, credits: row.credits, semester: row.semester, careerId: row.careerId, theoreticalHours: row.theoreticalHours, practicalHours: row.practicalHours, area: row.area, status: row.status }, create: { code: row.code, name: row.name, credits: row.credits, semester: row.semester, careerId: row.careerId, theoreticalHours: row.theoreticalHours, practicalHours: row.practicalHours, area: row.area, status: row.status } });
+      await tx.coursePrerequisite.deleteMany({ where: { courseCode: row.code } });
       if (row.prerequisiteCodes.length) await tx.coursePrerequisite.createMany({ data: row.prerequisiteCodes.map((prerequisiteCode: string) => ({ courseCode: row.code, prerequisiteCode })) });
       await tx.auditLog.create({ data: { action: 'IMPORT', entityType: 'COURSE', entityId: row.code, actorId: res.locals.authUser.id, details: JSON.stringify({ row: row.rowNumber, source: 'xlsx' }) } });
     }
