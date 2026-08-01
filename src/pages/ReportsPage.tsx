@@ -73,7 +73,7 @@ export const ReportsPage: React.FC = () => {
 
   return (
     <RoleGuard allowedRoles={['ADMIN']}>
-      <div className="space-y-6">
+      <div className="report-page space-y-6">
         <PageHeader
           title="Reportes Académicos y Estadísticas"
           description={`Análisis de rendimiento, distribución de matrículas y métricas del ${currentCycle.name}`}

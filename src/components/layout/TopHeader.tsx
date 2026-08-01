@@ -29,6 +29,10 @@ export const TopHeader: React.FC = () => {
     setSidebarOpen,
     resetToDefaults,
     institution,
+    students,
+    courses,
+    careers,
+    sections,
   } = useApp();
 
   const navigate = useNavigate();
@@ -37,6 +41,13 @@ export const TopHeader: React.FC = () => {
   const [showCycleMenu, setShowCycleMenu] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const searchTerm = globalSearch.trim().toLowerCase();
+  const searchResults = searchTerm.length < 2 ? [] : [
+    ...students.filter((item) => `${item.name} ${item.carnet} ${item.email}`.toLowerCase().includes(searchTerm)).slice(0, 4).map((item) => ({ label: item.name, detail: `Estudiante · ${item.carnet}`, path: '/estudiantes' })),
+    ...courses.filter((item) => `${item.name} ${item.code}`.toLowerCase().includes(searchTerm)).slice(0, 4).map((item) => ({ label: item.name, detail: `Curso · ${item.code}`, path: '/cursos' })),
+    ...careers.filter((item) => `${item.name} ${item.code}`.toLowerCase().includes(searchTerm)).slice(0, 4).map((item) => ({ label: item.name, detail: `Carrera · ${item.code}`, path: '/carreras' })),
+    ...sections.filter((item) => `${item.code} ${item.courseName} ${item.teacherName}`.toLowerCase().includes(searchTerm)).slice(0, 4).map((item) => ({ label: item.code, detail: `Sección · ${item.courseName}`, path: '/secciones' })),
+  ].slice(0, 6);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-[#E2E8F0] bg-white px-4 sm:px-6 shadow-xs">
@@ -68,6 +79,16 @@ export const TopHeader: React.FC = () => {
             placeholder="Buscar carné, curso, carrera..."
             className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-1.5 pl-9 pr-3 text-xs font-medium text-[#333333] placeholder-[#7D8490] focus:border-[#800020] focus:bg-white focus:outline-hidden"
           />
+          {searchTerm.length >= 2 && (
+            <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-xl">
+              {searchResults.length > 0 ? searchResults.map((result, index) => (
+                <button key={`${result.path}-${result.label}-${index}`} onClick={() => { setGlobalSearch(''); navigate(result.path); }} className="block w-full border-b border-[#F1F5F9] px-3 py-2 text-left last:border-0 hover:bg-slate-50">
+                  <p className="truncate text-xs font-bold text-[#333333]">{result.label}</p>
+                  <p className="truncate text-[10px] text-[#64748B]">{result.detail}</p>
+                </button>
+              )) : <p className="px-3 py-3 text-xs text-[#64748B]">No se encontraron coincidencias.</p>}
+            </div>
+          )}
         </div>
 
       </div>
@@ -201,7 +222,7 @@ export const TopHeader: React.FC = () => {
               <button
                 onClick={() => {
                   setShowProfileMenu(false);
-                  navigate('/configuracion');
+                    navigate('/perfil');
                 }}
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[#333333] hover:bg-slate-100 transition-colors"
               >

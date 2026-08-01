@@ -30,8 +30,10 @@
 @media print {
   body { background: white !important; }
   body * { visibility: hidden; }
-  .schedule-print-area, .schedule-print-area * { visibility: visible; }
-  .schedule-print-area { position: absolute; inset: 0; width: 100%; }
+  .schedule-print-area, .schedule-print-area *, .report-page, .report-page * { visibility: visible; }
+  .schedule-print-area, .report-page { position: absolute; inset: 0; width: 100%; }
   .schedule-print-area table { font-size: 10px; }
   .schedule-print-area td, .schedule-print-area th { padding: 6px !important; }
+  .report-page { padding: 1rem; }
+  .report-page button, .report-page select, .report-page [role='button'] { display: none !important; }
 }
