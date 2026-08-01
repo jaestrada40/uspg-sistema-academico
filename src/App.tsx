@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AppProvider, useApp } from './context/AppContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { NotificationToastContainer } from './components/common/NotificationToast';
+import { AcademicAssistant } from './components/common/AcademicAssistant';
 
 import { LoginPage } from './pages/LoginPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
@@ -56,7 +57,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
   if (currentUser.role === 'BIBLIOTECA' && location.pathname === '/dashboard') return <Navigate to="/biblioteca" replace />;
   if (['PARQUEO', 'EVENTOS'].includes(currentUser.role) && location.pathname === '/dashboard') return <Navigate to="/parqueo" replace />;
-  return <AppLayout>{children}</AppLayout>;
+  return <AppLayout>{children}<AcademicAssistant /></AppLayout>;
 };
 
 export default function App() {

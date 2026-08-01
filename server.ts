@@ -2200,6 +2200,41 @@ app.put('/api/institution', requireAdmin, async (req, res) => {
   res.json(institution);
 });
 
+app.post('/api/assistant', requireUser, async (req, res) => {
+  const user = res.locals.authUser as { id: string; role: string; name: string; carnetOrCode: string | null };
+  const question = String(req.body?.question || '').trim().toLowerCase();
+  if (!question) return void res.status(400).json({ message: 'Escribe una pregunta.' });
+  if (user.role === 'ESTUDIANTE') {
+    const student = await prisma.student.findUnique({ where: { userId: user.id }, include: { enrollments: { where: { status: 'Inscrito' }, include: { section: { include: { course: true, teacher: true, classroom: true, cycle: true } } } }, gradeRecords: { include: { section: { include: { course: true } } } }, financialCharges: { include: { payments: true } } } });
+    if (!student) return void res.json({ answer: 'No encontré tu expediente de estudiante asociado a esta cuenta.' });
+    if (/horario|clase|hoy|curso|llevo|inscrit/.test(question)) {
+      const lines = student.enrollments.map((item) => `${item.section.course.code} ${item.section.course.name}: ${item.section.scheduleDays} ${item.section.scheduleTime}, aula ${item.section.classroom.code}, docente ${item.section.teacher.name}`);
+      return void res.json({ answer: lines.length ? `Estos son tus cursos inscritos:\n${lines.join('\n')}` : 'No tienes cursos inscritos actualmente.' });
+    }
+    if (/nota|promedio|calificacion|calificación/.test(question)) {
+      const lines = student.gradeRecords.filter((item) => item.isPublished).map((item) => `${item.section.course.code} ${item.section.course.name}: ${item.total}`);
+      return void res.json({ answer: lines.length ? `Tus notas publicadas son:\n${lines.join('\n')}\nPromedio general: ${student.gpa}` : 'Todavía no tienes notas publicadas.' });
+    }
+    if (/debo|pago|saldo|finanz/.test(question)) {
+      const balance = student.financialCharges.reduce((sum, charge) => sum + Math.max(0, charge.amount - charge.payments.reduce((paid, payment) => paid + payment.amount, 0)), 0);
+      return void res.json({ answer: `Tu saldo pendiente registrado es Q${balance.toFixed(2)}.` });
+    }
+    if (/pensum|avance|credit/.test(question)) return void res.json({ answer: `Llevas ${student.creditsEarned} de ${student.totalCreditsRequired} créditos (${Math.round(student.creditsEarned / Math.max(1, student.totalCreditsRequired) * 100)}%).` });
+    return void res.json({ answer: 'Puedo ayudarte con tus cursos, horarios, notas, pagos y avance del pensum. Pregunta, por ejemplo: “¿Qué clases llevo?”' });
+  }
+  if (user.role === 'DOCENTE') {
+    const teacher = await prisma.teacher.findUnique({ where: { userId: user.id }, include: { sections: { include: { course: true, classroom: true, cycle: true } } } });
+    if (!teacher) return void res.json({ answer: 'No encontré tus secciones asignadas.' });
+    const lines = teacher.sections.map((item) => `${item.code} · ${item.course.code} ${item.course.name}: ${item.scheduleDays} ${item.scheduleTime}, aula ${item.classroom.code}, inscritos ${item.enrolledCount}`);
+    return void res.json({ answer: /horario|seccion|sección|curso|clase/.test(question) ? `Tus secciones asignadas:\n${lines.join('\n') || 'No tienes secciones asignadas.'}` : `Tienes ${teacher.sections.length} secciones asignadas. Puedo mostrarte horarios, cursos e inscritos.` });
+  }
+  if (user.role === 'ADMIN') {
+    const [students, teachers, courses, sections] = await Promise.all([prisma.student.count(), prisma.teacher.count(), prisma.course.count(), prisma.section.count()]);
+    return void res.json({ answer: `Resumen administrativo: ${students} estudiantes, ${teachers} docentes, ${courses} cursos y ${sections} secciones. También puedo ayudarte a revisar ciclos, carreras y operaciones.` });
+  }
+  return void res.json({ answer: `Hola ${user.name}. Puedo orientarte sobre los módulos disponibles para tu rol.` });
+});
+
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(error);
   res.status(500).json({ message: 'Ocurrió un error interno en el servidor.' });
