@@ -504,6 +504,21 @@ app.get('/api/admin/users', requireAdmin, async (_req, res) => {
   res.json(users);
 });
 
+app.post('/api/admin/users', requireAdmin, async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const role = String(req.body?.role || '').trim().toUpperCase();
+  const carnetOrCode = String(req.body?.carnetOrCode || '').trim() || null;
+  const allowedRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'];
+  if (name.length < 3 || !/^\S+@\S+\.\S+$/.test(email) || !allowedRoles.includes(role)) return void res.status(400).json({ message: 'Nombre, correo y rol son obligatorios y válidos.' });
+  const password = temporaryPassword();
+  try {
+    const user = await prisma.user.create({ data: { id: randomUUID(), name, email, role, carnetOrCode, passwordHash: hashPassword(password), mustChangePassword: true, department: role === 'ADMIN' ? 'Administración' : null } });
+    await prisma.auditLog.create({ data: { action: 'USER_CREATED_ADMIN', entityType: 'USER', entityId: user.id, actorId: res.locals.authUser.id, details: JSON.stringify({ email, role }) } });
+    res.status(201).json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, carnetOrCode: user.carnetOrCode, active: user.active, mustChangePassword: true, mfaEnabled: false }, temporaryPassword: password });
+  } catch (error) { if (!handleUniqueError(error, res)) throw error; }
+});
+
 app.post('/api/admin/users/:id/reset-password', requireAdmin, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.params.id } });
   if (!user) return void res.status(404).json({ message: 'Usuario no encontrado.' });
