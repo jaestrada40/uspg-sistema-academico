@@ -2253,8 +2253,10 @@ app.post('/api/assistant', requireUser, async (req, res) => {
   }
   if (user.role === 'ADMIN') {
     const [students, teachers, courses, sections, careers, pendingDocuments, pendingCharges] = await Promise.all([prisma.student.count(), prisma.teacher.count(), prisma.course.count(), prisma.section.count(), prisma.career.count(), prisma.enrollmentDocument.count({ where: { status: 'PENDIENTE' } }), prisma.financialCharge.count({ where: { status: { in: ['PENDIENTE', 'VENCIDO'] } } })]);
+    if (/cuánt|cuant|total|cantidad/.test(question) && /estudiante|alumno/.test(question)) return void reply(`Hay ${students} estudiantes registrados en el sistema.`);
     if (/listado|lista|alumno|estudiante|usuario/.test(question)) {
-      const search = question.replace(/.*(?:de|del|alumno|estudiante|usuario)\s+/i, '').trim();
+      const searchMatch = question.match(/(?:buscar|busca|nombre|carné|carne|de la carrera|de sistemas|de informática)\s+(.+)/i);
+      const search = searchMatch?.[1]?.trim() || '';
       const records = await prisma.student.findMany({ where: search && search.length > 2 ? { OR: [{ name: { contains: search } }, { carnet: { contains: search } }] } : undefined, orderBy: { name: 'asc' }, take: 50, select: { carnet: true, name: true, careerName: true, status: true } });
       return void reply(records.length ? `Listado de estudiantes${search ? ` para “${search}”` : ''}:\n${records.map((item) => `• ${item.carnet} · ${item.name}\n  ${item.careerName || 'Sin carrera'} · ${item.status}`).join('\n')}` : 'No encontré estudiantes con ese criterio.');
     }
