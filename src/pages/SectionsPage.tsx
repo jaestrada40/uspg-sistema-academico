@@ -266,7 +266,7 @@ export const SectionsPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0] text-xs">
                   {paginatedSections.map((sec) => (
-                    <tr key={sec.id} className="hover:bg-slate-50 transition-colors">
+                    <tr id={`section-${sec.id}`} key={sec.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 font-bold text-[#800020] whitespace-nowrap">
                         {sec.code}
                       </td>

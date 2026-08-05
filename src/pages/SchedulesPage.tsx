@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Clock,
   MapPin,
@@ -7,6 +7,7 @@ import {
   Building,
   AlertTriangle,
   Plus,
+  Search,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PageHeader } from '../components/common/PageHeader';
@@ -19,6 +20,9 @@ export const SchedulesPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'grid' | 'classrooms'>('grid');
   const [selectedDay, setSelectedDay] = useState<string>('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [classroomFilter, setClassroomFilter] = useState('ALL');
+  const [teacherFilter, setTeacherFilter] = useState('ALL');
 
   const [showAddClassroomModal, setShowAddClassroomModal] = useState(false);
   const [newClassroom, setNewClassroom] = useState({
@@ -30,13 +34,31 @@ export const SchedulesPage: React.FC = () => {
 
   const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   const enrolledSectionIds = new Set(enrollments.filter((item) => item.studentCarnet === currentUser.carnetOrCode && item.cycleId === currentCycle.id && item.status === 'Inscrito').map((item) => item.sectionId));
-  const visibleSections = currentUser.role === 'ESTUDIANTE' ? sections.filter((section) => enrolledSectionIds.has(section.id)) : sections;
+  const roleSections = sections.filter((section) => {
+    if (section.cycleId !== currentCycle.id) return false;
+    if (currentUser.role === 'ESTUDIANTE') return enrolledSectionIds.has(section.id);
+    if (currentUser.role === 'DOCENTE') return section.teacherId === currentUser.carnetOrCode || section.teacherName === currentUser.name;
+    return true;
+  });
+  const visibleSections = useMemo(() => roleSections.filter((section) => {
+    const haystack = `${section.code} ${section.courseName || ''} ${section.teacherName || ''} ${section.classroomName || ''}`.toLowerCase();
+    return (!searchTerm || haystack.includes(searchTerm.toLowerCase())) &&
+      (selectedDay === 'ALL' || section.scheduleDays.includes(selectedDay)) &&
+      (classroomFilter === 'ALL' || section.classroomId === classroomFilter) &&
+      (teacherFilter === 'ALL' || section.teacherId === teacherFilter);
+  }), [roleSections, searchTerm, selectedDay, classroomFilter, teacherFilter]);
   const timeSlots = Array.from(new Set(visibleSections.map((section) => section.scheduleTime).filter(Boolean))).sort((a, b) => {
     const minutes = (value: string) => { const match = value.match(/(\d{1,2}):(\d{2})/); return match ? Number(match[1]) * 60 + Number(match[2]) : Number.MAX_SAFE_INTEGER; };
     return minutes(a) - minutes(b);
   });
   const calendarStart = 7 * 60, calendarEnd = 22 * 60, slot = 30;
   const parseRange = (value: string) => { const match = value.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/); return match ? { start: Number(match[1]) * 60 + Number(match[2]), end: Number(match[3]) * 60 + Number(match[4]) } : null; };
+  const overlaps = (first: typeof visibleSections[number], second: typeof visibleSections[number]) => {
+    const a = parseRange(first.scheduleTime); const b = parseRange(second.scheduleTime);
+    return Boolean(a && b && first.scheduleDays.some((day) => second.scheduleDays.includes(day)) && a.start < b.end && b.start < a.end);
+  };
+  const hasConflict = (section: typeof visibleSections[number]) => roleSections.some((other) => other.id !== section.id && overlaps(section, other));
+  const teachersWithSchedule = Array.from(new Map(roleSections.map((section) => [section.teacherId, section.teacherName || section.teacherId])).entries());
 
   const handleCreateClassroom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,12 +140,19 @@ export const SchedulesPage: React.FC = () => {
         {activeTab === 'grid' ? (
           /* Weekly Schedule Matrix */
           <div className="schedule-print-area space-y-4">
+            <div className="grid gap-3 rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-xs md:grid-cols-[1.5fr_repeat(3,1fr)]">
+              <label className="relative block"><Search className="absolute left-3 top-2.5 h-4 w-4 text-[#94A3B8]" /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Buscar curso, sección, docente o aula" className="w-full rounded-lg border border-[#E2E8F0] py-2 pl-9 pr-3 text-xs" /></label>
+              <select value={selectedDay} onChange={(event) => setSelectedDay(event.target.value)} className="rounded-lg border border-[#E2E8F0] px-3 py-2 text-xs"><option value="ALL">Todos los días</option>{days.map((day) => <option key={day}>{day}</option>)}</select>
+              <select value={classroomFilter} onChange={(event) => setClassroomFilter(event.target.value)} className="rounded-lg border border-[#E2E8F0] px-3 py-2 text-xs"><option value="ALL">Todas las aulas</option>{classrooms.map((room) => <option key={room.id} value={room.id}>{room.code}</option>)}</select>
+              <select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="rounded-lg border border-[#E2E8F0] px-3 py-2 text-xs"><option value="ALL">Todos los docentes</option>{teachersWithSchedule.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#64748B]"><span className="font-semibold">{visibleSections.length} secciones visibles</span><span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-[#800020]" /> Cruce parcial o total</span><span>Haz clic en un bloque para abrir su registro.</span></div>
             <div className="overflow-x-auto rounded-xl border border-[#E2E8F0] bg-white shadow-xs">
               <div className="min-w-[980px]">
                 <div className="grid grid-cols-[80px_repeat(6,minmax(145px,1fr))] border-b bg-[#1E293B] text-[10px] font-bold text-white"><div className="p-3">Hora</div>{days.map((day) => <div key={day} className="border-l border-white/10 p-3 text-center">{day}</div>)}</div>
                 <div className="relative grid grid-cols-[80px_repeat(6,minmax(145px,1fr))]" style={{ height: `${((calendarEnd - calendarStart) / slot) * 32}px` }}>
                   <div className="relative border-r bg-[#F8FAFC]">{Array.from({ length: (calendarEnd - calendarStart) / slot }, (_, index) => { const minute = calendarStart + index * slot; return <div key={minute} className="h-8 border-b px-2 pt-1 text-[9px] font-bold text-[#64748B]">{String(Math.floor(minute / 60)).padStart(2, '0')}:{String(minute % 60).padStart(2, '0')}</div>; })}</div>
-                  {days.map((day) => <div key={day} className="relative border-r" style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 31px, #E2E8F0 31px, #E2E8F0 32px)' }}>{visibleSections.filter((section) => section.scheduleDays.includes(day)).map((section) => { const range = parseRange(section.scheduleTime); if (!range) return null; const top = ((range.start - calendarStart) / slot) * 32; const height = Math.max(28, ((range.end - range.start) / slot) * 32 - 4); return <div key={`${day}-${section.id}`} className="absolute left-1 right-1 z-10 overflow-hidden rounded-md border border-[#800020]/30 bg-[#800020]/10 p-1.5 text-[9px] leading-tight shadow-sm" style={{ top, height }} title={`${section.courseName} · ${section.scheduleTime}`}><strong className="block text-[#800020]">{section.code}</strong><span className="block font-bold">{section.courseName}</span><span className="block text-[#475569]">{section.scheduleTime} · {section.classroomName}</span></div>; })}</div>)}
+                  {days.map((day) => <div key={day} className="relative border-r" style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 31px, #E2E8F0 31px, #E2E8F0 32px)' }}>{visibleSections.filter((section) => section.scheduleDays.includes(day)).map((section) => { const range = parseRange(section.scheduleTime); if (!range) return null; const top = ((range.start - calendarStart) / slot) * 32; const height = Math.max(28, ((range.end - range.start) / slot) * 32 - 4); const conflict = hasConflict(section); return <a href={`/secciones#section-${section.id}`} key={`${day}-${section.id}`} className={`absolute left-1 right-1 z-10 overflow-hidden rounded-md border p-1.5 text-[9px] leading-tight shadow-sm hover:brightness-95 ${conflict ? 'border-red-600 bg-red-100' : 'border-[#800020]/30 bg-[#800020]/10'}`} style={{ top, height }} title={`${section.courseName} · ${section.scheduleTime}${conflict ? ' · Cruce detectado' : ''}`}><strong className={`block ${conflict ? 'text-red-700' : 'text-[#800020]'}`}>{section.code}{conflict ? ' · CRUCE' : ''}</strong><span className="block font-bold">{section.courseName}</span><span className="block text-[#475569]">{section.scheduleTime} · {section.classroomName}</span></a>; })}</div>)}
                 </div>
               </div>
             </div>

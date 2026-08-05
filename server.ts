@@ -2284,9 +2284,12 @@ app.post('/api/assistant', requireUser, async (req, res) => {
   const history = assistantHistory(storedHistory.reverse().map((item) => ({ from: item.role, text: item.content })));
   if (!question) return void res.status(400).json({ message: 'Escribe una pregunta.' });
   if (originalQuestion.length > 1000) return void res.status(413).json({ message: 'La pregunta es demasiado larga. Resúmela e inténtalo de nuevo.' });
+  let groundedContext = '';
   const links = (() => {
     const map: [RegExp, { label: string; path: string }][] = [
       [/horario|clase|seccion|sección/, { label: 'Ver horarios', path: '/horarios' }],
+      [/tarea|asignaci[oó]n/, { label: 'Ver tareas y actividades', path: '/actividades-zona' }],
+      [/aprob|reprob|cr[eé]dito|pensum|promedio|calific/, { label: 'Ver historial académico', path: '/historial' }],
       [/nota|calific|promedio|pensum|crédito/, { label: 'Ver historial académico', path: '/historial' }],
       [/pago|saldo|finanz|mora|cargo/, { label: 'Ver finanzas', path: '/pagos' }],
       [/biblioteca|libro|préstamo|prestamo/, { label: 'Abrir biblioteca', path: '/biblioteca' }],
@@ -2297,7 +2300,8 @@ app.post('/api/assistant', requireUser, async (req, res) => {
   })();
   await prisma.assistantMessage.create({ data: { conversationId: conversation.id, role: 'user', content: originalQuestion } });
   const reply = async (answer: string) => {
-    const finalAnswer = await improveAssistantAnswer(originalQuestion, user.role, answer);
+    // Every answer is grounded in the database result before Gemini formats it.
+    const finalAnswer = await answerWithGemini(`${originalQuestion}\nHistorial reciente:\n${history}`, user.role, groundedContext || answer, answer);
     await prisma.assistantMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: finalAnswer, linksJson: links.length ? JSON.stringify(links) : null } });
     await prisma.assistantConversation.update({ where: { id: conversation.id }, data: { title: conversation.title === 'Nueva conversación' ? originalQuestion.slice(0, 60) : undefined } });
     return void res.json({ conversationId: conversation.id, answer: finalAnswer, links });
@@ -2307,29 +2311,66 @@ app.post('/api/assistant', requireUser, async (req, res) => {
   }
   if (user.role === 'ESTUDIANTE') {
     const currentCycle = await prisma.academicCycle.findFirst({ where: { isCurrent: true } });
-    const student = await prisma.student.findUnique({ where: { userId: user.id }, include: { enrollments: { where: { status: 'Inscrito', ...(currentCycle ? { section: { cycleId: currentCycle.id } } : {}) }, include: { section: { include: { course: true, teacher: true, classroom: true, cycle: true } } } }, gradeRecords: { include: { section: { include: { course: true } } } }, financialCharges: { include: { payments: true } } } });
+    const student = await prisma.student.findUnique({ where: { userId: user.id }, include: { plan: { include: { courses: { include: { course: true }, orderBy: { semester: 'asc' } } } }, enrollments: { where: { status: 'Inscrito', ...(currentCycle ? { section: { cycleId: currentCycle.id } } : {}) }, include: { section: { include: { course: true, teacher: true, classroom: true, cycle: true } } } }, gradeRecords: { include: { section: { include: { course: true } } } }, financialCharges: { include: { payments: true, adjustments: true } } } });
     if (!student) return void reply('No encontré tu expediente de estudiante asociado a esta cuenta.');
+    const [tasks, attendance, loans, requests, cycles, institution, offeredSections] = await Promise.all([
+      prisma.zoneActivity.findMany({ where: { isPublished: true, section: { enrollments: { some: { studentCarnet: student.carnet, status: 'Inscrito' } } } }, include: { section: { include: { course: true } }, grades: { where: { studentCarnet: student.carnet }, select: { score: true, feedback: true } } }, orderBy: { dueDate: 'asc' } }),
+      prisma.attendanceRecord.findMany({ where: { studentCarnet: student.carnet }, include: { session: { include: { section: { include: { course: true } } } } }, orderBy: { session: { classDate: 'desc' } } }),
+      prisma.libraryLoan.findMany({ where: { borrowerId: user.id, status: { not: 'DEVUELTO' } }, include: { copy: { include: { book: true } } }, orderBy: { dueAt: 'asc' } }),
+      prisma.studentServiceRequest.findMany({ where: { studentCarnet: student.carnet }, orderBy: { createdAt: 'desc' }, take: 10 }),
+      prisma.academicCycle.findMany({ orderBy: { startDate: 'desc' }, take: 4 }),
+      prisma.institutionConfig.findUnique({ where: { id: 1 } }),
+      prisma.section.findMany({ where: { status: 'Abierta' }, select: { cycleId: true, courseCode: true } }),
+    ]);
+    const publishedGrades = student.gradeRecords.filter((item) => item.isPublished);
+    const approvedGrades = publishedGrades.filter((item) => item.total >= 61);
+    const failedGrades = publishedGrades.filter((item) => item.total < 61);
+    const approvedCodes = new Set(approvedGrades.map((item) => item.section.courseCode));
+    const pendingPlanCourses = (student.plan?.courses || []).filter((item) => !approvedCodes.has(item.courseCode));
+    const pendingBalance = student.financialCharges.reduce((sum, charge) => sum + Math.max(0, charge.amount - charge.adjustments.reduce((a, item) => a + item.amount, 0) - charge.payments.reduce((a, item) => a + item.amount, 0)), 0);
+    const verifiedContext = JSON.stringify({ estudiante: { carnet: student.carnet, nombre: student.name, carrera: student.careerName, plan: student.plan?.name }, cursosInscritos: student.enrollments.map((item) => ({ codigo: item.section.course.code, nombre: item.section.course.name, dias: item.section.scheduleDays, hora: item.section.scheduleTime, aula: item.section.classroom.code, docente: item.section.teacher.name })), calificacionesPublicadas: publishedGrades.map((item) => ({ curso: item.section.course.name, total: item.total, estado: item.total >= 61 ? 'APROBADO' : 'REPROBADO' })), promedio: student.gpa, creditos: { aprobados: student.creditsEarned, requeridos: student.totalCreditsRequired, pendientes: Math.max(0, student.totalCreditsRequired - student.creditsEarned) }, pensumPendiente: pendingPlanCourses.map((item) => ({ curso: item.course.name, semestre: item.semester, creditos: item.course.credits })), tareas: tasks.map((item) => ({ nombre: item.name, curso: item.section.course.name, vence: item.dueDate, entregada: item.grades.length > 0, calificacion: item.grades[0]?.score ?? null })), asistencia: attendance.map((item) => ({ curso: item.session.section.course.name, fecha: item.session.classDate, estado: item.status })), pagos: { saldoPendiente: pendingBalance, cargos: student.financialCharges.map((item) => ({ concepto: item.concept, vencimiento: item.dueDate, estado: item.status })) }, biblioteca: loans.map((item) => ({ libro: item.copy.book.title, vence: item.dueAt, estado: item.status })), tramites: requests.map((item) => ({ tipo: item.type, estado: item.status, proposito: item.purpose })), calendario: cycles.map((item) => ({ nombre: item.name, inicio: item.startDate, fin: item.endDate, inscripcionDesde: item.enrollmentStartDate, inscripcionHasta: item.enrollmentEndDate })), institucion: institution ? { nombre: institution.name, siglas: institution.shortName } : null });
+    groundedContext = verifiedContext;
+    if (/pr[oó]ximo semestre|siguiente semestre|puedo llevar|siguiente ciclo/.test(question)) {
+      const nextCycle = cycles.find((cycle) => !currentCycle || cycle.id !== currentCycle.id);
+      const candidates = nextCycle ? (student.plan?.courses || []).filter((item) => !approvedCodes.has(item.courseCode)).filter((item) => offeredSections.some((section) => section.cycleId === nextCycle.id && section.courseCode === item.courseCode)) : pendingPlanCourses;
+      return void reply(candidates.length ? `Para ${nextCycle?.name || 'el próximo semestre'} aparecen disponibles en tu pensum:\n${candidates.map((item) => `• ${item.course.code} · ${item.course.name} · ${item.course.credits} créditos`).join('\n')}` : 'No encontré cursos ofertados para el próximo semestre en tu pensum.');
+    }
+    if (/aprob/.test(question)) return void reply(approvedGrades.length ? `Cursos aprobados:\n${approvedGrades.map((item) => `• ${item.section.course.name}: ${item.total}`).join('\n')}` : 'No tienes cursos aprobados con calificación publicada.');
+    if (/reprob/.test(question)) return void reply(failedGrades.length ? `Cursos reprobados:\n${failedGrades.map((item) => `• ${item.section.course.name}: ${item.total}`).join('\n')}` : 'No tienes cursos reprobados con calificación publicada.');
+    if (/cr[eé]dito|pensum|avance/.test(question)) return void reply(`Llevas ${student.creditsEarned} de ${student.totalCreditsRequired} créditos; te faltan ${Math.max(0, student.totalCreditsRequired - student.creditsEarned)}. Cursos aprobados: ${approvedGrades.length}; reprobados: ${failedGrades.length}; pendientes en el pensum: ${pendingPlanCourses.length}.`);
+    if (/tarea|asignaci[oó]n/.test(question)) return void reply(tasks.length ? `Tareas y asignaciones publicadas:\n${tasks.map((item) => `• ${item.name} · ${item.section.course.name} · vence ${item.dueDate.toLocaleDateString('es-GT')} · ${item.grades.length ? 'entregada' : 'pendiente'}`).join('\n')}` : 'No hay tareas publicadas para tus cursos.');
+    if (/biblioteca|libro|préstamo|prestamo/.test(question)) return void reply(loans.length ? `Tus préstamos de biblioteca:\n${loans.map((item) => `• ${item.copy.book.title} · vence ${item.dueAt.toLocaleDateString('es-GT')} · ${item.status}`).join('\n')}` : 'No tienes préstamos activos en biblioteca.');
+    if (/docente|catedr/.test(question)) return void reply(student.enrollments.length ? `Docentes por curso:\n${student.enrollments.map((item) => `• ${item.section.course.name}: ${item.section.teacher.name}`).join('\n')}` : 'No tienes cursos inscritos actualmente.');
     if (/calendario|inicio de clases|fin de clases|examen|semestre|per[ií]odo acad/.test(question)) {
-      return void reply(currentCycle ? `El ciclo académico actual es “${currentCycle.name}”. Inicia el ${currentCycle.startDate.toLocaleDateString('es-GT')} y finaliza el ${currentCycle.endDate.toLocaleDateString('es-GT')}. Para fechas específicas de exámenes, el sistema no tiene un calendario detallado publicado.` : 'No hay un ciclo académico actual configurado en el sistema.');
+      return void reply(currentCycle ? `El ciclo académico actual es “${currentCycle.name}”. Inicia el ${currentCycle.startDate.toLocaleDateString('es-GT')} y finaliza el ${currentCycle.endDate.toLocaleDateString('es-GT')}.` : 'No hay un ciclo académico actual configurado en el sistema.');
     }
     if (/horario|hora|clase|hoy|mañana|curso|materia|llevo|inscrit/.test(question) && !/nota|calific|promedio|pago|saldo|pensum|crédito|asist|recuper|biblioteca/.test(question)) {
-      const requestedDay = /lunes/.test(question) ? 'lunes' : /martes/.test(question) ? 'martes' : /miércoles|miercoles/.test(question) ? 'miércoles' : /jueves/.test(question) ? 'jueves' : /viernes/.test(question) ? 'viernes' : /sábado|sabado/.test(question) ? 'sábado' : /domingo/.test(question) ? 'domingo' : null;
+      const tomorrow = new Date(Date.now() + 86400000).toLocaleDateString('es-GT', { weekday: 'long' }).toLocaleLowerCase('es-GT');
+      const requestedDay = /mañana|manana/.test(question) ? tomorrow : /lunes/.test(question) ? 'lunes' : /martes/.test(question) ? 'martes' : /miércoles|miercoles/.test(question) ? 'miércoles' : /jueves/.test(question) ? 'jueves' : /viernes/.test(question) ? 'viernes' : /sábado|sabado/.test(question) ? 'sábado' : /domingo/.test(question) ? 'domingo' : null;
       const lines = student.enrollments.filter((item) => { if (!requestedDay) return true; try { return JSON.parse(item.section.scheduleDays).some((day: string) => day.toLocaleLowerCase('es-GT').includes(requestedDay)); } catch { return item.section.scheduleDays.toLocaleLowerCase('es-GT').includes(requestedDay); } }).map((item) => { let days = item.section.scheduleDays; try { days = JSON.parse(days).join(', '); } catch { /* legacy plain text */ } return `• ${item.section.course.code} · ${item.section.course.name}\n  ${days} · ${item.section.scheduleTime}\n  Aula: ${item.section.classroom.code} · Docente: ${item.section.teacher.name}`; });
       return void reply(lines.length ? `${requestedDay ? `Tus clases del ${requestedDay}` : 'Estos son tus cursos inscritos'}:\n${lines.join('\n')}` : requestedDay ? `No tienes clases programadas el ${requestedDay}.` : currentCycle ? `No tienes cursos inscritos en el ciclo actual (${currentCycle.name}).` : 'No hay un ciclo académico actual configurado.');
     }
     if (/nota|promedio|calificacion|calificación|ganad|aprob/.test(question)) {
-      const lines = student.gradeRecords.filter((item) => item.isPublished).map((item) => `${item.section.course.code} ${item.section.course.name}: ${item.total}`);
+      const lines = publishedGrades.map((item) => `${item.section.course.code} ${item.section.course.name}: ${item.total} · ${item.total >= 61 ? 'Aprobado' : 'Reprobado'}`);
       return void reply(lines.length ? `Tus notas publicadas son:\n${lines.join('\n')}\nPromedio general: ${student.gpa}` : 'Todavía no tienes notas publicadas.');
     }
     if (/debo|pago|saldo|finanz/.test(question)) {
       const balance = student.financialCharges.reduce((sum, charge) => sum + Math.max(0, charge.amount - charge.payments.reduce((paid, payment) => paid + payment.amount, 0)), 0);
       return void reply(`Tu saldo pendiente registrado es Q${balance.toFixed(2)}.`);
     }
-    if (/pensum|avance|credit/.test(question)) return void reply(`Llevas ${student.creditsEarned} de ${student.totalCreditsRequired} créditos (${Math.round(student.creditsEarned / Math.max(1, student.totalCreditsRequired) * 100)}%).`);
+    if (/pensum|avance|credit/.test(question)) return void reply(`Llevas ${student.creditsEarned} de ${student.totalCreditsRequired} créditos; te faltan ${Math.max(0, student.totalCreditsRequired - student.creditsEarned)}. Cursos aprobados: ${approvedGrades.length}; reprobados: ${failedGrades.length}; pendientes en el pensum: ${pendingPlanCourses.length}.`);
+    if (/tarea|asignaci[oó]n|pendiente/.test(question)) return void reply(tasks.length ? `Tareas y asignaciones publicadas:\n${tasks.map((item) => `• ${item.name} · ${item.section.course.name} · vence ${item.dueDate.toLocaleDateString('es-GT')} · ${item.grades.length ? 'entregada' : 'pendiente'}`).join('\n')}` : 'No hay tareas publicadas para tus cursos.');
+    if (/docente|catedr/.test(question)) return void reply(student.enrollments.length ? `Docentes por curso:\n${student.enrollments.map((item) => `• ${item.section.course.name}: ${item.section.teacher.name}`).join('\n')}` : 'No tienes cursos inscritos actualmente.');
+    if (/pr[oó]ximo semestre|siguiente semestre|puedo llevar|siguiente ciclo/.test(question)) {
+      const nextCycle = cycles.find((cycle) => !currentCycle || cycle.id !== currentCycle.id);
+      const candidates = nextCycle ? (student.plan?.courses || []).filter((item) => !approvedCodes.has(item.courseCode)).filter((item) => offeredSections.some((section) => section.cycleId === nextCycle.id && section.courseCode === item.courseCode)) : pendingPlanCourses;
+      return void reply(candidates.length ? `Para ${nextCycle?.name || 'el próximo semestre'} aparecen disponibles en tu pensum:\n${candidates.map((item) => `• ${item.course.code} · ${item.course.name} · ${item.course.credits} créditos`).join('\n')}` : 'No encontré cursos ofertados para el próximo semestre en tu pensum.');
+    }
+    if (/aprob/.test(question)) return void reply(approvedGrades.length ? `Cursos aprobados:\n${approvedGrades.map((item) => `• ${item.section.course.name}: ${item.total}`).join('\n')}` : 'No tienes cursos aprobados con calificación publicada.');
+    if (/reprob/.test(question)) return void reply(failedGrades.length ? `Cursos reprobados:\n${failedGrades.map((item) => `• ${item.section.course.name}: ${item.total}`).join('\n')}` : 'No tienes cursos reprobados con calificación publicada.');
     if (/asistencia|faltas|presencia/.test(question)) {
-      const records = await prisma.attendanceRecord.findMany({ where: { studentCarnet: student.carnet }, select: { status: true } });
-      const present = records.filter((item) => item.status === 'PRESENTE').length;
-      return void reply(`Asistencia registrada: ${present} presente(s), ${records.length - present} ausencia(s) o tardanza(s), de ${records.length} registro(s).`);
+      const present = attendance.filter((item) => item.status === 'PRESENTE').length;
+      return void reply(`Asistencia registrada: ${present} presente(s), ${attendance.length - present} ausencia(s) o tardanza(s), de ${attendance.length} registro(s).`);
     }
     if (/recuperaci|examen de recuper/.test(question)) {
       const recoveries = await prisma.recoveryExam.findMany({ where: { gradeRecord: { studentCarnet: student.carnet } }, include: { gradeRecord: { include: { section: { include: { course: true } } } } } });
@@ -2344,7 +2385,6 @@ app.post('/api/assistant', requireUser, async (req, res) => {
       return void reply(notifications.length ? `Tus notificaciones recientes:\n${notifications.map((item) => `• ${item.title}${item.isRead ? ' · leída' : ' · pendiente'}\n  ${item.message}`).join('\n')}` : 'No tienes notificaciones.');
     }
     if (/biblioteca|libro|préstamo|prestamo/.test(question)) {
-      const loans = await prisma.libraryLoan.findMany({ where: { borrowerId: user.id, status: { not: 'DEVUELTO' } }, include: { copy: { include: { book: true } } } });
       return void reply(loans.length ? `Tus préstamos de biblioteca:\n${loans.map((item) => `• ${item.copy.book.title} · vence ${item.dueAt.toLocaleDateString('es-GT')} · ${item.status}`).join('\n')}` : 'No tienes préstamos activos en biblioteca.');
     }
     const context = JSON.stringify({ estudiante: { nombre: student.name, carrera: student.careerName, promedio: student.gpa, creditosAprobados: student.creditsEarned, creditosRequeridos: student.totalCreditsRequired }, cursosInscritos: student.enrollments.map((item) => ({ codigo: item.section.course.code, nombre: item.section.course.name, horario: item.section.scheduleDays, hora: item.section.scheduleTime, docente: item.section.teacher.name })), notasPublicadas: student.gradeRecords.filter((item) => item.isPublished).map((item) => ({ curso: item.section.course.name, nota: item.total })), cargos: student.financialCharges.map((charge) => ({ concepto: charge.concept, monto: charge.amount, pagos: charge.payments.reduce((sum, payment) => sum + payment.amount, 0) })) });
