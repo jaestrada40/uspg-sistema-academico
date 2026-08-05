@@ -17,7 +17,7 @@
     "db:postgres:prepare": "node scripts/prepare-postgresql-schema.mjs",
     "db:postgres:generate": "npm run db:postgres:prepare && prisma generate --config prisma.postgresql.config.ts",
     "db:postgres:push": "npm run db:postgres:prepare && prisma db push --config prisma.postgresql.config.ts",
-    "db:postgres:migrate:deploy": "npm run db:postgres:prepare && prisma migrate deploy --config prisma.postgresql.config.ts",
+    "db:postgres:migrate:deploy": "npm run db:postgres:prepare && (prisma migrate resolve --rolled-back 0007_restore_historical_grade_sections --config prisma.postgresql.config.ts || true) && prisma migrate deploy --config prisma.postgresql.config.ts",
     "production:check": "node scripts/check-production-env.mjs",
     "backup:create": "node scripts/backup-database.mjs",
     "backup:verify": "node scripts/verify-backup.mjs",
