@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 
 const baseUrl = process.env.TEST_BASE_URL || 'http://127.0.0.1:3001';
-const username = process.env.TEST_MFA_EMAIL || 'jaestrada@alumno.uspg.edu.gt';
+const username = process.env.TEST_MFA_EMAIL || 'jaestradag@alumno.uspg.edu.gt';
 const password = process.env.TEST_MFA_PASSWORD || 'Demo123!';
 const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const decodeBase32 = (input) => {

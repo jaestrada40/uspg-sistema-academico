@@ -2289,7 +2289,7 @@ app.post('/api/assistant', requireUser, async (req, res) => {
     const map: [RegExp, { label: string; path: string }][] = [
       [/horario|clase|seccion|sección/, { label: 'Ver horarios', path: '/horarios' }],
       [/tarea|asignaci[oó]n/, { label: 'Ver tareas y actividades', path: '/actividades-zona' }],
-      [/aprob|reprob|cr[eé]dito|pensum|promedio|calific/, { label: 'Ver historial académico', path: '/historial' }],
+      [/aprob|reprob|ganad|perdid|cr[eé]dito|pensum|promedio|calific/, { label: 'Ver historial académico', path: '/historial' }],
       [/nota|calific|promedio|pensum|crédito/, { label: 'Ver historial académico', path: '/historial' }],
       [/pago|saldo|finanz|mora|cargo/, { label: 'Ver finanzas', path: '/pagos' }],
       [/biblioteca|libro|préstamo|prestamo/, { label: 'Abrir biblioteca', path: '/biblioteca' }],
@@ -2344,8 +2344,8 @@ app.post('/api/assistant', requireUser, async (req, res) => {
       return void reply(`Tu promedio general es ${average.toFixed(1)} sobre 100, equivalente a un ${description}.`);
     }
     if (/cr[eé]dito|pensum|avance/.test(question)) return void reply(`Llevas ${student.creditsEarned} de ${student.totalCreditsRequired} créditos; te faltan ${Math.max(0, student.totalCreditsRequired - student.creditsEarned)}. Cursos aprobados: ${approvedGrades.length}; reprobados: ${failedGrades.length}; pendientes en el pensum: ${pendingPlanCourses.length}.`);
-    if (/aprob/.test(question)) return void reply(approvedGrades.length ? `Cursos aprobados:\n${approvedGrades.map((item) => `• ${item.section.course.name}: ${Number(item.total).toFixed(1)}`).join('\n')}` : 'No tienes cursos aprobados registrados.');
-    if (/reprob/.test(question)) return void reply(failedGrades.length ? `Cursos reprobados:\n${failedGrades.map((item) => `• ${item.section.course.name}: ${Number(item.total).toFixed(1)}`).join('\n')}` : 'No tienes cursos reprobados registrados.');
+    if (/aprob|ganad/.test(question)) return void reply(approvedGrades.length ? `Cursos aprobados:\n${approvedGrades.map((item) => `• ${item.section.course.name}: ${Number(item.total).toFixed(1)}`).join('\n')}` : 'No tienes cursos aprobados registrados.');
+    if (/reprob|perdid/.test(question)) return void reply(failedGrades.length ? `Cursos reprobados:\n${failedGrades.map((item) => `• ${item.section.course.name}: ${Number(item.total).toFixed(1)}`).join('\n')}` : 'No tienes cursos reprobados registrados.');
     if (/tarea|asignaci[oó]n/.test(question)) return void reply(tasks.length ? `Tareas y asignaciones publicadas:\n${tasks.map((item) => `• ${item.name} · ${item.section.course.name} · vence ${item.dueDate.toLocaleDateString('es-GT')} · ${item.grades.length ? 'entregada' : 'pendiente'}`).join('\n')}` : 'No hay tareas publicadas para tus cursos.');
     if (/biblioteca|libro|préstamo|prestamo/.test(question)) return void reply(loans.length ? `Tus préstamos de biblioteca:\n${loans.map((item) => `• ${item.copy.book.title} · vence ${item.dueAt.toLocaleDateString('es-GT')} · ${item.status}`).join('\n')}` : 'No tienes préstamos activos en biblioteca.');
     if (/docente|catedr/.test(question)) return void reply(student.enrollments.length ? `Docentes por curso:\n${student.enrollments.map((item) => `• ${item.section.course.name}: ${item.section.teacher.name}`).join('\n')}` : 'No tienes cursos inscritos actualmente.');

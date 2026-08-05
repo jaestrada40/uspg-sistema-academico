@@ -31,7 +31,7 @@ const demoUsers = [
     carnetOrCode: 'DOC-1042', phone: '+502 5512-3489', department: 'Facultad de Ingeniería y Tecnologías',
   },
   {
-    id: 'USR-003', name: 'Javier Estrada', email: 'jaestrada@alumno.uspg.edu.gt', role: roleFromInstitutionalEmail('jaestrada@alumno.uspg.edu.gt'),
+    id: 'USR-003', name: 'Javier Estrada', email: 'jaestradag@alumno.uspg.edu.gt', role: roleFromInstitutionalEmail('jaestradag@alumno.uspg.edu.gt'),
     carnetOrCode: '20230142', phone: '+502 4125-8890', department: 'Ingeniería en Tecnologías de la Información',
   },
 ];

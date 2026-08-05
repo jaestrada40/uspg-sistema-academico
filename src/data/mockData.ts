@@ -37,7 +37,7 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'USR-003',
     name: 'Javier Estrada',
-    email: 'jaestrada@alumno.uspg.edu.gt',
+    email: 'jaestradag@alumno.uspg.edu.gt',
     role: 'ESTUDIANTE',
     avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=200',
     carnetOrCode: '20230142',
@@ -478,7 +478,7 @@ export const INITIAL_STUDENTS: Student[] = [
   {
     carnet: '20230142',
     name: 'Javier Estrada',
-    email: 'jaestrada@alumno.uspg.edu.gt',
+    email: 'jaestradag@alumno.uspg.edu.gt',
     phone: '+502 4125-8890',
     careerId: 'CAR-ITI',
     careerName: 'Ingeniería en Tecnologías de la Información',

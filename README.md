@@ -25,7 +25,7 @@ Todos usan temporalmente la contraseña `Demo123!`:
 
 - Administrador: `cmendoza@administrador.uspg.edu.gt`
 - Docente: `luismena@catedratico.uspg.edu.gt`
-- Estudiante: `jaestrada@alumno.uspg.edu.gt`
+- Estudiante: `jaestradag@alumno.uspg.edu.gt`
 
 Las contraseñas se almacenan con `scrypt`; las sesiones usan tokens aleatorios guardados como hash y cookies `HttpOnly`.
 

@@ -2,7 +2,7 @@ const baseUrl = process.env.TEST_BASE_URL || 'http://127.0.0.1:3001';
 const accounts = {
   ADMIN: { username: process.env.TEST_ADMIN_EMAIL || 'cmendoza@administrador.uspg.edu.gt', password: process.env.TEST_ADMIN_PASSWORD },
   DOCENTE: { username: process.env.TEST_TEACHER_EMAIL || 'luismena@catedratico.uspg.edu.gt', password: process.env.TEST_TEACHER_PASSWORD || 'Demo123!' },
-  ESTUDIANTE: { username: process.env.TEST_STUDENT_EMAIL || 'jaestrada@alumno.uspg.edu.gt', password: process.env.TEST_STUDENT_PASSWORD || 'Demo123!' },
+  ESTUDIANTE: { username: process.env.TEST_STUDENT_EMAIL || 'jaestradag@alumno.uspg.edu.gt', password: process.env.TEST_STUDENT_PASSWORD || 'Demo123!' },
 };
 const cases = {
   ADMIN: [
