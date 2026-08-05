@@ -24,6 +24,7 @@
     "test:roles": "node scripts/test-role-access.mjs",
     "test:library": "node scripts/test-library-flow.mjs",
     "test:mfa": "node scripts/test-mfa.mjs",
+    "test:assistant": "node scripts/test-assistant.mjs",
     "verify:release": "npm run lint && npm run build && npm audit --omit=dev",
     "db:import:systems-curriculum": "tsx scripts/import-systems-curriculum.ts",
     "db:seed": "tsx prisma/seed.ts",

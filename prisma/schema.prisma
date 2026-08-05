@@ -13,39 +13,66 @@ datasource db {
 }
 
 model User {
-  id           String    @id
-  name         String
-  email        String    @unique
-  passwordHash String    @map("password_hash")
-  role         String
-  carnetOrCode String?   @unique @map("carnet_or_code")
-  avatar       String?
-  phone        String?
-  department   String?
-  librarySuspendedUntil DateTime? @map("library_suspended_until")
-  librarySuspensionReason String? @map("library_suspension_reason")
-  active       Boolean   @default(true)
-  mustChangePassword Boolean @default(true) @map("must_change_password")
-  mfaEnabled Boolean @default(false) @map("mfa_enabled")
-  mfaSecretEncrypted String? @map("mfa_secret_encrypted")
-  mfaPendingSecretEncrypted String? @map("mfa_pending_secret_encrypted")
-  mfaRecoveryCodeHashes String? @map("mfa_recovery_code_hashes")
-  mfaLastUsedStep Int? @map("mfa_last_used_step")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  sessions     Session[]
-  mfaChallenges MfaChallenge[]
-  passwordResetTokens PasswordResetToken[]
-  student      Student?
-  teacher      Teacher?
-  auditLogs    AuditLog[] @relation("AuditActor")
-  appNotifications AppNotification[]
-  libraryLoans LibraryLoan[]
-  libraryReservations LibraryReservation[]
-  parkingVehicles ParkingVehicle[]
-  parkingVisits   ParkingVisit[]
+  id                        String                  @id
+  name                      String
+  email                     String                  @unique
+  passwordHash              String                  @map("password_hash")
+  role                      String
+  carnetOrCode              String?                 @unique @map("carnet_or_code")
+  avatar                    String?
+  phone                     String?
+  department                String?
+  librarySuspendedUntil     DateTime?               @map("library_suspended_until")
+  librarySuspensionReason   String?                 @map("library_suspension_reason")
+  active                    Boolean                 @default(true)
+  mustChangePassword        Boolean                 @default(true) @map("must_change_password")
+  mfaEnabled                Boolean                 @default(false) @map("mfa_enabled")
+  mfaSecretEncrypted        String?                 @map("mfa_secret_encrypted")
+  mfaPendingSecretEncrypted String?                 @map("mfa_pending_secret_encrypted")
+  mfaRecoveryCodeHashes     String?                 @map("mfa_recovery_code_hashes")
+  mfaLastUsedStep           Int?                    @map("mfa_last_used_step")
+  createdAt                 DateTime                @default(now()) @map("created_at")
+  updatedAt                 DateTime                @updatedAt @map("updated_at")
+  sessions                  Session[]
+  mfaChallenges             MfaChallenge[]
+  passwordResetTokens       PasswordResetToken[]
+  student                   Student?
+  teacher                   Teacher?
+  auditLogs                 AuditLog[]              @relation("AuditActor")
+  appNotifications          AppNotification[]
+  libraryLoans              LibraryLoan[]
+  libraryReservations       LibraryReservation[]
+  parkingVehicles           ParkingVehicle[]
+  parkingVisits             ParkingVisit[]
+  assistantConversations    AssistantConversation[]
 
   @@map("users")
+}
+
+model AssistantConversation {
+  id        String             @id @default(cuid())
+  userId    String             @map("user_id")
+  title     String             @default("Nueva conversación")
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  AssistantMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("assistant_conversations")
+}
+
+model AssistantMessage {
+  id             String                @id @default(cuid())
+  conversationId String                @map("conversation_id")
+  role           String
+  content        String
+  linksJson      String?               @map("links_json")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  conversation   AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("assistant_messages")
 }
 
 model PasswordResetToken {
@@ -62,26 +89,26 @@ model PasswordResetToken {
 }
 
 model Student {
-  carnet               String   @id
+  carnet               String                  @id
   name                 String
-  email                String   @unique
+  email                String                  @unique
   phone                String
-  careerId             String   @map("career_id")
-  careerName           String?  @map("career_name")
-  entryCycle            String   @map("entry_cycle")
+  careerId             String                  @map("career_id")
+  careerName           String?                 @map("career_name")
+  entryCycle           String                  @map("entry_cycle")
   jornada              String
-  status               String   @default("Activo")
-  gpa                  Float    @default(0)
-  creditsEarned        Int      @default(0) @map("credits_earned")
-  totalCreditsRequired Int      @map("total_credits_required")
+  status               String                  @default("Activo")
+  gpa                  Float                   @default(0)
+  creditsEarned        Int                     @default(0) @map("credits_earned")
+  totalCreditsRequired Int                     @map("total_credits_required")
   address              String?
   dpi                  String?
-  userId               String   @unique @map("user_id")
-  campusId             String?  @map("campus_id")
-  planId               String?  @map("plan_id")
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  campus               Campus?  @relation(fields: [campusId], references: [id], onDelete: Restrict)
-  plan                 CurriculumPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
+  userId               String                  @unique @map("user_id")
+  campusId             String?                 @map("campus_id")
+  planId               String?                 @map("plan_id")
+  user                 User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus               Campus?                 @relation(fields: [campusId], references: [id], onDelete: Restrict)
+  plan                 CurriculumPlan?         @relation(fields: [planId], references: [id], onDelete: Restrict)
   enrollments          Enrollment[]
   gradeRecords         GradeRecord[]
   financialCharges     FinancialCharge[]
@@ -89,31 +116,31 @@ model Student {
   financialAdjustments FinancialAdjustment[]
   paymentAgreements    PaymentAgreement[]
   serviceRequests      StudentServiceRequest[]
-  enrollmentDocuments EnrollmentDocument[]
-  transferProofs      TransferProof[]
+  enrollmentDocuments  EnrollmentDocument[]
+  transferProofs       TransferProof[]
   attendanceRecords    AttendanceRecord[]
   zoneActivityGrades   ZoneActivityGrade[]
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  createdAt            DateTime                @default(now()) @map("created_at")
+  updatedAt            DateTime                @updatedAt @map("updated_at")
 
   @@map("students")
 }
 
 model Teacher {
-  code               String   @id
+  code               String    @id
   name               String
-  email              String   @unique
+  email              String    @unique
   phone              String
   specialty          String
-  academicDegree     String   @map("academic_degree")
-  assignedSectionIds String   @default("[]") @map("assigned_section_ids")
-  status             String   @default("Activo")
-  maxHoursPerWeek    Int      @map("max_hours_per_week")
-  userId             String   @unique @map("user_id")
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  academicDegree     String    @map("academic_degree")
+  assignedSectionIds String    @default("[]") @map("assigned_section_ids")
+  status             String    @default("Activo")
+  maxHoursPerWeek    Int       @map("max_hours_per_week")
+  userId             String    @unique @map("user_id")
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   sections           Section[]
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   @@map("teachers")
 }
@@ -134,16 +161,16 @@ model AuditLog {
 }
 
 model Career {
-  code              String   @id
+  code              String           @id
   name              String
   faculty           String
-  durationSemesters Int      @map("duration_semesters")
-  totalCredits      Int      @map("total_credits")
+  durationSemesters Int              @map("duration_semesters")
+  totalCredits      Int              @map("total_credits")
   modality          String
-  status            String   @default("Activo")
-  degreeType        String   @map("degree_type")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  status            String           @default("Activo")
+  degreeType        String           @map("degree_type")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
   courses           Course[]
   financialFees     CareerFee[]
   curriculumPlans   CurriculumPlan[]
@@ -152,69 +179,69 @@ model Career {
 }
 
 model Course {
-  code             String   @id
+  code             String                 @id
   name             String
   credits          Int
   semester         Int
-  theoreticalHours Int      @map("theoretical_hours")
-  practicalHours   Int      @map("practical_hours")
+  theoreticalHours Int                    @map("theoretical_hours")
+  practicalHours   Int                    @map("practical_hours")
   area             String
-  status           String   @default("Activo")
-  careerId         String   @map("career_id")
-  career           Career   @relation(fields: [careerId], references: [code], onDelete: Restrict)
-  prerequisites    CoursePrerequisite[] @relation("CoursePrerequisites")
-  requiredFor      CoursePrerequisite[] @relation("RequiredFor")
+  status           String                 @default("Activo")
+  careerId         String                 @map("career_id")
+  career           Career                 @relation(fields: [careerId], references: [code], onDelete: Restrict)
+  prerequisites    CoursePrerequisite[]   @relation("CoursePrerequisites")
+  requiredFor      CoursePrerequisite[]   @relation("RequiredFor")
   curriculumPlans  CurriculumPlanCourse[]
   sections         Section[]
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
 
   @@index([careerId])
   @@map("courses")
 }
 
 model Campus {
-  id        String   @id
-  code      String   @unique
-  name      String
-  address   String?
-  status    String   @default("Activo")
-  students  Student[]
+  id            String      @id
+  code          String      @unique
+  name          String
+  address       String?
+  status        String      @default("Activo")
+  students      Student[]
   financialFees CareerFee[]
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
 
   @@map("campuses")
 }
 
 model CurriculumPlan {
-  id                String   @id
-  code              String   @unique
+  id                String                 @id
+  code              String                 @unique
   name              String
   version           String
-  effectiveFrom     DateTime @map("effective_from")
-  effectiveTo       DateTime? @map("effective_to")
-  status            String   @default("Activo")
-  totalCredits      Int      @map("total_credits")
-  durationSemesters Int      @map("duration_semesters")
-  careerId          String   @map("career_id")
-  career            Career   @relation(fields: [careerId], references: [code], onDelete: Restrict)
+  effectiveFrom     DateTime               @map("effective_from")
+  effectiveTo       DateTime?              @map("effective_to")
+  status            String                 @default("Activo")
+  totalCredits      Int                    @map("total_credits")
+  durationSemesters Int                    @map("duration_semesters")
+  careerId          String                 @map("career_id")
+  career            Career                 @relation(fields: [careerId], references: [code], onDelete: Restrict)
   courses           CurriculumPlanCourse[]
   students          Student[]
   financialFees     CareerFee[]
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
 
   @@index([careerId, status])
   @@map("curriculum_plans")
 }
 
 model CurriculumPlanCourse {
-  planId     String @map("plan_id")
-  courseCode String @map("course_code")
+  planId     String         @map("plan_id")
+  courseCode String         @map("course_code")
   semester   Int
   plan       CurriculumPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  course     Course @relation(fields: [courseCode], references: [code], onDelete: Restrict)
+  course     Course         @relation(fields: [courseCode], references: [code], onDelete: Restrict)
 
   @@id([planId, courseCode])
   @@index([courseCode])
@@ -233,66 +260,69 @@ model CoursePrerequisite {
 }
 
 model AcademicCycle {
-  id                      String   @id
+  id                      String    @id
   year                    Int
   name                    String
-  startDate               DateTime @map("start_date")
-  endDate                 DateTime @map("end_date")
-  enrollmentStartDate     DateTime @map("enrollment_start_date")
-  enrollmentEndDate       DateTime @map("enrollment_end_date")
-  gradeSubmissionDeadline DateTime @map("grade_submission_deadline")
+  startDate               DateTime  @map("start_date")
+  endDate                 DateTime  @map("end_date")
+  enrollmentStartDate     DateTime  @map("enrollment_start_date")
+  enrollmentEndDate       DateTime  @map("enrollment_end_date")
+  gradeSubmissionDeadline DateTime  @map("grade_submission_deadline")
   status                  String
-  isCurrent               Boolean  @default(false) @map("is_current")
+  isCurrent               Boolean   @default(false) @map("is_current")
   sections                Section[]
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
   @@map("academic_cycles")
 }
 
 model Classroom {
-  id                 String   @id
-  code               String   @unique
+  id                 String    @id
+  code               String    @unique
   building           String
   capacity           Int
   type               String
   status             String
-  hasProjector       Boolean  @default(false) @map("has_projector")
-  hasAirConditioning Boolean  @default(false) @map("has_air_conditioning")
+  hasProjector       Boolean   @default(false) @map("has_projector")
+  hasAirConditioning Boolean   @default(false) @map("has_air_conditioning")
   sections           Section[]
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
   @@map("classrooms")
 }
 
 model Section {
-  id            String   @id
-  code          String
-  scheduleDays  String   @map("schedule_days")
-  scheduleTime  String   @map("schedule_time")
-  modality      String
-  jornada       String
-  capacity      Int
-  enrolledCount Int      @default(0) @map("enrolled_count")
-  status        String
-  courseCode    String   @map("course_code")
-  teacherId     String   @map("teacher_id")
-  cycleId       String   @map("cycle_id")
-  classroomId   String   @map("classroom_id")
-  course        Course   @relation(fields: [courseCode], references: [code], onDelete: Restrict)
-  teacher       Teacher  @relation(fields: [teacherId], references: [code], onDelete: Restrict)
-  cycle         AcademicCycle @relation(fields: [cycleId], references: [id], onDelete: Restrict)
-  classroom     Classroom @relation(fields: [classroomId], references: [id], onDelete: Restrict)
-  enrollments   Enrollment[]
-  virtualClassroom VirtualClassroom?
-  gradeRecords   GradeRecord[]
+  id                 String              @id
+  code               String
+  scheduleDays       String              @map("schedule_days")
+  scheduleTime       String              @map("schedule_time")
+  modality           String
+  jornada            String
+  capacity           Int
+  enrolledCount      Int                 @default(0) @map("enrolled_count")
+  status             String
+  courseCode         String              @map("course_code")
+  teacherId          String              @map("teacher_id")
+  cycleId            String              @map("cycle_id")
+  classroomId        String              @map("classroom_id")
+  course             Course              @relation(fields: [courseCode], references: [code], onDelete: Restrict)
+  teacher            Teacher             @relation(fields: [teacherId], references: [code], onDelete: Restrict)
+  cycle              AcademicCycle       @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  classroom          Classroom           @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  enrollments        Enrollment[]
+  virtualClassroom   VirtualClassroom?
+  gradeRecords       GradeRecord[]
   attendanceSessions AttendanceSession[]
-  zoneActivities ZoneActivity[]
-  gradeActStatus String   @default("BORRADOR") @map("grade_act_status")
-  gradesPublishedAt DateTime? @map("grades_published_at")
-  gradesClosedAt DateTime? @map("grades_closed_at")
-  gradesClosedBy String? @map("grades_closed_by")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  zoneActivities     ZoneActivity[]
+  gradeActStatus     String              @default("BORRADOR") @map("grade_act_status")
+  gradesPublishedAt  DateTime?           @map("grades_published_at")
+  gradesClosedAt     DateTime?           @map("grades_closed_at")
+  gradesClosedBy     String?             @map("grades_closed_by")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+
   @@unique([cycleId, courseCode, code])
   @@index([teacherId, cycleId])
   @@index([classroomId, cycleId])
@@ -300,51 +330,52 @@ model Section {
 }
 
 model GradeRecord {
-  id            String   @id
-  zona          Float    @default(0)
-  parcial       Float    @default(0)
-  segundoParcial Float   @default(0) @map("segundo_parcial")
-  final         Float    @default(0)
-  recuperacion  Float    @default(0)
-  total         Float    @default(0)
-  status        String   @default("En curso")
-  isPublished   Boolean  @default(false) @map("is_published")
-  studentCarnet String   @map("student_carnet")
-  sectionId     String   @map("section_id")
-  student       Student  @relation(fields: [studentCarnet], references: [carnet], onDelete: Restrict)
-  section       Section  @relation(fields: [sectionId], references: [id], onDelete: Restrict)
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  recoveryExam  RecoveryExam?
+  id             String        @id
+  zona           Float         @default(0)
+  parcial        Float         @default(0)
+  segundoParcial Float         @default(0) @map("segundo_parcial")
+  final          Float         @default(0)
+  recuperacion   Float         @default(0)
+  total          Float         @default(0)
+  status         String        @default("En curso")
+  isPublished    Boolean       @default(false) @map("is_published")
+  studentCarnet  String        @map("student_carnet")
+  sectionId      String        @map("section_id")
+  student        Student       @relation(fields: [studentCarnet], references: [carnet], onDelete: Restrict)
+  section        Section       @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  recoveryExam   RecoveryExam?
+
   @@unique([studentCarnet, sectionId])
   @@index([sectionId, isPublished])
   @@map("grade_records")
 }
 
 model FinancialCharge {
-  id            String    @id @default(cuid())
-  concept       String
-  amount        Float
-  dueDate       DateTime  @map("due_date")
-  status        String    @default("PENDIENTE")
-  cycleId       String?   @map("cycle_id")
-  careerFeeId   String?   @map("career_fee_id")
-  studentCarnet String    @map("student_carnet")
-  student       Student   @relation(fields: [studentCarnet], references: [carnet], onDelete: Restrict)
-  payments      Payment[]
+  id             String                @id @default(cuid())
+  concept        String
+  amount         Float
+  dueDate        DateTime              @map("due_date")
+  status         String                @default("PENDIENTE")
+  cycleId        String?               @map("cycle_id")
+  careerFeeId    String?               @map("career_fee_id")
+  studentCarnet  String                @map("student_carnet")
+  student        Student               @relation(fields: [studentCarnet], references: [carnet], onDelete: Restrict)
+  payments       Payment[]
   transferProofs TransferProof[]
-  adjustments   FinancialAdjustment[]
-  agreementId   String?       @map("agreement_id")
-  agreement     PaymentAgreement? @relation(fields: [agreementId], references: [id], onDelete: SetNull)
-  careerFee     CareerFee? @relation(fields: [careerFeeId], references: [id], onDelete: SetNull)
-  recoveryExam  RecoveryExam?
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  adjustments    FinancialAdjustment[]
+  agreementId    String?               @map("agreement_id")
+  agreement      PaymentAgreement?     @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  careerFee      CareerFee?            @relation(fields: [careerFeeId], references: [id], onDelete: SetNull)
+  recoveryExam   RecoveryExam?
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
 
+  @@unique([careerFeeId, studentCarnet])
   @@index([studentCarnet, status])
   @@index([careerFeeId])
   @@index([agreementId])
-  @@unique([careerFeeId, studentCarnet])
   @@map("financial_charges")
 }
 
@@ -368,7 +399,7 @@ model FinancialAdjustment {
 model PaymentAgreement {
   id            String            @id @default(cuid())
   totalAmount   Float             @map("total_amount")
-  installments Int
+  installments  Int
   startDate     DateTime          @map("start_date")
   status        String            @default("ACTIVO")
   note          String?
@@ -383,24 +414,24 @@ model PaymentAgreement {
 }
 
 model CareerFee {
-  id            String   @id @default(cuid())
-  concept       String
-  amount        Float
-  dueDate       DateTime @map("due_date")
-  cycleId       String   @map("cycle_id")
-  careerId      String   @map("career_id")
-  career        Career   @relation(fields: [careerId], references: [code], onDelete: Restrict)
-  campusId      String?  @map("campus_id")
-  planId        String?  @map("plan_id")
-  campus        Campus?  @relation(fields: [campusId], references: [id], onDelete: Restrict)
-  plan          CurriculumPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
-  feeType       String   @default("OTRO") @map("fee_type")
-  installmentNumber Int? @map("installment_number")
-  installmentCount  Int? @map("installment_count")
-  charges       FinancialCharge[]
-  assignedCount Int      @default(0) @map("assigned_count")
-  createdAt     DateTime @default(now()) @map("created_at")
-  createdBy     String   @map("created_by")
+  id                String            @id @default(cuid())
+  concept           String
+  amount            Float
+  dueDate           DateTime          @map("due_date")
+  cycleId           String            @map("cycle_id")
+  careerId          String            @map("career_id")
+  career            Career            @relation(fields: [careerId], references: [code], onDelete: Restrict)
+  campusId          String?           @map("campus_id")
+  planId            String?           @map("plan_id")
+  campus            Campus?           @relation(fields: [campusId], references: [id], onDelete: Restrict)
+  plan              CurriculumPlan?   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  feeType           String            @default("OTRO") @map("fee_type")
+  installmentNumber Int?              @map("installment_number")
+  installmentCount  Int?              @map("installment_count")
+  charges           FinancialCharge[]
+  assignedCount     Int               @default(0) @map("assigned_count")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  createdBy         String            @map("created_by")
 
   @@index([careerId, cycleId])
   @@index([campusId, planId])
@@ -451,15 +482,15 @@ model TransferProof {
 }
 
 model AttendanceSession {
-  id          String   @id @default(cuid())
-  classDate   DateTime @map("class_date")
-  topic       String?
-  createdBy   String   @map("created_by")
-  sectionId   String   @map("section_id")
-  section     Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  records     AttendanceRecord[]
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String             @id @default(cuid())
+  classDate DateTime           @map("class_date")
+  topic     String?
+  createdBy String             @map("created_by")
+  sectionId String             @map("section_id")
+  section   Section            @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  records   AttendanceRecord[]
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
 
   @@unique([sectionId, classDate])
   @@index([sectionId])
@@ -483,17 +514,17 @@ model AttendanceRecord {
 }
 
 model ZoneActivity {
-  id          String   @id @default(cuid())
+  id          String              @id @default(cuid())
   name        String
   type        String
-  maxScore    Float    @map("max_score")
-  dueDate     DateTime @map("due_date")
-  isPublished Boolean  @default(false) @map("is_published")
-  sectionId   String   @map("section_id")
-  section     Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  maxScore    Float               @map("max_score")
+  dueDate     DateTime            @map("due_date")
+  isPublished Boolean             @default(false) @map("is_published")
+  sectionId   String              @map("section_id")
+  section     Section             @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   grades      ZoneActivityGrade[]
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
 
   @@index([sectionId])
   @@map("zone_activities")
@@ -516,43 +547,43 @@ model ZoneActivityGrade {
 }
 
 model RecoveryExam {
-  id                String   @id @default(cuid())
-  status            String   @default("SOLICITADA")
-  originalTotal     Float    @map("original_total")
-  recoveryScore     Float?   @map("recovery_score")
-  requestedAt       DateTime @default(now()) @map("requested_at")
-  scheduledAt       DateTime? @map("scheduled_at")
-  authorizedAt      DateTime? @map("authorized_at")
-  gradedAt          DateTime? @map("graded_at")
-  requestedBy       String   @map("requested_by")
-  authorizedBy      String?  @map("authorized_by")
-  gradedBy          String?  @map("graded_by")
-  authorizationNote String?  @map("authorization_note")
-  gradeRecordId     String   @unique @map("grade_record_id")
-  financialChargeId String?  @unique @map("financial_charge_id")
-  gradeRecord       GradeRecord @relation(fields: [gradeRecordId], references: [id], onDelete: Restrict)
+  id                String           @id @default(cuid())
+  status            String           @default("SOLICITADA")
+  originalTotal     Float            @map("original_total")
+  recoveryScore     Float?           @map("recovery_score")
+  requestedAt       DateTime         @default(now()) @map("requested_at")
+  scheduledAt       DateTime?        @map("scheduled_at")
+  authorizedAt      DateTime?        @map("authorized_at")
+  gradedAt          DateTime?        @map("graded_at")
+  requestedBy       String           @map("requested_by")
+  authorizedBy      String?          @map("authorized_by")
+  gradedBy          String?          @map("graded_by")
+  authorizationNote String?          @map("authorization_note")
+  gradeRecordId     String           @unique @map("grade_record_id")
+  financialChargeId String?          @unique @map("financial_charge_id")
+  gradeRecord       GradeRecord      @relation(fields: [gradeRecordId], references: [id], onDelete: Restrict)
   financialCharge   FinancialCharge? @relation(fields: [financialChargeId], references: [id], onDelete: SetNull)
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
 
   @@index([status])
   @@map("recovery_exams")
 }
 
 model StudentServiceRequest {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   type          String
-  status        String   @default("SOLICITADA")
+  status        String    @default("SOLICITADA")
   purpose       String
-  deliveryType  String   @default("DIGITAL") @map("delivery_type")
-  adminNote     String?  @map("admin_note")
-  handledBy     String?  @map("handled_by")
+  deliveryType  String    @default("DIGITAL") @map("delivery_type")
+  adminNote     String?   @map("admin_note")
+  handledBy     String?   @map("handled_by")
   reviewedAt    DateTime? @map("reviewed_at")
   completedAt   DateTime? @map("completed_at")
-  studentCarnet String   @map("student_carnet")
-  student       Student  @relation(fields: [studentCarnet], references: [carnet], onDelete: Restrict)
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  studentCarnet String    @map("student_carnet")
+  student       Student   @relation(fields: [studentCarnet], references: [carnet], onDelete: Restrict)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   @@index([studentCarnet, createdAt])
   @@index([status, createdAt])
@@ -560,19 +591,19 @@ model StudentServiceRequest {
 }
 
 model EnrollmentDocument {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   type          String
-  fileName      String   @map("file_name")
-  mimeType      String   @map("mime_type")
-  fileData      String   @map("file_data")
-  status        String   @default("PENDIENTE")
-  reviewNote    String?  @map("review_note")
-  reviewedBy    String?  @map("reviewed_by")
+  fileName      String    @map("file_name")
+  mimeType      String    @map("mime_type")
+  fileData      String    @map("file_data")
+  status        String    @default("PENDIENTE")
+  reviewNote    String?   @map("review_note")
+  reviewedBy    String?   @map("reviewed_by")
   reviewedAt    DateTime? @map("reviewed_at")
-  studentCarnet String   @map("student_carnet")
-  student       Student  @relation(fields: [studentCarnet], references: [carnet], onDelete: Cascade)
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  studentCarnet String    @map("student_carnet")
+  student       Student   @relation(fields: [studentCarnet], references: [carnet], onDelete: Cascade)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   @@unique([studentCarnet, type])
   @@index([status, createdAt])
@@ -580,65 +611,67 @@ model EnrollmentDocument {
 }
 
 model AppNotification {
-  id        String   @id @default(cuid())
+  id        String       @id @default(cuid())
   title     String
   message   String
-  type      String   @default("INFO")
+  type      String       @default("INFO")
   link      String?
-  isRead    Boolean  @default(false) @map("is_read")
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isRead    Boolean      @default(false) @map("is_read")
+  userId    String       @map("user_id")
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   email     EmailOutbox?
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime     @default(now()) @map("created_at")
 
   @@index([userId, isRead])
   @@map("app_notifications")
 }
 
 model EmailOutbox {
-  id             String   @id @default(cuid())
-  recipientEmail String   @map("recipient_email")
+  id             String          @id @default(cuid())
+  recipientEmail String          @map("recipient_email")
   subject        String
-  textBody       String   @map("text_body")
-  status         String   @default("PENDING_CONFIGURATION")
-  attempts       Int      @default(0)
-  lastError      String?  @map("last_error")
-  sentAt         DateTime? @map("sent_at")
-  notificationId String   @unique @map("notification_id")
+  textBody       String          @map("text_body")
+  status         String          @default("PENDING_CONFIGURATION")
+  attempts       Int             @default(0)
+  lastError      String?         @map("last_error")
+  sentAt         DateTime?       @map("sent_at")
+  notificationId String          @unique @map("notification_id")
   notification   AppNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
 
   @@index([status])
   @@map("email_outbox")
 }
 
 model VirtualClassroom {
-  id              String   @id @default(cuid())
-  provider        String   @default("GOOGLE_CLASSROOM")
-  syncStatus      String   @default("PENDING_CONFIGURATION") @map("sync_status")
-  externalCourseId String? @unique @map("external_course_id")
-  enrollmentCode String?   @map("enrollment_code")
-  alternateLink   String?  @map("alternate_link")
-  lastSyncedAt    DateTime? @map("last_synced_at")
-  syncError       String?   @map("sync_error")
-  sectionId       String   @unique @map("section_id")
-  section         Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id               String    @id @default(cuid())
+  provider         String    @default("GOOGLE_CLASSROOM")
+  syncStatus       String    @default("PENDING_CONFIGURATION") @map("sync_status")
+  externalCourseId String?   @unique @map("external_course_id")
+  enrollmentCode   String?   @map("enrollment_code")
+  alternateLink    String?   @map("alternate_link")
+  lastSyncedAt     DateTime? @map("last_synced_at")
+  syncError        String?   @map("sync_error")
+  sectionId        String    @unique @map("section_id")
+  section          Section   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
   @@map("virtual_classrooms")
 }
 
 model Enrollment {
-  id            String   @id @default(cuid())
+  id             String   @id @default(cuid())
   enrollmentDate DateTime @default(now()) @map("enrollment_date")
-  status        String   @default("Inscrito")
-  studentCarnet String   @map("student_carnet")
-  sectionId     String   @map("section_id")
-  student       Student  @relation(fields: [studentCarnet], references: [carnet], onDelete: Restrict)
-  section       Section  @relation(fields: [sectionId], references: [id], onDelete: Restrict)
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  status         String   @default("Inscrito")
+  studentCarnet  String   @map("student_carnet")
+  sectionId      String   @map("section_id")
+  student        Student  @relation(fields: [studentCarnet], references: [carnet], onDelete: Restrict)
+  section        Section  @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
   @@unique([studentCarnet, sectionId])
   @@index([studentCarnet, status])
   @@map("enrollments")
@@ -658,14 +691,14 @@ model Session {
 }
 
 model MfaChallenge {
-  id          String   @id @default(cuid())
-  tokenHash   String   @unique @map("token_hash")
-  rememberMe  Boolean  @default(false) @map("remember_me")
-  attempts    Int      @default(0)
-  expiresAt   DateTime @map("expires_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-  userId      String   @map("user_id")
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique @map("token_hash")
+  rememberMe Boolean  @default(false) @map("remember_me")
+  attempts   Int      @default(0)
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
@@ -673,67 +706,67 @@ model MfaChallenge {
 }
 
 model InstitutionConfig {
-  id          Int      @id @default(1)
-  name        String
-  shortName   String   @map("short_name")
-  logoDataUrl String?  @map("logo_data_url")
-  mfaRequiredRoles String @default("[\"ADMIN\",\"DOCENTE\",\"BIBLIOTECA\",\"PARQUEO\",\"EVENTOS\"]") @map("mfa_required_roles")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id               Int      @id @default(1)
+  name             String
+  shortName        String   @map("short_name")
+  logoDataUrl      String?  @map("logo_data_url")
+  mfaRequiredRoles String   @default("[\"ADMIN\",\"DOCENTE\",\"BIBLIOTECA\",\"PARQUEO\",\"EVENTOS\"]") @map("mfa_required_roles")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@map("institution_config")
 }
 
 model LibraryBook {
-  id            String   @id @default(cuid())
-  isbn          String?  @unique
-  title         String
-  author        String
-  publisher     String?
-  publicationYear Int?   @map("publication_year")
-  category      String
-  description   String?
-  status        String   @default("ACTIVO")
-  copies        LibraryCopy[]
-  reservations  LibraryReservation[]
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id              String               @id @default(cuid())
+  isbn            String?              @unique
+  title           String
+  author          String
+  publisher       String?
+  publicationYear Int?                 @map("publication_year")
+  category        String
+  description     String?
+  status          String               @default("ACTIVO")
+  copies          LibraryCopy[]
+  reservations    LibraryReservation[]
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
 
   @@index([title, author])
   @@map("library_books")
 }
 
 model LibraryCopy {
-  id          String   @id @default(cuid())
-  barcode     String   @unique
-  location    String
-  status      String   @default("DISPONIBLE")
-  condition   String   @default("BUENO")
-  bookId      String   @map("book_id")
-  book        LibraryBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  loans       LibraryLoan[]
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String        @id @default(cuid())
+  barcode   String        @unique
+  location  String
+  status    String        @default("DISPONIBLE")
+  condition String        @default("BUENO")
+  bookId    String        @map("book_id")
+  book      LibraryBook   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  loans     LibraryLoan[]
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
 
   @@index([bookId, status])
   @@map("library_copies")
 }
 
 model LibraryLoan {
-  id            String   @id @default(cuid())
-  loanedAt      DateTime @default(now()) @map("loaned_at")
-  dueAt         DateTime @map("due_at")
-  returnedAt    DateTime? @map("returned_at")
-  status        String   @default("PRESTADO")
-  renewalCount  Int      @default(0) @map("renewal_count")
-  notes         String?
-  dueReminderSentAt DateTime? @map("due_reminder_sent_at")
-  overdueNoticeSentAt DateTime? @map("overdue_notice_sent_at")
-  borrowerId    String   @map("borrower_id")
-  copyId        String   @map("copy_id")
-  borrower      User     @relation(fields: [borrowerId], references: [id], onDelete: Restrict)
-  copy          LibraryCopy @relation(fields: [copyId], references: [id], onDelete: Restrict)
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id                  String      @id @default(cuid())
+  loanedAt            DateTime    @default(now()) @map("loaned_at")
+  dueAt               DateTime    @map("due_at")
+  returnedAt          DateTime?   @map("returned_at")
+  status              String      @default("PRESTADO")
+  renewalCount        Int         @default(0) @map("renewal_count")
+  notes               String?
+  dueReminderSentAt   DateTime?   @map("due_reminder_sent_at")
+  overdueNoticeSentAt DateTime?   @map("overdue_notice_sent_at")
+  borrowerId          String      @map("borrower_id")
+  copyId              String      @map("copy_id")
+  borrower            User        @relation(fields: [borrowerId], references: [id], onDelete: Restrict)
+  copy                LibraryCopy @relation(fields: [copyId], references: [id], onDelete: Restrict)
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
 
   @@index([borrowerId, status])
   @@index([copyId, status])
@@ -741,18 +774,18 @@ model LibraryLoan {
 }
 
 model LibraryReservation {
-  id          String   @id @default(cuid())
-  status      String   @default("SOLICITADA")
-  expiresAt   DateTime @map("expires_at")
-  assignedCopyId String? @map("assigned_copy_id")
-  readyAt     DateTime? @map("ready_at")
-  fulfilledAt DateTime? @map("fulfilled_at")
-  cancelledAt DateTime? @map("cancelled_at")
-  userId      String   @map("user_id")
-  bookId      String   @map("book_id")
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  book        LibraryBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now()) @map("created_at")
+  id             String      @id @default(cuid())
+  status         String      @default("SOLICITADA")
+  expiresAt      DateTime    @map("expires_at")
+  assignedCopyId String?     @map("assigned_copy_id")
+  readyAt        DateTime?   @map("ready_at")
+  fulfilledAt    DateTime?   @map("fulfilled_at")
+  cancelledAt    DateTime?   @map("cancelled_at")
+  userId         String      @map("user_id")
+  bookId         String      @map("book_id")
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book           LibraryBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  createdAt      DateTime    @default(now()) @map("created_at")
 
   @@index([bookId, status])
   @@index([userId, status])
@@ -760,84 +793,84 @@ model LibraryReservation {
 }
 
 model ParkingConfig {
-  id              Int      @id @default(1)
-  totalCapacity   Int      @default(200) @map("total_capacity")
-  regularReserve  Int      @default(20) @map("regular_reserve")
-  entry1Name      String   @default("Entrada 1") @map("entry_1_name")
-  entry2Name      String   @default("Entrada 2") @map("entry_2_name")
-  exitName        String   @default("Salida principal") @map("exit_name")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id             Int      @id @default(1)
+  totalCapacity  Int      @default(200) @map("total_capacity")
+  regularReserve Int      @default(20) @map("regular_reserve")
+  entry1Name     String   @default("Entrada 1") @map("entry_1_name")
+  entry2Name     String   @default("Entrada 2") @map("entry_2_name")
+  exitName       String   @default("Salida principal") @map("exit_name")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@map("parking_config")
 }
 
 model ParkingVehicle {
-  id          String   @id @default(cuid())
-  plate       String   @unique
-  make        String
-  model       String
-  color       String
-  type        String   @default("AUTOMOVIL")
-  accessCode  String   @unique @map("access_code")
-  status      String   @default("ACTIVO")
-  ownerId     String   @map("owner_id")
-  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  visits      ParkingVisit[]
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id         String         @id @default(cuid())
+  plate      String         @unique
+  make       String
+  model      String
+  color      String
+  type       String         @default("AUTOMOVIL")
+  accessCode String         @unique @map("access_code")
+  status     String         @default("ACTIVO")
+  ownerId    String         @map("owner_id")
+  owner      User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  visits     ParkingVisit[]
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
 
   @@index([ownerId, status])
   @@map("parking_vehicles")
 }
 
 model ParkingEvent {
-  id             String   @id @default(cuid())
+  id             String              @id @default(cuid())
   name           String
   organizer      String
-  startsAt       DateTime @map("starts_at")
-  endsAt         DateTime @map("ends_at")
-  reservedSpaces Int      @map("reserved_spaces")
-  status         String   @default("PLANIFICADO")
-  createdBy      String   @map("created_by")
+  startsAt       DateTime            @map("starts_at")
+  endsAt         DateTime            @map("ends_at")
+  reservedSpaces Int                 @map("reserved_spaces")
+  status         String              @default("PLANIFICADO")
+  createdBy      String              @map("created_by")
   guests         ParkingEventGuest[]
   visits         ParkingVisit[]
-  createdAt      DateTime @default(now()) @map("created_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
 
   @@index([startsAt, endsAt])
   @@map("parking_events")
 }
 
 model ParkingEventGuest {
-  id          String   @id @default(cuid())
-  guestName   String   @map("guest_name")
-  plate       String?
-  accessCode  String   @unique @map("access_code")
-  status      String   @default("AUTORIZADO")
-  eventId     String   @map("event_id")
-  event       ParkingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now()) @map("created_at")
+  id         String       @id @default(cuid())
+  guestName  String       @map("guest_name")
+  plate      String?
+  accessCode String       @unique @map("access_code")
+  status     String       @default("AUTORIZADO")
+  eventId    String       @map("event_id")
+  event      ParkingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt  DateTime     @default(now()) @map("created_at")
 
   @@index([eventId, status])
   @@map("parking_event_guests")
 }
 
 model ParkingVisit {
-  id          String   @id @default(cuid())
+  id          String          @id @default(cuid())
   plate       String
-  accessCode  String?  @map("access_code")
-  visitorName String?  @map("visitor_name")
-  entryGate   String   @map("entry_gate")
-  exitGate    String?  @map("exit_gate")
-  enteredAt   DateTime @default(now()) @map("entered_at")
-  exitedAt    DateTime? @map("exited_at")
-  status      String   @default("DENTRO")
-  vehicleId   String?  @map("vehicle_id")
-  userId      String?  @map("user_id")
-  eventId     String?  @map("event_id")
+  accessCode  String?         @map("access_code")
+  visitorName String?         @map("visitor_name")
+  entryGate   String          @map("entry_gate")
+  exitGate    String?         @map("exit_gate")
+  enteredAt   DateTime        @default(now()) @map("entered_at")
+  exitedAt    DateTime?       @map("exited_at")
+  status      String          @default("DENTRO")
+  vehicleId   String?         @map("vehicle_id")
+  userId      String?         @map("user_id")
+  eventId     String?         @map("event_id")
   vehicle     ParkingVehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  event       ParkingEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now()) @map("created_at")
+  user        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  event       ParkingEvent?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now()) @map("created_at")
 
   @@index([status, enteredAt])
   @@index([plate, status])
@@ -846,15 +879,15 @@ model ParkingVisit {
 }
 
 model ParkingAccessAttempt {
-  id          String   @id @default(cuid())
-  outcome     String
-  reason      String
-  entryGate   String?  @map("entry_gate")
-  plate       String?
-  codeMasked  String?  @map("code_masked")
-  vehicleId   String?  @map("vehicle_id")
-  operatorId  String?  @map("operator_id")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id         String   @id @default(cuid())
+  outcome    String
+  reason     String
+  entryGate  String?  @map("entry_gate")
+  plate      String?
+  codeMasked String?  @map("code_masked")
+  vehicleId  String?  @map("vehicle_id")
+  operatorId String?  @map("operator_id")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([outcome, createdAt])
   @@index([vehicleId, createdAt])
@@ -862,16 +895,16 @@ model ParkingAccessAttempt {
 }
 
 model ParkingAlert {
-  id          String   @id @default(cuid())
-  dedupeKey   String   @unique @map("dedupe_key")
-  type        String
-  severity    String
-  message     String
-  status      String   @default("ACTIVA")
-  eventId     String?  @map("event_id")
-  acknowledgedBy String? @map("acknowledged_by")
+  id             String    @id @default(cuid())
+  dedupeKey      String    @unique @map("dedupe_key")
+  type           String
+  severity       String
+  message        String
+  status         String    @default("ACTIVA")
+  eventId        String?   @map("event_id")
+  acknowledgedBy String?   @map("acknowledged_by")
   acknowledgedAt DateTime? @map("acknowledged_at")
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   @@index([status, createdAt])
   @@map("parking_alerts")
