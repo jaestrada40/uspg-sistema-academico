@@ -22,6 +22,7 @@ export const AcademicHistoryPage: React.FC = () => {
 
   const activeStudent = students.find((s) => s.carnet === selectedCarnet) || students[0];
   const studentGrades = grades.filter((g) => g.studentCarnet === activeStudent?.carnet);
+  const approvedCredits = studentGrades.filter((grade) => grade.status === 'Aprobado').reduce((sum, grade) => sum + (courses.find((course) => course.code === grade.courseCode)?.credits || 0), 0);
 
   const handleDownloadCertification = () => {
     const content = `
@@ -37,7 +38,7 @@ Carné:           ${activeStudent?.carnet}
 Carrera:         ${activeStudent?.careerName}
 Ciclo de Ingreso:${activeStudent?.entryCycle}
 Promedio General:${activeStudent?.gpa.toFixed(2)} pts
-Créditos:        ${activeStudent?.creditsEarned} / ${activeStudent?.totalCreditsRequired} pts
+Créditos:        ${approvedCredits} / ${activeStudent?.totalCreditsRequired} pts
 
 HISTORIAL DE ASIGNATURAS EVALUADAS:
 -------------------------------------------------------------------
@@ -134,7 +135,7 @@ Fecha de emisión: ${new Date().toLocaleDateString('es-GT')}
               <div className="rounded-lg bg-[#F8FAFC] p-3 border border-[#E2E8F0]">
                 <span className="text-[10px] text-[#7D8490] block">Créditos Acumulados</span>
                 <span className="text-lg font-black text-[#333333]">
-                  {activeStudent.creditsEarned} / {activeStudent.totalCreditsRequired}
+                  {approvedCredits} / {activeStudent.totalCreditsRequired}
                 </span>
               </div>
 
@@ -148,7 +149,7 @@ Fecha de emisión: ${new Date().toLocaleDateString('es-GT')}
               <div className="rounded-lg bg-[#F8FAFC] p-3 border border-[#E2E8F0]">
                 <span className="text-[10px] text-[#7D8490] block">Aprobación General</span>
                 <span className="text-lg font-black text-[#17A2B8]">
-                  {Math.round((activeStudent.creditsEarned / activeStudent.totalCreditsRequired) * 100)}%
+                  {Math.round((approvedCredits / activeStudent.totalCreditsRequired) * 100)}%
                 </span>
               </div>
             </div>

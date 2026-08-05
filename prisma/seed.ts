@@ -100,6 +100,19 @@ for (const enrollment of INITIAL_ENROLLMENTS) {
   const { studentName: _studentName, courseCode: _courseCode, courseName: _courseName, cycleId: _cycleId, ...data } = enrollment;
   await prisma.enrollment.upsert({ where: { id: enrollment.id }, update: { ...data, enrollmentDate: new Date(enrollment.enrollmentDate) }, create: { ...data, enrollmentDate: new Date(enrollment.enrollmentDate) } });
 }
+// Create the historical section records required by historical grades. Without
+// these rows the FK prevents the grade records from being loaded and the
+// curriculum map incorrectly presents completed courses as available.
+for (const grade of INITIAL_GRADES) {
+  if (!grade.sectionId.startsWith('HIST-')) continue;
+  const course = await prisma.course.findUnique({ where: { code: grade.courseCode } });
+  if (!course) continue;
+  await prisma.section.upsert({
+    where: { id: grade.sectionId },
+    update: {},
+    create: { id: grade.sectionId, code: `${grade.courseCode}-HIST`, scheduleDays: JSON.stringify([]), scheduleTime: '00:00 - 00:00', modality: 'Presencial', jornada: 'Matutina', capacity: 0, enrolledCount: 0, status: 'Cerrada', courseCode: grade.courseCode, teacherId: 'DOC-1042', cycleId: grade.cycleId, classroomId: 'CLR-LAB1' },
+  });
+}
 for (const grade of INITIAL_GRADES) {
   const { studentName: _studentName, courseCode: _courseCode, courseName: _courseName, cycleId: _cycleId, ...data } = grade;
   const [student, section] = await Promise.all([prisma.student.findUnique({ where: { carnet: grade.studentCarnet } }), prisma.section.findUnique({ where: { id: grade.sectionId } })]);

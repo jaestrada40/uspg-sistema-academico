@@ -77,6 +77,7 @@ export const DashboardPage: React.FC = () => {
     (e) => e.studentCarnet === studentCarnet && e.cycleId === currentCycle.id && e.status === 'Inscrito'
   );
   const studentGrades = grades.filter((g) => g.studentCarnet === studentCarnet);
+  const approvedCredits = studentGrades.filter((grade) => grade.status === 'Aprobado').reduce((sum, grade) => sum + (courses.find((course) => course.code === grade.courseCode)?.credits || 0), 0);
   const totalEnrolledCredits = studentEnrollments.reduce((sum, enr) => {
     const sec = sections.find((s) => s.id === enr.sectionId);
     const crs = courses.find((c) => c.code === sec?.courseCode);
@@ -427,8 +428,8 @@ export const DashboardPage: React.FC = () => {
             />
             <StatCard
               title="Créditos Aprobados"
-              value={`${studentData.creditsEarned} / ${studentData.totalCreditsRequired}`}
-              description="Progreso de pensum"
+              value={`${approvedCredits} / ${studentData.totalCreditsRequired}`}
+              description="Créditos derivados de cursos aprobados"
               icon={CheckCircle2}
             />
           </div>

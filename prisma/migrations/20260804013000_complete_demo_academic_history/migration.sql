@@ -1,0 +1,25 @@
+-- Complete the demo student's historical academic chain when an older
+-- database was created from the imported curriculum instead of the demo seed.
+INSERT OR IGNORE INTO "courses" ("code", "name", "credits", "semester", "theoretical_hours", "practical_hours", "area", "status", "career_id")
+VALUES
+  ('INF-101', 'Introducción a la Programación', 4, 1, 3, 1, 'Básica', 'Activo', 'CAR-ITI'),
+  ('MAT-101', 'Matemática Discreta y Algoritmos', 4, 1, 3, 1, 'Básica', 'Activo', 'CAR-ITI');
+
+UPDATE "curriculum_plans"
+SET "total_credits" = 220
+WHERE "id" = (SELECT "plan_id" FROM "students" WHERE "carnet" = '20230142');
+
+INSERT OR IGNORE INTO "curriculum_plan_courses" ("plan_id", "course_code", "semester")
+SELECT "plan_id", 'INF-101', 1 FROM "students" WHERE "carnet" = '20230142' AND "plan_id" IS NOT NULL;
+INSERT OR IGNORE INTO "curriculum_plan_courses" ("plan_id", "course_code", "semester")
+SELECT "plan_id", 'MAT-101', 1 FROM "students" WHERE "carnet" = '20230142' AND "plan_id" IS NOT NULL;
+
+INSERT OR IGNORE INTO "sections" ("id", "code", "schedule_days", "schedule_time", "modality", "jornada", "capacity", "enrolled_count", "status", "course_code", "teacher_id", "cycle_id", "classroom_id")
+VALUES
+  ('HIST-INF-101', 'INF-101-HIST', '[]', '00:00 - 00:00', 'Presencial', 'Matutina', 0, 0, 'Cerrada', 'INF-101', 'DOC-1042', 'CYC-2025-1', 'CLR-LAB1'),
+  ('HIST-MAT-101', 'MAT-101-HIST', '[]', '00:00 - 00:00', 'Presencial', 'Matutina', 0, 0, 'Cerrada', 'MAT-101', 'DOC-1042', 'CYC-2025-1', 'CLR-LAB1');
+
+INSERT OR IGNORE INTO "grade_records" ("id", "zona", "parcial", "segundo_parcial", "final", "recuperacion", "total", "status", "is_published", "student_carnet", "section_id")
+VALUES
+  ('GRD-101', 30, 18, 15, 26, 0, 89, 'Aprobado', 1, '20230142', 'HIST-INF-101'),
+  ('GRD-102', 30, 16, 12, 24, 0, 82, 'Aprobado', 1, '20230142', 'HIST-MAT-101');

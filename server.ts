@@ -1003,7 +1003,7 @@ app.get('/api/curriculum-map', requireUser, async (req, res) => {
   const charges = student.financialCharges.map((charge) => ({ dueDate: charge.dueDate, balance: Math.max(0, charge.amount - charge.adjustments.reduce((sum, item) => sum + item.amount, 0) - charge.payments.reduce((sum, item) => sum + item.amount, 0)) }));
   const financialSolvent = !charges.some((charge) => charge.dueDate < new Date() && charge.balance > 0);
   const expedienteComplete = student.enrollmentDocuments.length >= 5 && student.enrollmentDocuments.every((document) => document.status === 'APROBADO');
-  const totalCredits = mapped.reduce((sum, course) => sum + course.credits, 0), approvedCredits = mapped.filter((course) => course.status === 'APROBADO').reduce((sum, course) => sum + course.credits, 0);
+  const totalCredits = Math.max(student.plan?.totalCredits || 0, mapped.reduce((sum, course) => sum + course.credits, 0)), approvedCredits = mapped.filter((course) => course.status === 'APROBADO').reduce((sum, course) => sum + course.credits, 0);
   res.json({ student: { carnet: student.carnet, name: student.name, careerName: student.careerName || student.careerId, campusName: student.campus?.name || 'Sin campus', planCode: student.plan?.code || 'Plan general', planName: student.plan?.name || 'Pensum vigente', planVersion: student.plan?.version || 'Actual' }, curriculum: { totalCourses: mapped.length, totalCredits, semesters: student.plan?.durationSemesters || Math.max(0, ...mapped.map((course) => course.semester)), approvedCourses: mapped.filter((course) => course.status === 'APROBADO').length, approvedCredits, progress: totalCredits ? Math.round((approvedCredits / totalCredits) * 100) : 0 }, courses: mapped, graduationRequirements: [
     { code: 'LECTURES', label: 'Lectures (12)', completed: false, detail: 'Pendiente de registro institucional' },
     { code: 'ENGLISH_TEST', label: 'Constancia de test de inglés', completed: false, detail: 'Pendiente de validación' },
@@ -2326,8 +2326,8 @@ app.post('/api/assistant', requireUser, async (req, res) => {
     // El dashboard muestra el expediente acumulado del estudiante, no solo las
     // actas publicadas del ciclo actual. Esta misma fuente/lógica se usa aquí.
     const visibleGrades = student.gradeRecords;
-    const approvedGrades = visibleGrades.filter((item) => item.status === 'Aprobado' || item.total >= 61);
-    const failedGrades = visibleGrades.filter((item) => item.status === 'Reprobado' || item.total < 61);
+    const approvedGrades = visibleGrades.filter((item) => item.status === 'Aprobado' || ((item.isPublished || item.section.gradeActStatus !== 'BORRADOR') && item.total >= 61));
+    const failedGrades = visibleGrades.filter((item) => item.status === 'Reprobado' || ((item.isPublished || item.section.gradeActStatus !== 'BORRADOR') && item.total < 61));
     const approvedCodes = new Set(approvedGrades.map((item) => item.section.courseCode));
     const pendingPlanCourses = (student.plan?.courses || []).filter((item) => !approvedCodes.has(item.courseCode));
     const pendingBalance = student.financialCharges.reduce((sum, charge) => sum + Math.max(0, charge.amount - charge.adjustments.reduce((a, item) => a + item.amount, 0) - charge.payments.reduce((a, item) => a + item.amount, 0)), 0);
@@ -2343,7 +2343,8 @@ app.post('/api/assistant', requireUser, async (req, res) => {
       const description = average >= 85 ? 'rendimiento sobresaliente' : average >= 80 ? 'rendimiento muy bueno' : average >= 70 ? 'rendimiento bueno' : 'rendimiento en desarrollo';
       return void reply(`Tu promedio general es ${average.toFixed(1)} sobre 100, equivalente a un ${description}.`);
     }
-    if (/cr[eé]dito|pensum|avance/.test(question)) return void reply(`Llevas ${student.creditsEarned} de ${student.totalCreditsRequired} créditos; te faltan ${Math.max(0, student.totalCreditsRequired - student.creditsEarned)}. Cursos aprobados: ${approvedGrades.length}; reprobados: ${failedGrades.length}; pendientes en el pensum: ${pendingPlanCourses.length}.`);
+    const approvedCredits = approvedGrades.reduce((sum, item) => sum + item.section.course.credits, 0);
+    if (/cr[eé]dito|pensum|avance/.test(question)) return void reply(`Llevas ${approvedCredits} de ${student.totalCreditsRequired} créditos; te faltan ${Math.max(0, student.totalCreditsRequired - approvedCredits)}. Cursos aprobados: ${approvedGrades.length}; reprobados: ${failedGrades.length}; pendientes en el pensum: ${pendingPlanCourses.length}.`);
     if (/aprob|ganad/.test(question)) return void reply(approvedGrades.length ? `Cursos aprobados:\n${approvedGrades.map((item) => `• ${item.section.course.name}: ${Number(item.total).toFixed(1)}`).join('\n')}` : 'No tienes cursos aprobados registrados.');
     if (/reprob|perdid/.test(question)) return void reply(failedGrades.length ? `Cursos reprobados:\n${failedGrades.map((item) => `• ${item.section.course.name}: ${Number(item.total).toFixed(1)}`).join('\n')}` : 'No tienes cursos reprobados registrados.');
     if (/tarea|asignaci[oó]n/.test(question)) return void reply(tasks.length ? `Tareas y asignaciones publicadas:\n${tasks.map((item) => `• ${item.name} · ${item.section.course.name} · vence ${item.dueDate.toLocaleDateString('es-GT')} · ${item.grades.length ? 'entregada' : 'pendiente'}`).join('\n')}` : 'No hay tareas publicadas para tus cursos.');
