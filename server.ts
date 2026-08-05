@@ -2296,7 +2296,8 @@ app.post('/api/assistant', requireUser, async (req, res) => {
       [/solicitud|trámite|tramite|constancia|expediente|document/, { label: 'Ver solicitudes y documentos', path: '/solicitudes' }],
       [/estudiante|alumno|usuario|carrera|curso/, { label: 'Abrir módulo académico', path: '/dashboard' }],
     ];
-    return map.filter(([pattern]) => pattern.test(question)).slice(0, 2).map(([, link]) => link);
+    const match = map.find(([pattern]) => pattern.test(question));
+    return match ? [match[1]] : [];
   })();
   await prisma.assistantMessage.create({ data: { conversationId: conversation.id, role: 'user', content: originalQuestion } });
   const reply = async (answer: string) => {
@@ -2322,22 +2323,29 @@ app.post('/api/assistant', requireUser, async (req, res) => {
       prisma.institutionConfig.findUnique({ where: { id: 1 } }),
       prisma.section.findMany({ where: { status: 'Abierta' }, select: { cycleId: true, courseCode: true } }),
     ]);
-    const publishedGrades = student.gradeRecords.filter((item) => item.isPublished);
-    const approvedGrades = publishedGrades.filter((item) => item.total >= 61);
-    const failedGrades = publishedGrades.filter((item) => item.total < 61);
+    // El dashboard muestra el expediente acumulado del estudiante, no solo las
+    // actas publicadas del ciclo actual. Esta misma fuente/lógica se usa aquí.
+    const visibleGrades = student.gradeRecords;
+    const approvedGrades = visibleGrades.filter((item) => item.status === 'Aprobado' || item.total >= 61);
+    const failedGrades = visibleGrades.filter((item) => item.status === 'Reprobado' || item.total < 61);
     const approvedCodes = new Set(approvedGrades.map((item) => item.section.courseCode));
     const pendingPlanCourses = (student.plan?.courses || []).filter((item) => !approvedCodes.has(item.courseCode));
     const pendingBalance = student.financialCharges.reduce((sum, charge) => sum + Math.max(0, charge.amount - charge.adjustments.reduce((a, item) => a + item.amount, 0) - charge.payments.reduce((a, item) => a + item.amount, 0)), 0);
-    const verifiedContext = JSON.stringify({ estudiante: { carnet: student.carnet, nombre: student.name, carrera: student.careerName, plan: student.plan?.name }, cursosInscritos: student.enrollments.map((item) => ({ codigo: item.section.course.code, nombre: item.section.course.name, dias: item.section.scheduleDays, hora: item.section.scheduleTime, aula: item.section.classroom.code, docente: item.section.teacher.name })), calificacionesPublicadas: publishedGrades.map((item) => ({ curso: item.section.course.name, total: item.total, estado: item.total >= 61 ? 'APROBADO' : 'REPROBADO' })), promedio: student.gpa, creditos: { aprobados: student.creditsEarned, requeridos: student.totalCreditsRequired, pendientes: Math.max(0, student.totalCreditsRequired - student.creditsEarned) }, pensumPendiente: pendingPlanCourses.map((item) => ({ curso: item.course.name, semestre: item.semester, creditos: item.course.credits })), tareas: tasks.map((item) => ({ nombre: item.name, curso: item.section.course.name, vence: item.dueDate, entregada: item.grades.length > 0, calificacion: item.grades[0]?.score ?? null })), asistencia: attendance.map((item) => ({ curso: item.session.section.course.name, fecha: item.session.classDate, estado: item.status })), pagos: { saldoPendiente: pendingBalance, cargos: student.financialCharges.map((item) => ({ concepto: item.concept, vencimiento: item.dueDate, estado: item.status })) }, biblioteca: loans.map((item) => ({ libro: item.copy.book.title, vence: item.dueAt, estado: item.status })), tramites: requests.map((item) => ({ tipo: item.type, estado: item.status, proposito: item.purpose })), calendario: cycles.map((item) => ({ nombre: item.name, inicio: item.startDate, fin: item.endDate, inscripcionDesde: item.enrollmentStartDate, inscripcionHasta: item.enrollmentEndDate })), institucion: institution ? { nombre: institution.name, siglas: institution.shortName } : null });
+    const verifiedContext = JSON.stringify({ estudiante: { carnet: student.carnet, nombre: student.name, carrera: student.careerName, plan: student.plan?.name }, cursosInscritos: student.enrollments.map((item) => ({ codigo: item.section.course.code, nombre: item.section.course.name, dias: item.section.scheduleDays, hora: item.section.scheduleTime, aula: item.section.classroom.code, docente: item.section.teacher.name })), calificacionesDelExpediente: visibleGrades.map((item) => ({ curso: item.section.course.name, total: Number(item.total), estado: item.status, visible: item.isPublished || item.section.gradeActStatus !== 'BORRADOR' })), promedioGeneral: Number(student.gpa), creditos: { aprobados: Number(student.creditsEarned), requeridos: Number(student.totalCreditsRequired), pendientes: Math.max(0, Number(student.totalCreditsRequired) - Number(student.creditsEarned)) }, pensumPendiente: pendingPlanCourses.map((item) => ({ curso: item.course.name, semestre: item.semester, creditos: item.course.credits })), tareas: tasks.map((item) => ({ nombre: item.name, curso: item.section.course.name, vence: item.dueDate, entregada: item.grades.length > 0, calificacion: item.grades[0]?.score ?? null })), asistencia: attendance.map((item) => ({ curso: item.session.section.course.name, fecha: item.session.classDate, estado: item.status })), pagos: { saldoPendiente: pendingBalance, cargos: student.financialCharges.map((item) => ({ concepto: item.concept, vencimiento: item.dueDate, estado: item.status })) }, biblioteca: loans.map((item) => ({ libro: item.copy.book.title, vence: item.dueAt, estado: item.status })), tramites: requests.map((item) => ({ tipo: item.type, estado: item.status, proposito: item.purpose })), calendario: cycles.map((item) => ({ nombre: item.name, inicio: item.startDate, fin: item.endDate, inscripcionDesde: item.enrollmentStartDate, inscripcionHasta: item.enrollmentEndDate })), institucion: institution ? { nombre: institution.name, siglas: institution.shortName } : null });
     groundedContext = verifiedContext;
     if (/pr[oó]ximo semestre|siguiente semestre|puedo llevar|siguiente ciclo/.test(question)) {
       const nextCycle = cycles.find((cycle) => !currentCycle || cycle.id !== currentCycle.id);
       const candidates = nextCycle ? (student.plan?.courses || []).filter((item) => !approvedCodes.has(item.courseCode)).filter((item) => offeredSections.some((section) => section.cycleId === nextCycle.id && section.courseCode === item.courseCode)) : pendingPlanCourses;
       return void reply(candidates.length ? `Para ${nextCycle?.name || 'el próximo semestre'} aparecen disponibles en tu pensum:\n${candidates.map((item) => `• ${item.course.code} · ${item.course.name} · ${item.course.credits} créditos`).join('\n')}` : 'No encontré cursos ofertados para el próximo semestre en tu pensum.');
     }
-    if (/aprob/.test(question)) return void reply(approvedGrades.length ? `Cursos aprobados:\n${approvedGrades.map((item) => `• ${item.section.course.name}: ${item.total}`).join('\n')}` : 'No tienes cursos aprobados con calificación publicada.');
-    if (/reprob/.test(question)) return void reply(failedGrades.length ? `Cursos reprobados:\n${failedGrades.map((item) => `• ${item.section.course.name}: ${item.total}`).join('\n')}` : 'No tienes cursos reprobados con calificación publicada.');
+    if (/promedio|gpa|rendimiento/.test(question)) {
+      const average = Number(student.gpa);
+      const description = average >= 85 ? 'rendimiento sobresaliente' : average >= 80 ? 'rendimiento muy bueno' : average >= 70 ? 'rendimiento bueno' : 'rendimiento en desarrollo';
+      return void reply(`Tu promedio general es ${average.toFixed(1)} sobre 100, equivalente a un ${description}.`);
+    }
     if (/cr[eé]dito|pensum|avance/.test(question)) return void reply(`Llevas ${student.creditsEarned} de ${student.totalCreditsRequired} créditos; te faltan ${Math.max(0, student.totalCreditsRequired - student.creditsEarned)}. Cursos aprobados: ${approvedGrades.length}; reprobados: ${failedGrades.length}; pendientes en el pensum: ${pendingPlanCourses.length}.`);
+    if (/aprob/.test(question)) return void reply(approvedGrades.length ? `Cursos aprobados:\n${approvedGrades.map((item) => `• ${item.section.course.name}: ${Number(item.total).toFixed(1)}`).join('\n')}` : 'No tienes cursos aprobados registrados.');
+    if (/reprob/.test(question)) return void reply(failedGrades.length ? `Cursos reprobados:\n${failedGrades.map((item) => `• ${item.section.course.name}: ${Number(item.total).toFixed(1)}`).join('\n')}` : 'No tienes cursos reprobados registrados.');
     if (/tarea|asignaci[oó]n/.test(question)) return void reply(tasks.length ? `Tareas y asignaciones publicadas:\n${tasks.map((item) => `• ${item.name} · ${item.section.course.name} · vence ${item.dueDate.toLocaleDateString('es-GT')} · ${item.grades.length ? 'entregada' : 'pendiente'}`).join('\n')}` : 'No hay tareas publicadas para tus cursos.');
     if (/biblioteca|libro|préstamo|prestamo/.test(question)) return void reply(loans.length ? `Tus préstamos de biblioteca:\n${loans.map((item) => `• ${item.copy.book.title} · vence ${item.dueAt.toLocaleDateString('es-GT')} · ${item.status}`).join('\n')}` : 'No tienes préstamos activos en biblioteca.');
     if (/docente|catedr/.test(question)) return void reply(student.enrollments.length ? `Docentes por curso:\n${student.enrollments.map((item) => `• ${item.section.course.name}: ${item.section.teacher.name}`).join('\n')}` : 'No tienes cursos inscritos actualmente.');
@@ -2350,9 +2358,9 @@ app.post('/api/assistant', requireUser, async (req, res) => {
       const lines = student.enrollments.filter((item) => { if (!requestedDay) return true; try { return JSON.parse(item.section.scheduleDays).some((day: string) => day.toLocaleLowerCase('es-GT').includes(requestedDay)); } catch { return item.section.scheduleDays.toLocaleLowerCase('es-GT').includes(requestedDay); } }).map((item) => { let days = item.section.scheduleDays; try { days = JSON.parse(days).join(', '); } catch { /* legacy plain text */ } return `• ${item.section.course.code} · ${item.section.course.name}\n  ${days} · ${item.section.scheduleTime}\n  Aula: ${item.section.classroom.code} · Docente: ${item.section.teacher.name}`; });
       return void reply(lines.length ? `${requestedDay ? `Tus clases del ${requestedDay}` : 'Estos son tus cursos inscritos'}:\n${lines.join('\n')}` : requestedDay ? `No tienes clases programadas el ${requestedDay}.` : currentCycle ? `No tienes cursos inscritos en el ciclo actual (${currentCycle.name}).` : 'No hay un ciclo académico actual configurado.');
     }
-    if (/nota|promedio|calificacion|calificación|ganad|aprob/.test(question)) {
-      const lines = publishedGrades.map((item) => `${item.section.course.code} ${item.section.course.name}: ${item.total} · ${item.total >= 61 ? 'Aprobado' : 'Reprobado'}`);
-      return void reply(lines.length ? `Tus notas publicadas son:\n${lines.join('\n')}\nPromedio general: ${student.gpa}` : 'Todavía no tienes notas publicadas.');
+    if (/nota|calificacion|calificación|ganad/.test(question)) {
+      const lines = visibleGrades.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).map((item) => `${item.section.course.code} ${item.section.course.name}: ${Number(item.total).toFixed(1)} · ${item.status}`);
+      return void reply(lines.length ? `Tus calificaciones del expediente son:\n${lines.join('\n')}` : 'Todavía no tienes calificaciones registradas.');
     }
     if (/debo|pago|saldo|finanz/.test(question)) {
       const balance = student.financialCharges.reduce((sum, charge) => sum + Math.max(0, charge.amount - charge.payments.reduce((paid, payment) => paid + payment.amount, 0)), 0);
@@ -2366,8 +2374,6 @@ app.post('/api/assistant', requireUser, async (req, res) => {
       const candidates = nextCycle ? (student.plan?.courses || []).filter((item) => !approvedCodes.has(item.courseCode)).filter((item) => offeredSections.some((section) => section.cycleId === nextCycle.id && section.courseCode === item.courseCode)) : pendingPlanCourses;
       return void reply(candidates.length ? `Para ${nextCycle?.name || 'el próximo semestre'} aparecen disponibles en tu pensum:\n${candidates.map((item) => `• ${item.course.code} · ${item.course.name} · ${item.course.credits} créditos`).join('\n')}` : 'No encontré cursos ofertados para el próximo semestre en tu pensum.');
     }
-    if (/aprob/.test(question)) return void reply(approvedGrades.length ? `Cursos aprobados:\n${approvedGrades.map((item) => `• ${item.section.course.name}: ${item.total}`).join('\n')}` : 'No tienes cursos aprobados con calificación publicada.');
-    if (/reprob/.test(question)) return void reply(failedGrades.length ? `Cursos reprobados:\n${failedGrades.map((item) => `• ${item.section.course.name}: ${item.total}`).join('\n')}` : 'No tienes cursos reprobados con calificación publicada.');
     if (/asistencia|faltas|presencia/.test(question)) {
       const present = attendance.filter((item) => item.status === 'PRESENTE').length;
       return void reply(`Asistencia registrada: ${present} presente(s), ${attendance.length - present} ausencia(s) o tardanza(s), de ${attendance.length} registro(s).`);
