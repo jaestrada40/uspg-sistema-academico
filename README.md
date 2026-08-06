@@ -23,7 +23,7 @@ Sistema académico por roles con React, Express, Prisma y SQLite para desarrollo
 
 Todos usan temporalmente la contraseña `Demo123!`:
 
-- Administrador: `cmendoza@administrador.uspg.edu.gt`
+- Administrador: `admin@administrador.uspg.edu.gt`
 - Docente: `luismena@catedratico.uspg.edu.gt`
 - Estudiante: `jaestradag@alumno.uspg.edu.gt`
 - Sistemas: `sistemas@sistemas.uspg.edu.gt`
@@ -93,15 +93,15 @@ El servicio expone el puerto `3000` y publica su verificación de salud en
 Los archivos `.env` nunca deben subirse; configure los secretos como variables de
 ejecución en Coolify.
 
-En el primer despliegue, abra la terminal del servicio `app` en Coolify y ejecute
-una sola vez los siguientes comandos para cargar la institución, el pensum oficial
-de Sistemas, la matrícula de validación y los cuatro roles:
+Para una base de pruebas limpia, abra la terminal del servicio `app` y ejecute una
+sola vez el siguiente comando. Elimina los datos existentes y carga únicamente el
+pensum oficial de Sistemas, Campus Central/Escuintla, los cuatro usuarios y el
+historial de validación:
 
 ```bash
-npm run db:seed
-VALIDATION_PASSWORD="una-contraseña-temporal-segura" npm run db:sync:systems-validation
+npm run db:reset:systems-test
 ```
 
-Guarde `VALIDATION_PASSWORD` como secreto de Hostinger/Coolify; el comando la exige
-en producción. Después del primer acceso, cambie inmediatamente todas las
-contraseñas temporales y complete MFA para Administrador, Docente y Sistemas.
+Las cuatro cuentas iniciales usan `Demo123!`. Después del primer acceso, cambie
+inmediatamente las contraseñas temporales y complete MFA para Administrador,
+Docente y Sistemas.

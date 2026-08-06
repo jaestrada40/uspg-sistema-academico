@@ -28,6 +28,7 @@
     "verify:release": "npm run lint && npm run build && npm audit --omit=dev",
     "db:import:systems-curriculum": "tsx scripts/import-systems-curriculum.ts",
     "db:sync:systems-validation": "tsx scripts/sync-systems-validation.ts",
+    "db:reset:systems-test": "tsx scripts/reset-systems-test-data.ts",
     "db:seed": "tsx prisma/seed.ts",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
