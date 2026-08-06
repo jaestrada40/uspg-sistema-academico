@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   User,
   Student,
@@ -236,18 +236,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Ciclo activo cambiado a: ${cycles.find((c) => c.id === id)?.name || id}`, 'info');
   };
 
-  // Toast helper
-  const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
+
+  // Debe conservar su referencia entre renderizados: las pantallas usan esta
+  // función como dependencia al cargar datos del servidor.
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 5);
     setToasts((prev) => prev.some((toast) => toast.message === message && toast.type === type) ? prev : [...prev, { id, message, type }]);
     setTimeout(() => {
       removeToast(id);
     }, message.includes('Contraseña temporal') ? 15000 : 4500);
-  };
-
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
+  }, [removeToast]);
 
   // Server-backed authentication
   const login = async (username: string, password: string, rememberMe: boolean) => {
