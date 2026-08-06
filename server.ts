@@ -213,36 +213,32 @@ app.use('/api', (req, res, next) => {
 
 type RateBucket = { count: number; resetAt: number };
 const apiRateBuckets = new Map<string, RateBucket>();
-// El proxy de producción puede concentrar tráfico de varios visitantes. El límite
-// se mantiene como defensa ante abusos, pero es configurable para no bloquear el
-// portal completo por una ráfaga legítima de solicitudes.
-const apiRateWindowMs = Number(process.env.API_RATE_WINDOW_MS || 15 * 60 * 1000);
-const apiRateLimit = Number(process.env.API_RATE_LIMIT || 3_000);
-app.use('/api', (req, res, next) => {
-  // El acceso ya tiene su propio control por IP y usuario; no debe heredar un
-  // contador compartido con el resto de visitantes detrás del proxy.
-  if (req.path === '/auth/login') return next();
+const apiRateWindowMs = 15 * 60 * 1000;
+const apiRateLimit = 1_500;
+app.use('/api', async (req, res, next) => {
+  const token = readSessionToken(req);
+  const session = token ? await prisma.session.findUnique({ where: { tokenHash: hashToken(token) }, select: { userId: true, expiresAt: true } }) : null;
+  // Nunca se usa la IP del proxy como identidad. Una sesión válida se limita por
+  // usuario y, antes de iniciar sesión, se usa el correo o carné solicitado.
+  const requestedAccount = String(req.body?.username || '').trim().toLowerCase();
+  const key = session && session.expiresAt > new Date()
+    ? `user:${session.userId}`
+    : `anonymous:${requestedAccount || req.ip || req.socket.remoteAddress || 'unknown'}`;
   const now = Date.now();
-  const sessionToken = parseCookies(req.headers.cookie)[sessionCookie];
-  const key = sessionToken
-    ? `session:${hashToken(sessionToken)}`
-    : `ip:${req.ip || req.socket.remoteAddress || 'unknown'}`;
   const current = apiRateBuckets.get(key);
   const bucket = !current || current.resetAt <= now ? { count: 0, resetAt: now + apiRateWindowMs } : current;
   bucket.count += 1;
   apiRateBuckets.set(key, bucket);
-  res.setHeader('RateLimit-Limit', String(apiRateLimit));
-  res.setHeader('RateLimit-Remaining', String(Math.max(0, apiRateLimit - bucket.count)));
-  res.setHeader('RateLimit-Reset', String(Math.ceil((bucket.resetAt - now) / 1000)));
   if (bucket.count > apiRateLimit) {
     res.setHeader('Retry-After', String(Math.ceil((bucket.resetAt - now) / 1000)));
-    return void res.status(429).json({ message: 'Demasiadas solicitudes. Intenta nuevamente más tarde.' });
+    return void res.status(429).json({ message: 'Demasiadas solicitudes para esta cuenta. Intenta nuevamente más tarde.' });
   }
   if (apiRateBuckets.size > 10_000) {
     for (const [bucketKey, value] of apiRateBuckets) if (value.resetAt <= now) apiRateBuckets.delete(bucketKey);
   }
   next();
 });
+
 const publicUser = (user: {
   id: string; name: string; email: string; role: string; avatar: string | null;
   carnetOrCode: string | null; phone: string | null; department: string | null; mustChangePassword: boolean; mfaEnabled: boolean;

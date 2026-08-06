@@ -239,7 +239,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Toast helper
   const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 5);
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => prev.some((toast) => toast.message === message && toast.type === type) ? prev : [...prev, { id, message, type }]);
     setTimeout(() => {
       removeToast(id);
     }, message.includes('Contraseña temporal') ? 15000 : 4500);
