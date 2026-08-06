@@ -66,7 +66,7 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-0 md:p-6">
+    <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC] p-0 md:p-6">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl overflow-hidden bg-white shadow-2xl md:min-h-[680px] md:rounded-3xl">
         <section className="flex w-full flex-col justify-center px-6 py-10 sm:px-12 md:w-[46%] lg:px-16">
           <div className="mx-auto w-full max-w-sm">
