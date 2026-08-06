@@ -184,6 +184,18 @@ app.use((_req, res, next) => {
 });
 app.use(express.json({ limit: '5mb', strict: true }));
 
+const sessionCookie = 'uspg_session';
+const sessionCookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: isProduction,
+  path: '/',
+};
+const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
+const parseCookies = (header = '') => Object.fromEntries(
+  header.split(';').map((part) => part.trim().split('=').map(decodeURIComponent)).filter(([key]) => key)
+);
+
 const configuredOrigin = (() => {
   try { return process.env.APP_URL ? new URL(process.env.APP_URL).origin : null; } catch { return null; }
 })();
@@ -201,11 +213,20 @@ app.use('/api', (req, res, next) => {
 
 type RateBucket = { count: number; resetAt: number };
 const apiRateBuckets = new Map<string, RateBucket>();
-const apiRateWindowMs = 15 * 60 * 1000;
-const apiRateLimit = 600;
+// El proxy de producción puede concentrar tráfico de varios visitantes. El límite
+// se mantiene como defensa ante abusos, pero es configurable para no bloquear el
+// portal completo por una ráfaga legítima de solicitudes.
+const apiRateWindowMs = Number(process.env.API_RATE_WINDOW_MS || 15 * 60 * 1000);
+const apiRateLimit = Number(process.env.API_RATE_LIMIT || 3_000);
 app.use('/api', (req, res, next) => {
+  // El acceso ya tiene su propio control por IP y usuario; no debe heredar un
+  // contador compartido con el resto de visitantes detrás del proxy.
+  if (req.path === '/auth/login') return next();
   const now = Date.now();
-  const key = req.ip || req.socket.remoteAddress || 'unknown';
+  const sessionToken = parseCookies(req.headers.cookie)[sessionCookie];
+  const key = sessionToken
+    ? `session:${hashToken(sessionToken)}`
+    : `ip:${req.ip || req.socket.remoteAddress || 'unknown'}`;
   const current = apiRateBuckets.get(key);
   const bucket = !current || current.resetAt <= now ? { count: 0, resetAt: now + apiRateWindowMs } : current;
   bucket.count += 1;
@@ -222,18 +243,6 @@ app.use('/api', (req, res, next) => {
   }
   next();
 });
-
-const sessionCookie = 'uspg_session';
-const sessionCookieOptions = {
-  httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: isProduction,
-  path: '/',
-};
-const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
-const parseCookies = (header = '') => Object.fromEntries(
-  header.split(';').map((part) => part.trim().split('=').map(decodeURIComponent)).filter(([key]) => key)
-);
 const publicUser = (user: {
   id: string; name: string; email: string; role: string; avatar: string | null;
   carnetOrCode: string | null; phone: string | null; department: string | null; mustChangePassword: boolean; mfaEnabled: boolean;
