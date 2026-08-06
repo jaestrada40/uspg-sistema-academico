@@ -211,37 +211,6 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-type RateBucket = { count: number; resetAt: number };
-const apiRateBuckets = new Map<string, RateBucket>();
-const apiRateWindowMs = 15 * 60 * 1000;
-const apiRateLimit = 1_500;
-app.use('/api', async (req, res, next) => {
-  // El acceso tiene un bloqueo específico de cinco intentos fallidos por cuenta.
-  // No debe heredar el contador de tráfico general.
-  if (req.path === '/auth/login') return next();
-  const token = readSessionToken(req);
-  const session = token ? await prisma.session.findUnique({ where: { tokenHash: hashToken(token) }, select: { userId: true, expiresAt: true } }) : null;
-  // Nunca se usa la IP del proxy como identidad. Una sesión válida se limita por
-  // usuario y, antes de iniciar sesión, se usa el correo o carné solicitado.
-  const requestedAccount = String(req.body?.username || '').trim().toLowerCase();
-  const key = session && session.expiresAt > new Date()
-    ? `user:${session.userId}`
-    : `anonymous:${requestedAccount || req.ip || req.socket.remoteAddress || 'unknown'}`;
-  const now = Date.now();
-  const current = apiRateBuckets.get(key);
-  const bucket = !current || current.resetAt <= now ? { count: 0, resetAt: now + apiRateWindowMs } : current;
-  bucket.count += 1;
-  apiRateBuckets.set(key, bucket);
-  if (bucket.count > apiRateLimit) {
-    res.setHeader('Retry-After', String(Math.ceil((bucket.resetAt - now) / 1000)));
-    return void res.status(429).json({ message: 'Demasiadas solicitudes para esta cuenta. Intenta nuevamente más tarde.' });
-  }
-  if (apiRateBuckets.size > 10_000) {
-    for (const [bucketKey, value] of apiRateBuckets) if (value.resetAt <= now) apiRateBuckets.delete(bucketKey);
-  }
-  next();
-});
-
 const publicUser = (user: {
   id: string; name: string; email: string; role: string; avatar: string | null;
   carnetOrCode: string | null; phone: string | null; department: string | null; mustChangePassword: boolean; mfaEnabled: boolean;
@@ -351,7 +320,7 @@ app.get('/api/health', (_req, res) => {
 
 const loginAttempts = new Map<string, { count: number; blockedUntil: number }>();
 const passwordRecoveryRequests = new Map<string, number>();
-const loginAttemptKey = (req: express.Request, username: string) => `${req.ip}:${username.toLowerCase()}`;
+const loginAttemptKey = (username: string) => username.toLowerCase();
 const registerFailedLogin = (key: string) => {
   const current = loginAttempts.get(key);
   const count = (current?.blockedUntil && current.blockedUntil > Date.now() ? current.count : 0) + 1;
@@ -370,7 +339,7 @@ app.post('/api/auth/login', async (req, res) => {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
   const rememberMe = Boolean(req.body?.rememberMe);
-  const attemptKey = loginAttemptKey(req, username);
+  const attemptKey = loginAttemptKey(username);
   const attempt = loginAttempts.get(attemptKey);
   if (attempt?.blockedUntil && attempt.blockedUntil > Date.now()) return void res.status(429).json({ message: 'Demasiados intentos fallidos. Intenta nuevamente en 15 minutos.' });
   const user = await prisma.user.findFirst({
@@ -460,7 +429,7 @@ app.post('/api/auth/logout', async (req, res) => {
 app.post('/api/auth/forgot-password', async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
   const genericResponse = { message: 'Si el correo está registrado, recibirás un enlace de recuperación.' };
-  const recoveryKey = hashToken(`${req.ip || 'unknown'}:${email}`);
+  const recoveryKey = hashToken(email);
   const lastRequest = passwordRecoveryRequests.get(recoveryKey) || 0;
   if (Date.now() - lastRequest < 5 * 60 * 1000) return void res.json(genericResponse);
   passwordRecoveryRequests.set(recoveryKey, Date.now());
