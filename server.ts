@@ -708,7 +708,7 @@ app.get('/api/academic-structure', requireUser, async (_req, res) => {
   const admin = res.locals.authUser.role === 'ADMIN';
   const [campuses, plans] = await Promise.all([
     prisma.campus.findMany({ where: admin ? {} : { status: 'Activo' }, include: { _count: { select: { students: true } } }, orderBy: { name: 'asc' } }),
-    prisma.curriculumPlan.findMany({ where: admin ? {} : { status: 'Activo' }, include: { career: { select: { name: true } }, _count: { select: { courses: true, students: true } } }, orderBy: [{ careerId: 'asc' }, { effectiveFrom: 'desc' }] }),
+    prisma.curriculumPlan.findMany({ where: admin ? {} : { status: 'Activo' }, include: { career: { select: { name: true } }, campus: { select: { id: true, code: true, name: true } }, _count: { select: { courses: true, students: true } } }, orderBy: [{ careerId: 'asc' }, { effectiveFrom: 'desc' }] }),
   ]);
   res.json({ campuses, plans: plans.map((plan) => ({ ...plan, careerName: plan.career.name, career: undefined })) });
 });
@@ -732,16 +732,18 @@ app.patch('/api/academic-structure/campuses/:id', requireAdmin, async (req, res)
 });
 
 app.post('/api/academic-structure/plans', requireAdmin, async (req, res) => {
-  const code = String(req.body.code || '').trim().toUpperCase(), name = String(req.body.name || '').trim(), version = String(req.body.version || '').trim().toUpperCase(), careerId = String(req.body.careerId || ''), sourcePlanId = String(req.body.sourcePlanId || '');
+  const code = String(req.body.code || '').trim().toUpperCase(), name = String(req.body.name || '').trim(), version = String(req.body.version || '').trim().toUpperCase(), careerId = String(req.body.careerId || ''), sourcePlanId = String(req.body.sourcePlanId || ''), campusId = String(req.body.campusId || '');
   const effectiveFrom = new Date(`${req.body.effectiveFrom}T12:00:00Z`), totalCredits = Number(req.body.totalCredits), durationSemesters = Number(req.body.durationSemesters);
-  if (!/^[A-Z0-9-]{3,30}$/.test(code) || name.length < 5 || !version || !careerId || Number.isNaN(effectiveFrom.getTime()) || !Number.isInteger(totalCredits) || totalCredits <= 0 || !Number.isInteger(durationSemesters) || durationSemesters <= 0) return void res.status(400).json({ message: 'Completa código, nombre, versión, vigencia, créditos y semestres.' });
+  if (!/^[A-Z0-9-]{3,30}$/.test(code) || name.length < 5 || !version || !careerId || !campusId || Number.isNaN(effectiveFrom.getTime()) || !Number.isInteger(totalCredits) || totalCredits <= 0 || !Number.isInteger(durationSemesters) || durationSemesters <= 0) return void res.status(400).json({ message: 'Completa carrera, campus, código, nombre, versión, vigencia, créditos y semestres.' });
+  const campus = await prisma.campus.findFirst({ where: { id: campusId, status: 'Activo' } });
+  if (!campus) return void res.status(400).json({ message: 'Selecciona un campus activo válido.' });
   const source = sourcePlanId ? await prisma.curriculumPlan.findUnique({ where: { id: sourcePlanId }, include: { courses: true } }) : null;
   if (sourcePlanId && (!source || source.careerId !== careerId)) return void res.status(400).json({ message: 'El plan de origen debe pertenecer a la misma carrera.' });
   const existingPlans = await prisma.curriculumPlan.count({ where: { careerId } });
   if (!source && existingPlans > 0) return void res.status(400).json({ message: 'Selecciona el plan de origen para crear una nueva versión.' });
   const sourceCourses = source?.courses || (await prisma.course.findMany({ where: { careerId }, select: { code: true, semester: true } })).map((course) => ({ courseCode: course.code, semester: course.semester }));
   try {
-    const plan = await prisma.$transaction(async (tx) => { const created = await tx.curriculumPlan.create({ data: { id: `PLAN-${randomUUID()}`, code, name, version, effectiveFrom, totalCredits, durationSemesters, careerId, status: existingPlans === 0 ? 'Activo' : 'Planificado' } }); if (sourceCourses.length) await tx.curriculumPlanCourse.createMany({ data: sourceCourses.map((item) => ({ planId: created.id, courseCode: item.courseCode, semester: item.semester })) }); await tx.auditLog.create({ data: { action: 'CREATE_CURRICULUM_PLAN', entityType: 'CURRICULUM_PLAN', entityId: created.id, actorId: res.locals.authUser.id, details: JSON.stringify({ sourcePlanId: sourcePlanId || null, courses: sourceCourses.length }) } }); return created; });
+    const plan = await prisma.$transaction(async (tx) => { const created = await tx.curriculumPlan.create({ data: { id: `PLAN-${randomUUID()}`, code, name, version, effectiveFrom, totalCredits, durationSemesters, careerId, campusId, status: existingPlans === 0 ? 'Activo' : 'Planificado' } }); if (sourceCourses.length) await tx.curriculumPlanCourse.createMany({ data: sourceCourses.map((item) => ({ planId: created.id, courseCode: item.courseCode, semester: item.semester })) }); await tx.auditLog.create({ data: { action: 'CREATE_CURRICULUM_PLAN', entityType: 'CURRICULUM_PLAN', entityId: created.id, actorId: res.locals.authUser.id, details: JSON.stringify({ campusId, sourcePlanId: sourcePlanId || null, courses: sourceCourses.length }) } }); return created; });
     res.status(201).json(plan);
   } catch (error) { if (!handleUniqueError(error, res)) throw error; }
 });
@@ -749,10 +751,11 @@ app.post('/api/academic-structure/plans', requireAdmin, async (req, res) => {
 app.patch('/api/academic-structure/plans/:id', requireAdmin, async (req, res) => {
   const current = await prisma.curriculumPlan.findUnique({ where: { id: req.params.id }, include: { _count: { select: { students: true } } } });
   if (!current) return void res.status(404).json({ message: 'Plan académico no encontrado.' });
-  const status = String(req.body.status ?? current.status), name = String(req.body.name ?? current.name).trim();
+  const status = String(req.body.status ?? current.status), name = String(req.body.name ?? current.name).trim(), campusId = String(req.body.campusId ?? current.campusId ?? '');
   const effectiveTo = req.body.effectiveTo ? new Date(`${req.body.effectiveTo}T12:00:00Z`) : null;
-  if (!['Planificado', 'Activo', 'Cerrado'].includes(status) || name.length < 5 || (effectiveTo && (Number.isNaN(effectiveTo.getTime()) || effectiveTo < current.effectiveFrom))) return void res.status(400).json({ message: 'Nombre, estado o fecha de cierre no válidos.' });
-  const plan = await prisma.$transaction(async (tx) => { const updated = await tx.curriculumPlan.update({ where: { id: current.id }, data: { name, status, effectiveTo } }); await tx.auditLog.create({ data: { action: 'UPDATE_CURRICULUM_PLAN', entityType: 'CURRICULUM_PLAN', entityId: current.id, actorId: res.locals.authUser.id, details: JSON.stringify({ status, students: current._count.students }) } }); return updated; });
+  const campus = campusId ? await prisma.campus.findFirst({ where: { id: campusId, status: 'Activo' } }) : null;
+  if (!['Planificado', 'Activo', 'Cerrado'].includes(status) || name.length < 5 || !campus || (effectiveTo && (Number.isNaN(effectiveTo.getTime()) || effectiveTo < current.effectiveFrom))) return void res.status(400).json({ message: 'Nombre, estado, campus o fecha de cierre no válidos.' });
+  const plan = await prisma.$transaction(async (tx) => { const updated = await tx.curriculumPlan.update({ where: { id: current.id }, data: { name, status, effectiveTo, campusId } }); await tx.auditLog.create({ data: { action: 'UPDATE_CURRICULUM_PLAN', entityType: 'CURRICULUM_PLAN', entityId: current.id, actorId: res.locals.authUser.id, details: JSON.stringify({ status, campusId, students: current._count.students }) } }); return updated; });
   res.json(plan);
 });
 
@@ -799,7 +802,7 @@ app.post('/api/students', requireAdmin, async (req, res) => {
   try {
     const plan = data.planId ? await prisma.curriculumPlan.findUnique({ where: { id: data.planId } }) : await prisma.curriculumPlan.findFirst({ where: { careerId: data.careerId, status: 'Activo' }, orderBy: { effectiveFrom: 'desc' } });
     const campus = data.campusId ? await prisma.campus.findUnique({ where: { id: data.campusId } }) : await prisma.campus.findFirst({ where: { status: 'Activo' }, orderBy: { name: 'asc' } });
-    if (!plan || plan.careerId !== data.careerId) return void res.status(400).json({ message: 'Selecciona un plan académico válido para la carrera.' });
+    if (!plan || plan.careerId !== data.careerId || plan.campusId !== campus?.id) return void res.status(400).json({ message: 'Selecciona un plan académico vigente para la carrera y campus elegidos.' });
     if (!campus) return void res.status(400).json({ message: 'Selecciona un campus válido.' });
     const student = await prisma.$transaction(async (tx) => {
       await tx.user.create({ data: { id: userId, name: data.name, email: normalizedEmail, passwordHash: hashPassword(password), role: 'ESTUDIANTE', carnetOrCode: data.carnet, phone: data.phone, department: data.careerName, mustChangePassword: true } });
@@ -822,7 +825,7 @@ app.patch('/api/students/:carnet', requireAdmin, async (req, res) => {
   try {
     const plan = next.planId ? await prisma.curriculumPlan.findUnique({ where: { id: next.planId } }) : null;
     const campus = next.campusId ? await prisma.campus.findUnique({ where: { id: next.campusId } }) : null;
-    if (!plan || plan.careerId !== next.careerId) return void res.status(400).json({ message: 'Selecciona un plan académico válido para la carrera.' });
+    if (!plan || plan.careerId !== next.careerId || plan.campusId !== campus?.id) return void res.status(400).json({ message: 'Selecciona un plan académico vigente para la carrera y campus elegidos.' });
     if (!campus) return void res.status(400).json({ message: 'Selecciona un campus válido.' });
     const student = await prisma.$transaction(async (tx) => {
       await tx.user.update({ where: { id: current.userId }, data: { name: next.name, email: normalizedEmail, phone: next.phone, active: next.status === 'Activo' } });

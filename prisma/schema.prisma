@@ -208,6 +208,7 @@ model Campus {
   status        String      @default("Activo")
   students      Student[]
   financialFees CareerFee[]
+  curriculumPlans CurriculumPlan[]
   createdAt     DateTime    @default(now()) @map("created_at")
   updatedAt     DateTime    @updatedAt @map("updated_at")
 
@@ -225,7 +226,9 @@ model CurriculumPlan {
   totalCredits      Int                    @map("total_credits")
   durationSemesters Int                    @map("duration_semesters")
   careerId          String                 @map("career_id")
+  campusId          String?                @map("campus_id")
   career            Career                 @relation(fields: [careerId], references: [code], onDelete: Restrict)
+  campus            Campus?                @relation(fields: [campusId], references: [id], onDelete: Restrict)
   courses           CurriculumPlanCourse[]
   students          Student[]
   financialFees     CareerFee[]
@@ -233,6 +236,7 @@ model CurriculumPlan {
   updatedAt         DateTime               @updatedAt @map("updated_at")
 
   @@index([careerId, status])
+  @@index([campusId, status])
   @@map("curriculum_plans")
 }
 
