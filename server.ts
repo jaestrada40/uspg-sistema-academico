@@ -216,6 +216,9 @@ const apiRateBuckets = new Map<string, RateBucket>();
 const apiRateWindowMs = 15 * 60 * 1000;
 const apiRateLimit = 1_500;
 app.use('/api', async (req, res, next) => {
+  // El acceso tiene un bloqueo específico de cinco intentos fallidos por cuenta.
+  // No debe heredar el contador de tráfico general.
+  if (req.path === '/auth/login') return next();
   const token = readSessionToken(req);
   const session = token ? await prisma.session.findUnique({ where: { tokenHash: hashToken(token) }, select: { userId: true, expiresAt: true } }) : null;
   // Nunca se usa la IP del proxy como identidad. Una sesión válida se limita por
