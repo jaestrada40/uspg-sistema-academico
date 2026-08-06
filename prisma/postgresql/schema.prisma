@@ -702,7 +702,7 @@ model InstitutionConfig {
   name        String
   shortName   String   @map("short_name")
   logoDataUrl String?  @map("logo_data_url")
-  mfaRequiredRoles String @default("[\"ADMIN\",\"DOCENTE\",\"BIBLIOTECA\",\"PARQUEO\",\"EVENTOS\"]") @map("mfa_required_roles")
+  mfaRequiredRoles String @default("[\"ADMIN\",\"DOCENTE\",\"BIBLIOTECA\",\"PARQUEO\",\"EVENTOS\",\"SISTEMAS\"]") @map("mfa_required_roles")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("institution_config")

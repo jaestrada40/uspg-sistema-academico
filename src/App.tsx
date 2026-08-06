@@ -36,6 +36,7 @@ const AcademicStructurePage = lazyPage(() => import('./pages/AcademicStructurePa
 const LibraryPage = lazyPage(() => import('./pages/LibraryPage'), 'LibraryPage');
 const ParkingPage = lazyPage(() => import('./pages/ParkingPage'), 'ParkingPage');
 const UsersPage = lazyPage(() => import('./pages/UsersPage'), 'UsersPage');
+const SystemsPage = lazyPage(() => import('./pages/SystemsPage'), 'SystemsPage');
 
 const PageLoader = () => <div className="flex min-h-[40vh] items-center justify-center text-sm font-semibold text-[#64748B]">Cargando módulo...</div>;
 
@@ -57,6 +58,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
   if (currentUser.role === 'BIBLIOTECA' && location.pathname === '/dashboard') return <Navigate to="/biblioteca" replace />;
   if (['PARQUEO', 'EVENTOS'].includes(currentUser.role) && location.pathname === '/dashboard') return <Navigate to="/parqueo" replace />;
+  if (currentUser.role === 'SISTEMAS' && location.pathname === '/dashboard') return <Navigate to="/sistemas" replace />;
   return <AppLayout>{children}<AcademicAssistant /></AppLayout>;
 };
 
@@ -69,6 +71,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/restablecer-contrasena" element={<ResetPasswordPage />} />
           <Route path="/usuarios" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
+          <Route path="/sistemas" element={<ProtectedRoute><SystemsPage /></ProtectedRoute>} />
           <Route path="/aulas-virtuales" element={<ProtectedRoute><VirtualClassroomsPage /></ProtectedRoute>} />
           <Route path="/pagos" element={<ProtectedRoute><FinancesPage /></ProtectedRoute>} />
           <Route path="/asistencia" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />

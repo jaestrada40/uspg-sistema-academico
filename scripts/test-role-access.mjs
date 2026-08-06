@@ -1,8 +1,9 @@
 const baseUrl = process.env.TEST_BASE_URL || 'http://127.0.0.1:3001';
 const accounts = {
-  ADMIN: { username: process.env.TEST_ADMIN_EMAIL || 'cmendoza@administrador.uspg.edu.gt', password: process.env.TEST_ADMIN_PASSWORD },
+  ADMIN: { username: process.env.TEST_ADMIN_EMAIL || 'cmendoza@administrador.uspg.edu.gt', password: process.env.TEST_ADMIN_PASSWORD || 'Demo123!' },
   DOCENTE: { username: process.env.TEST_TEACHER_EMAIL || 'luismena@catedratico.uspg.edu.gt', password: process.env.TEST_TEACHER_PASSWORD || 'Demo123!' },
   ESTUDIANTE: { username: process.env.TEST_STUDENT_EMAIL || 'jaestradag@alumno.uspg.edu.gt', password: process.env.TEST_STUDENT_PASSWORD || 'Demo123!' },
+  SISTEMAS: { username: process.env.TEST_SYSTEMS_EMAIL || 'sistemas@sistemas.uspg.edu.gt', password: process.env.TEST_SYSTEMS_PASSWORD || 'Demo123!' },
 };
 const cases = {
   ADMIN: [
@@ -13,6 +14,9 @@ const cases = {
   ],
   ESTUDIANTE: [
     ['/api/finances', 200], ['/api/student-requests', 200], ['/api/enrollment-documents', 200], ['/api/finances/career-fees', 403],
+  ],
+  SISTEMAS: [
+    ['/api/systems/overview', 200], ['/api/finances', 403], ['/api/students', 403],
   ],
 };
 let failures = 0;

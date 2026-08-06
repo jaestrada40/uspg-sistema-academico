@@ -43,7 +43,7 @@ const assistantHistory = (history: unknown) => Array.isArray(history)
   ? history.slice(-8).filter((item): item is { from: string; text: string } => Boolean(item && typeof item === 'object' && typeof (item as any).text === 'string')).map((item) => `${item.from === 'user' ? 'Usuario' : 'Asistente'}: ${item.text.slice(0, 500)}`).join('\n')
   : '';
 
-const defaultMfaRequiredRoles = ['ADMIN', 'DOCENTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'];
+const defaultMfaRequiredRoles = ['ADMIN', 'DOCENTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS'];
 const mfaEncryptionKey = (() => {
   const configured = process.env.MFA_ENCRYPTION_KEY;
   if (configured) {
@@ -113,7 +113,8 @@ const getMfaRequiredRoles = async () => {
   const config = await prisma.institutionConfig.findUnique({ where: { id: 1 }, select: { mfaRequiredRoles: true } });
   try {
     const parsed = JSON.parse(config?.mfaRequiredRoles || JSON.stringify(defaultMfaRequiredRoles));
-    return Array.isArray(parsed) ? parsed.filter((role): role is string => typeof role === 'string') : defaultMfaRequiredRoles;
+    const roles = Array.isArray(parsed) ? parsed.filter((role): role is string => typeof role === 'string') : defaultMfaRequiredRoles;
+    return roles.includes('SISTEMAS') ? roles : [...roles, 'SISTEMAS'];
   } catch { return defaultMfaRequiredRoles; }
 };
 
@@ -272,6 +273,7 @@ const roleFromEmail = (email: string) => {
   if (value.endsWith('@biblioteca.uspg.edu.gt')) return 'BIBLIOTECA';
   if (value.endsWith('@parqueo.uspg.edu.gt')) return 'PARQUEO';
   if (value.endsWith('@eventos.uspg.edu.gt')) return 'EVENTOS';
+  if (value.endsWith('@sistemas.uspg.edu.gt')) return 'SISTEMAS';
   return null;
 };
 
@@ -322,6 +324,9 @@ const requireUser: express.RequestHandler = async (req, res, next) => {
       return void res.status(401).json({ message: 'La sesión no es válida.' });
     }
     if (await blockUntilMfaEnrollment(req, res, session.user)) return;
+    if (session.user.role === 'SISTEMAS' && !['/api/systems', '/api/auth/', '/api/notifications'].some((prefix) => req.path.startsWith(prefix))) {
+      return void res.status(403).json({ message: 'El rol Sistemas no tiene acceso a módulos académicos, financieros ni administrativos.' });
+    }
     res.locals.authUser = session.user;
     next();
   } catch (error) {
@@ -330,6 +335,7 @@ const requireUser: express.RequestHandler = async (req, res, next) => {
 };
 const requireLibraryStaff: express.RequestHandler = (req, res, next) => ['ADMIN', 'BIBLIOTECA'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Biblioteca.' });
 const requireParkingStaff: express.RequestHandler = (req, res, next) => ['ADMIN', 'PARQUEO', 'EVENTOS'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Parqueo.' });
+const requireSystems: express.RequestHandler = (_req, res, next) => res.locals.authUser?.role === 'SISTEMAS' ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Sistemas.' });
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, database: process.env.DATABASE_PROVIDER || 'sqlite' });
@@ -519,7 +525,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
   const role = String(req.body?.role || '').trim().toUpperCase();
   const carnetOrCode = String(req.body?.carnetOrCode || '').trim() || null;
-  const allowedRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'];
+  const allowedRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS'];
   if (name.length < 3 || !/^\S+@\S+\.\S+$/.test(email) || !allowedRoles.includes(role)) return void res.status(400).json({ message: 'Nombre, correo y rol son obligatorios y válidos.' });
   const password = temporaryPassword();
   try {
@@ -625,11 +631,11 @@ app.post('/api/auth/mfa/disable', requireUser, async (req, res) => {
 });
 
 app.get('/api/security/mfa-policy', requireAdmin, async (_req, res) => {
-  res.json({ requiredRoles: await getMfaRequiredRoles(), availableRoles: ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'] });
+  res.json({ requiredRoles: await getMfaRequiredRoles(), availableRoles: ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS'] });
 });
 
 app.put('/api/security/mfa-policy', requireAdmin, async (req, res) => {
-  const availableRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'];
+  const availableRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS'];
   const requiredRoles: string[] = Array.isArray(req.body?.requiredRoles) ? [...new Set<string>(req.body.requiredRoles.map((role: unknown) => String(role).toUpperCase()))] : [];
   if (requiredRoles.some((role) => !availableRoles.includes(role))) return void res.status(400).json({ message: 'La política contiene un rol inválido.' });
   await prisma.$transaction([
@@ -660,6 +666,64 @@ const handleUniqueError = (error: unknown, res: express.Response) => {
   }
   return false;
 };
+
+// Operación técnica: deliberadamente no permite administrar cuentas ADMIN ni datos académicos o financieros.
+app.get('/api/systems/overview', requireUser, requireSystems, async (_req, res) => {
+  const [users, activeSessions, mfaEnabled, pendingEmails, failedEmails, recentAudit] = await Promise.all([
+    prisma.user.count({ where: { role: { not: 'ADMIN' } } }),
+    prisma.session.count({ where: { expiresAt: { gt: new Date() } } }),
+    prisma.user.count({ where: { mfaEnabled: true } }),
+    prisma.emailOutbox.count({ where: { status: { in: ['PENDING_CONFIGURATION', 'FAILED'] } } }),
+    prisma.emailOutbox.count({ where: { status: 'FAILED' } }),
+    prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 30, include: { actor: { select: { name: true, role: true } } } }),
+  ]);
+  res.json({ health: { ok: true, database: process.env.DATABASE_PROVIDER || 'sqlite', smtpConfigured: Boolean(mailTransport) }, metrics: { managedUsers: users, activeSessions, mfaEnabled, pendingEmails, failedEmails }, audit: recentAudit.map((record) => ({ id: record.id, action: record.action, entityType: record.entityType, entityId: record.entityId, actor: record.actor?.name || 'Sistema', actorRole: record.actor?.role || null, createdAt: record.createdAt })) });
+});
+
+app.get('/api/systems/accounts', requireUser, requireSystems, async (_req, res) => {
+  const users = await prisma.user.findMany({ where: { role: { not: 'ADMIN' } }, select: { id: true, name: true, email: true, role: true, active: true, mustChangePassword: true, mfaEnabled: true }, orderBy: [{ role: 'asc' }, { name: 'asc' }] });
+  res.json(users);
+});
+
+app.post('/api/systems/accounts/:id/reset-password', requireUser, requireSystems, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user || user.role === 'ADMIN') return void res.status(404).json({ message: 'Usuario no disponible para soporte técnico.' });
+  const password = temporaryPassword();
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(password), mustChangePassword: true } }),
+    prisma.session.deleteMany({ where: { userId: user.id } }),
+    prisma.mfaChallenge.deleteMany({ where: { userId: user.id } }),
+    prisma.auditLog.create({ data: { action: 'PASSWORD_RESET_SYSTEMS', entityType: 'USER', entityId: user.id, actorId: res.locals.authUser.id, details: JSON.stringify({ role: user.role }) } }),
+  ]);
+  await notifyUser(user.id, 'Cambio de contraseña · Sistema Académico USPG', `El equipo de Sistemas restableció tu acceso. Correo: ${user.email}\nContraseña temporal: ${password}\nDebes cambiarla al ingresar.`, 'WARNING', '/login');
+  res.json({ temporaryPassword: password });
+});
+
+app.post('/api/systems/accounts/:id/reset-mfa', requireUser, requireSystems, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user || user.role === 'ADMIN') return void res.status(404).json({ message: 'Usuario no disponible para soporte técnico.' });
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { mfaEnabled: false, mfaSecretEncrypted: null, mfaPendingSecretEncrypted: null, mfaRecoveryCodeHashes: null, mfaLastUsedStep: null } }),
+    prisma.session.deleteMany({ where: { userId: user.id } }),
+    prisma.mfaChallenge.deleteMany({ where: { userId: user.id } }),
+    prisma.auditLog.create({ data: { action: 'MFA_RESET_SYSTEMS', entityType: 'USER', entityId: user.id, actorId: res.locals.authUser.id, details: JSON.stringify({ role: user.role }) } }),
+  ]);
+  await notifyUser(user.id, 'MFA reiniciado por Sistemas', 'Tus métodos MFA fueron eliminados. Configúralos nuevamente al ingresar si tu rol lo requiere.', 'WARNING', '/perfil');
+  res.json({ ok: true });
+});
+
+app.get('/api/systems/outbox', requireUser, requireSystems, async (_req, res) => {
+  const records = await prisma.emailOutbox.findMany({ where: { status: { in: ['PENDING_CONFIGURATION', 'FAILED'] } }, orderBy: { createdAt: 'desc' }, take: 100, select: { id: true, recipientEmail: true, subject: true, status: true, attempts: true, lastError: true, createdAt: true } });
+  res.json({ smtpConfigured: Boolean(mailTransport), records });
+});
+
+app.post('/api/systems/outbox/:id/retry', requireUser, requireSystems, async (req, res) => {
+  const record = await prisma.emailOutbox.findUnique({ where: { id: req.params.id } });
+  if (!record || !['PENDING_CONFIGURATION', 'FAILED'].includes(record.status)) return void res.status(404).json({ message: 'Correo no disponible para reintento.' });
+  await deliverOutboxEmail(record.id);
+  await prisma.auditLog.create({ data: { action: 'RETRY_OUTBOX_SYSTEMS', entityType: 'EMAIL_OUTBOX', entityId: record.id, actorId: res.locals.authUser.id } });
+  res.json(await prisma.emailOutbox.findUnique({ where: { id: record.id }, select: { id: true, status: true, attempts: true, lastError: true } }));
+});
 
 const studentView = (student: any) => ({ ...student, campusName: student.campus?.name, planCode: student.plan?.code, planName: student.plan?.name, planVersion: student.plan?.version, campus: undefined, plan: undefined });
 

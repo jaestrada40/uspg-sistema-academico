@@ -26,6 +26,7 @@ Todos usan temporalmente la contraseña `Demo123!`:
 - Administrador: `cmendoza@administrador.uspg.edu.gt`
 - Docente: `luismena@catedratico.uspg.edu.gt`
 - Estudiante: `jaestradag@alumno.uspg.edu.gt`
+- Sistemas: `sistemas@sistemas.uspg.edu.gt`
 
 Las contraseñas se almacenan con `scrypt`; las sesiones usan tokens aleatorios guardados como hash y cookies `HttpOnly`.
 
@@ -93,5 +94,14 @@ Los archivos `.env` nunca deben subirse; configure los secretos como variables d
 ejecución en Coolify.
 
 En el primer despliegue, abra la terminal del servicio `app` en Coolify y ejecute
-una sola vez `npm run db:seed` para cargar la institución y los usuarios iniciales.
-Después del primer acceso, cambie inmediatamente todas las contraseñas temporales.
+una sola vez los siguientes comandos para cargar la institución, el pensum oficial
+de Sistemas, la matrícula de validación y los cuatro roles:
+
+```bash
+npm run db:seed
+VALIDATION_PASSWORD="una-contraseña-temporal-segura" npm run db:sync:systems-validation
+```
+
+Guarde `VALIDATION_PASSWORD` como secreto de Hostinger/Coolify; el comando la exige
+en producción. Después del primer acceso, cambie inmediatamente todas las
+contraseñas temporales y complete MFA para Administrador, Docente y Sistemas.

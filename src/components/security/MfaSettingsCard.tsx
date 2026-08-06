@@ -5,7 +5,7 @@ import { PasswordInput } from '../common/PasswordInput';
 
 type MfaStatus = { enabled: boolean; required: boolean; requiredRoles: string[]; recoveryCodesRemaining: number };
 type MfaSetup = { secret: string; qrDataUrl: string };
-const roles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'];
+const roles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS'];
 
 export const MfaSettingsCard: React.FC = () => {
   const { currentUser, setCurrentUser, showToast } = useApp();

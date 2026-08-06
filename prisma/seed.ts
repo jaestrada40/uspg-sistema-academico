@@ -18,6 +18,7 @@ const roleFromInstitutionalEmail = (email: string) => {
   if (normalized.endsWith('@alumno.uspg.edu.gt')) return 'ESTUDIANTE';
   if (normalized.endsWith('@catedratico.uspg.edu.gt')) return 'DOCENTE';
   if (normalized.endsWith('@administrador.uspg.edu.gt')) return 'ADMIN';
+  if (normalized.endsWith('@sistemas.uspg.edu.gt')) return 'SISTEMAS';
   throw new Error(`Dominio institucional no reconocido: ${email}`);
 };
 
@@ -33,6 +34,10 @@ const demoUsers = [
   {
     id: 'USR-003', name: 'Javier Estrada', email: 'jaestradag@alumno.uspg.edu.gt', role: roleFromInstitutionalEmail('jaestradag@alumno.uspg.edu.gt'),
     carnetOrCode: '20230142', phone: '+502 4125-8890', department: 'Ingeniería en Tecnologías de la Información',
+  },
+  {
+    id: 'USR-SYS-001', name: 'Soporte de Sistemas USPG', email: 'sistemas@sistemas.uspg.edu.gt', role: roleFromInstitutionalEmail('sistemas@sistemas.uspg.edu.gt'),
+    carnetOrCode: 'SYS-0001', phone: '+502 2326-5555', department: 'Tecnología y Sistemas',
   },
 ];
 

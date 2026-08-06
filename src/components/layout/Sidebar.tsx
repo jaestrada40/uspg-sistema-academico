@@ -25,6 +25,7 @@ import {
   Files,
   FolderCheck,
   Network,
+  Wrench,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { InstitutionLogo } from '../common/InstitutionLogo';
@@ -60,7 +61,8 @@ export const Sidebar: React.FC = () => {
     { path: '/historial', label: 'Historial Académico', icon: History, roles: ['ADMIN', 'ESTUDIANTE'] },
     { path: '/reportes', label: 'Reportes Académicos', icon: BarChart3, roles: ['ADMIN'] },
     { path: '/notificaciones', label: 'Notificaciones', icon: BellRing, roles: ['ADMIN'] },
-    { path: '/perfil', label: 'Perfil y Configuración', icon: Settings, roles: ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'] },
+    { path: '/sistemas', label: 'Operación de Sistemas', icon: Wrench, roles: ['SISTEMAS'] },
+    { path: '/perfil', label: 'Perfil y Configuración', icon: Settings, roles: ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS'] },
   ];
 
   const visibleNav = navItems.filter((item) => item.roles.includes(currentUser.role));
