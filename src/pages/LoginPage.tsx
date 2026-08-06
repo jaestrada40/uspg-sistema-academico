@@ -9,7 +9,7 @@ export const LoginPage: React.FC = () => {
   const { login, verifyMfa, institution } = useApp();
   const navigate = useNavigate();
 
-  const [username, setUsername] = useState('cmendoza@administrador.uspg.edu.gt');
+  const [username, setUsername] = useState('admin@administrador.uspg.edu.gt');
   const [password, setPassword] = useState('Demo123!');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -66,21 +66,17 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center items-center p-4">
-      {/* Container */}
-      <div className="w-full max-w-md bg-white rounded-2xl border border-[#E2E8F0] shadow-xl overflow-hidden">
-        {/* Header Branding */}
-        <div className="bg-[#1E293B] border-b-4 border-[#800020] text-white px-8 py-7 text-center relative">
-          <InstitutionLogo
-            className="mx-auto h-32 w-32 text-white text-lg mb-3"
-            imageClassName="h-full w-full object-contain drop-shadow-[0_4px_10px_rgba(0,0,0,0.35)]"
-          />
-          <h1 className="text-xl font-bold tracking-tight uppercase">{institution.name}</h1>
-          <p className="text-xs text-white/80 mt-1 font-medium">Sistema de Gestión Académica Universitaria</p>
-        </div>
-
-        {/* Form area */}
-        <div className="p-8">
+    <div className="min-h-screen bg-[#F8FAFC] p-0 md:p-6">
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl overflow-hidden bg-white shadow-2xl md:min-h-[680px] md:rounded-3xl">
+        <section className="flex w-full flex-col justify-center px-6 py-10 sm:px-12 md:w-[46%] lg:px-16">
+          <div className="mx-auto w-full max-w-sm">
+            <div className="mb-8 flex items-center gap-3 md:hidden">
+              <InstitutionLogo className="flex h-11 w-11 rounded-xl bg-[#800020] text-sm text-white shadow-lg" />
+              <div>
+                <p className="text-sm font-extrabold text-[#333333]">{institution.shortName}</p>
+                <p className="text-[11px] text-[#64748B]">Gestión Académica Universitaria</p>
+              </div>
+            </div>
           <h2 className="text-lg font-bold text-[#333333] mb-1">{mfaChallengeToken ? 'Verificación en dos pasos' : 'Iniciar Sesión'}</h2>
           <p className="text-xs text-[#64748B] mb-6">{mfaChallengeToken ? 'Ingresa el código de 6 dígitos o uno de tus códigos de recuperación.' : 'Ingresa tus credenciales para acceder a la plataforma.'}</p>
 
@@ -179,11 +175,26 @@ export const LoginPage: React.FC = () => {
             {mfaChallengeToken && <button type="button" onClick={() => { setMfaChallengeToken(''); setMfaCode(''); setErrorMessage(''); }} className="w-full text-xs font-semibold text-[#64748B] hover:text-[#800020]">Volver al inicio de sesión</button>}
           </form>
 
-        </div>
+          </div>
+          <p className="mt-10 text-center text-[10px] text-[#7D8490]">© 2026 {institution.name}. Todos los derechos reservados.</p>
+        </section>
 
-        <div className="bg-[#F8FAFC] border-t border-[#E2E8F0] px-8 py-3 text-center text-[10px] text-[#7D8490]">
-          © 2026 {institution.name}. Todos los derechos reservados.
-        </div>
+        <aside className="relative hidden w-[54%] overflow-hidden bg-[#800020] p-12 text-white md:flex md:flex-col md:justify-center">
+          <div className="absolute -left-28 -top-40 h-[430px] w-[430px] rounded-full border-[72px] border-white/[0.07]" />
+          <div className="absolute -bottom-52 -right-28 h-[500px] w-[500px] rounded-full border-[78px] border-white/[0.08]" />
+          <div className="absolute right-12 top-10 grid grid-cols-6 gap-3 opacity-25">
+            {Array.from({ length: 36 }).map((_, index) => <span key={index} className="h-1 w-1 rounded-full bg-white" />)}
+          </div>
+          <div className="relative z-10 max-w-md">
+            <InstitutionLogo
+              className="mb-10 h-28 w-28 rounded-2xl bg-white/10 p-3 text-xl text-white ring-1 ring-white/25"
+              imageClassName="h-full w-full object-contain drop-shadow-[0_6px_16px_rgba(0,0,0,0.25)]"
+            />
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.22em] text-white/70">{institution.name}</p>
+            <h1 className="text-4xl font-extrabold leading-tight tracking-tight">Sistema de Gestión Académica</h1>
+            <p className="mt-5 max-w-sm text-base leading-relaxed text-white/75">Accede a tu información académica, cursos, servicios y gestiones universitarias en un solo lugar.</p>
+          </div>
+        </aside>
       </div>
 
       {/* Recover Password Modal */}
