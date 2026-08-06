@@ -346,7 +346,7 @@ export const CareersPage: React.FC = () => {
                 <label className="block text-xs font-bold text-[#333333] mb-1">Modalidad</label>
                 <select
                   value={formData.modality}
-                  onChange={(e) => setFormData({ ...formData, modality: e.target.value as any })}
+                  onChange={(e) => setFormData({ ...formData, modality: e.target.value as 'Presencial' | 'Virtual' | 'Híbrida' })}
                   className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333]"
                 >
                   <option value="Presencial">Presencial</option>

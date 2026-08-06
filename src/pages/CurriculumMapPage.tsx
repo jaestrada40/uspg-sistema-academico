@@ -3,6 +3,7 @@ import { BookOpenCheck, CheckCircle2, CircleDashed, Clock3, GraduationCap, LockK
 import { PageHeader } from '../components/common/PageHeader';
 import { RoleGuard } from '../components/common/RoleGuard';
 import { useApp } from '../context/AppContext';
+import { apiGet } from '../services/api';
 import { StudentPicker } from '../components/common/StudentPicker';
 
 interface MapCourse { code: string; name: string; credits: number; semester: number; status: 'APROBADO' | 'EN_CURSO' | 'DISPONIBLE' | 'BLOQUEADO'; prerequisites: { code: string; name: string; completed: boolean }[]; missingPrerequisites: { code: string; name: string }[]; unlocks: { code: string; name: string; semester: number }[]; }
@@ -15,7 +16,7 @@ export const CurriculumMapPage: React.FC = () => {
   const [studentCarnet, setStudentCarnet] = useState(currentUser.role === 'ESTUDIANTE' ? currentUser.carnetOrCode || '' : students[0]?.carnet || '');
   const [data, setData] = useState<MapData | null>(null);
   const [loading, setLoading] = useState(true);
-  const load = useCallback(async () => { if (!studentCarnet) return; setLoading(true); try { const query = currentUser.role === 'ADMIN' ? `?studentCarnet=${encodeURIComponent(studentCarnet)}` : ''; const response = await fetch(`/api/curriculum-map${query}`); const result = await response.json(); if (!response.ok) throw new Error(result.message); setData(result); } catch (error) { showToast(error instanceof Error ? error.message : 'No se pudo cargar la malla', 'error'); } finally { setLoading(false); } }, [currentUser.role, studentCarnet]);
+  const load = useCallback(async () => { if (!studentCarnet) return; setLoading(true); try { const query = currentUser.role === 'ADMIN' ? `?studentCarnet=${encodeURIComponent(studentCarnet)}` : ''; setData(await apiGet<MapData>(`/api/curriculum-map${query}`)); } catch (error) { showToast(error instanceof Error ? error.message : 'No se pudo cargar la malla', 'error'); } finally { setLoading(false); } }, [currentUser.role, studentCarnet]);
   useEffect(() => { load(); }, [load]);
   return <RoleGuard allowedRoles={['ADMIN', 'ESTUDIANTE']}><div className="space-y-6"><PageHeader title="Malla Estudiantil" description="Avance por semestre, créditos y prerrequisitos del pensum asignado" breadcrumbs={[{ label: 'Inicio', href: '/dashboard' }, { label: 'Malla Estudiantil', active: true }]} />
     {currentUser.role === 'ADMIN' && <div className="rounded-xl border border-[#E2E8F0] bg-white p-5"><StudentPicker students={students} value={studentCarnet} onChange={setStudentCarnet} label="Estudiante" /></div>}

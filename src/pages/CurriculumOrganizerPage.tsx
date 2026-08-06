@@ -3,6 +3,7 @@ import { AlertTriangle, BookOpenCheck, GripVertical, Save } from 'lucide-react';
 import { PageHeader } from '../components/common/PageHeader';
 import { RoleGuard } from '../components/common/RoleGuard';
 import { useApp } from '../context/AppContext';
+import { apiGet } from '../services/api';
 
 interface OrganizerCourse { code: string; name: string; credits: number; semester: number; prerequisites: { code: string; name: string }[]; }
 interface OrganizerPlan { id: string; code: string; name: string; version: string; careerId: string; status: string; durationSemesters: number; totalCredits: number; courses: OrganizerCourse[]; }
@@ -18,7 +19,7 @@ export const CurriculumOrganizerPage: React.FC = () => {
   const [dragging, setDragging] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => { const response = await fetch('/api/curriculum-plans/organizer'), result = await response.json(); if (!response.ok) return showToast(result.message, 'error'); setData(result); const firstCareer = result.careers[0]?.code || ''; setCareerId((current) => current || firstCareer); }, [showToast]);
+  const load = useCallback(async () => { apiGet<OrganizerData>('/api/curriculum-plans/organizer').then((result) => { setData(result); const firstCareer = result.careers[0]?.code || ''; setCareerId((current) => current || firstCareer); }).catch(() => showToast('No se pudo cargar el organizador de pensum', 'error')); }, [showToast]);
   useEffect(() => { load(); }, [load]);
   const careerPlans = useMemo(() => data.plans.filter((plan) => plan.careerId === careerId), [careerId, data.plans]);
   useEffect(() => { if (!careerPlans.some((plan) => plan.id === planId)) setPlanId(careerPlans[0]?.id || ''); }, [careerPlans, planId]);

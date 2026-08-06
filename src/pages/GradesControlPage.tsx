@@ -11,6 +11,7 @@ import {
   History,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { apiGet } from '../services/api';
 import { GradeRecord } from '../types';
 import { PageHeader } from '../components/common/PageHeader';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -47,8 +48,7 @@ export const GradesControlPage: React.FC = () => {
 
   useEffect(() => {
     if (!selectedSectionId) return;
-    fetch(`/api/grades/sections/${encodeURIComponent(selectedSectionId)}/history`)
-      .then((response) => response.ok ? response.json() : [])
+    apiGet<Array<{ id: string; action: string; actorName: string; createdAt: string; details?: string }>>(`/api/grades/sections/${encodeURIComponent(selectedSectionId)}/history`)
       .then(setHistory)
       .catch(() => setHistory([]));
   }, [selectedSectionId, grades]);

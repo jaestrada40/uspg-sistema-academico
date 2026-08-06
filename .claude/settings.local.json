@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($pkg = Get-Content \"E:\\\\uspg-sistema-academico\\\\package.json\" | ConvertFrom-Json; $pkg.scripts.PSObject.Properties | Where-Object { $_.Name -match 'postgres|db:|seed|migrate' } | ForEach-Object { \"$\\($_.Name\\): $\\($_.Value\\)\" })",
+      "PowerShell(Get-Command *)",
+      "PowerShell(Start-Sleep -Seconds 8; Invoke-RestMethod -Uri \"http://localhost:3000/api/health\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:3000/api/health\" -TimeoutSec 5 -ErrorAction SilentlyContinue)"
+    ]
+  }
+}

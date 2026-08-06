@@ -110,7 +110,7 @@ export const CoursesPage: React.FC = () => {
       prerequisiteCodes: formData.prerequisiteCodes || [],
       theoreticalHours: formData.theoreticalHours || 3,
       practicalHours: formData.practicalHours || 0,
-      area: formData.area as any || 'Básica',
+      area: (formData.area as 'Básica' | 'Especialidad' | 'Humanística' | 'Investigación' | 'Práctica') || 'Básica',
       status: 'Activo',
     };
 

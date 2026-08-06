@@ -25,11 +25,11 @@ export const SchedulesPage: React.FC = () => {
   const [teacherFilter, setTeacherFilter] = useState('ALL');
 
   const [showAddClassroomModal, setShowAddClassroomModal] = useState(false);
-  const [newClassroom, setNewClassroom] = useState({
+  const [newClassroom, setNewClassroom] = useState<{ code: string; building: string; capacity: number; type: 'Teórica' | 'Laboratorio' | 'Auditorio' | 'Virtual' }>({
     code: '',
     building: 'Edificio Central USPG',
     capacity: 35,
-    type: 'Teórica' as const,
+    type: 'Teórica',
   });
 
   const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -291,7 +291,7 @@ export const SchedulesPage: React.FC = () => {
                 <label className="block font-bold text-[#333333] mb-1">Tipo de Instalación</label>
                 <select
                   value={newClassroom.type}
-                  onChange={(e) => setNewClassroom({ ...newClassroom, type: e.target.value as any })}
+                  onChange={(e) => setNewClassroom({ ...newClassroom, type: e.target.value as 'Teórica' | 'Laboratorio' | 'Auditorio' | 'Virtual' })}
                   className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium"
                 >
                   <option value="Teórica">Teórica</option>

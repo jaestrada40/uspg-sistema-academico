@@ -13,6 +13,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { apiGet } from '../services/api';
 import { Student } from '../types';
 import { PageHeader } from '../components/common/PageHeader';
 import { SearchInput } from '../components/common/SearchInput';
@@ -59,12 +60,12 @@ export const StudentsPage: React.FC = () => {
   const [academicStructure, setAcademicStructure] = useState<{ campuses: { id: string; code: string; name: string; status: string }[]; plans: { id: string; code: string; name: string; version: string; careerId: string; status: string }[] }>({ campuses: [], plans: [] });
 
   useEffect(() => {
-    fetch('/api/academic-structure').then(async (response) => {
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message);
-      setAcademicStructure({ campuses: result.campuses.filter((campus: { status: string }) => campus.status === 'Activo'), plans: result.plans.filter((plan: { status: string }) => plan.status === 'Activo') });
-      setFormData((current) => ({ ...current, campusId: current.campusId || result.campuses.find((campus: { status: string }) => campus.status === 'Activo')?.id, planId: current.planId || result.plans.find((plan: { careerId: string; status: string }) => plan.careerId === current.careerId && plan.status === 'Activo')?.id }));
-    }).catch(() => showToast('No se pudo cargar la estructura académica', 'error'));
+    apiGet<{ campuses: { id: string; code: string; name: string; status: string }[]; plans: { id: string; code: string; name: string; version: string; careerId: string; status: string }[] }>('/api/academic-structure')
+      .then((result) => {
+        setAcademicStructure({ campuses: result.campuses.filter((campus) => campus.status === 'Activo'), plans: result.plans.filter((plan) => plan.status === 'Activo') });
+        setFormData((current) => ({ ...current, campusId: current.campusId || result.campuses.find((campus) => campus.status === 'Activo')?.id, planId: current.planId || result.plans.find((plan) => plan.careerId === current.careerId && plan.status === 'Activo')?.id }));
+      })
+      .catch(() => showToast('No se pudo cargar la estructura académica', 'error'));
   }, [showToast]);
 
   // Filtered Students
@@ -114,7 +115,7 @@ export const StudentsPage: React.FC = () => {
       careerId: formData.careerId!,
       careerName: selectedCareer?.name || 'Carrera USPG',
       entryCycle: formData.entryCycle || '2026-1',
-      jornada: (formData.jornada as any) || 'Matutina',
+      jornada: (formData.jornada as 'Matutina' | 'Vespertina' | 'Nocturna' | 'Sabatina') || 'Matutina',
       status: 'Activo',
       gpa: 85.0,
       creditsEarned: 0,
@@ -461,7 +462,7 @@ export const StudentsPage: React.FC = () => {
                 <label className="block text-xs font-bold text-[#333333] mb-1">Jornada</label>
                 <select
                   value={formData.jornada}
-                  onChange={(e) => setFormData({ ...formData, jornada: e.target.value as any })}
+                  onChange={(e) => setFormData({ ...formData, jornada: e.target.value as 'Matutina' | 'Vespertina' | 'Nocturna' | 'Sabatina' })}
                   className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333]"
                 >
                   <option value="Matutina">Matutina</option>
@@ -546,7 +547,7 @@ export const StudentsPage: React.FC = () => {
                 <label className="block text-xs font-bold text-[#333333] mb-1">Estado</label>
                 <select
                   value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as 'Activo' | 'Inactivo' | 'Egresado' | 'Suspendido' })}
                   className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333]"
                 >
                   <option value="Activo">Activo</option>

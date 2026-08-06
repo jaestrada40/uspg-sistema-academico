@@ -420,7 +420,7 @@ export const SectionsPage: React.FC = () => {
                 <label className="block font-bold text-[#333333] mb-1">Modalidad</label>
                 <select
                   value={formData.modality}
-                  onChange={(e) => setFormData({ ...formData, modality: e.target.value as any })}
+                  onChange={(e) => setFormData({ ...formData, modality: e.target.value as 'Presencial' | 'Virtual' | 'Híbrida' })}
                   className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium"
                 >
                   <option value="Presencial">Presencial</option>
