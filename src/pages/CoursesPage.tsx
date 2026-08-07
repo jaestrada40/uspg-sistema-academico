@@ -299,14 +299,14 @@ export const CoursesPage: React.FC = () => {
                           <span className="text-[11px] text-[#7D8490] italic">Ninguno</span>
                         ) : (
                           <div className="flex flex-wrap gap-1">
-                            {course.prerequisiteCodes.map((req) => (
-                              <span
-                                key={req}
-                                className="rounded-md bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-[#333333]"
-                              >
-                                {req}
-                              </span>
-                            ))}
+                            {course.prerequisiteCodes.map((req) => {
+                              const reqName = courses.find((c) => c.code === req)?.name;
+                              return (
+                                <span key={req} title={reqName} className="rounded-md bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-[#333333] cursor-help">
+                                  {req}
+                                </span>
+                              );
+                            })}
                           </div>
                         )}
                       </td>
@@ -483,18 +483,23 @@ export const CoursesPage: React.FC = () => {
                 {selectedCourse.prerequisiteCodes.length === 0 ? (
                   <span className="text-[#2F855A] font-bold">Curso inicial (Sin prerrequisitos)</span>
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <div className="flex gap-1">
-                      {selectedCourse.prerequisiteCodes.map((req) => (
-                        <span key={req} className="rounded-lg bg-[#800020]/10 px-2.5 py-1 font-bold text-[#800020]">
-                          {req}
-                        </span>
-                      ))}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap gap-2">
+                      {selectedCourse.prerequisiteCodes.map((req) => {
+                        const reqCourse = courses.find((c) => c.code === req);
+                        return (
+                          <div key={req} className="flex flex-col items-center gap-1">
+                            <span className="rounded-lg bg-[#800020]/10 px-2.5 py-1 font-bold text-[#800020]">{req}</span>
+                            {reqCourse && <span className="max-w-[120px] text-center text-[10px] text-[#64748B] leading-tight">{reqCourse.name}</span>}
+                          </div>
+                        );
+                      })}
                     </div>
-                    <span className="text-[#64748B] font-bold">➜</span>
-                    <span className="rounded-lg bg-[#800020] px-3 py-1 font-bold text-white shadow-xs">
-                      {selectedCourse.code}
-                    </span>
+                    <span className="text-[#64748B] font-bold text-lg">➜</span>
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="rounded-lg bg-[#800020] px-3 py-1 font-bold text-white shadow-xs">{selectedCourse.code}</span>
+                      <span className="max-w-[120px] text-center text-[10px] text-[#64748B] leading-tight">{selectedCourse.name}</span>
+                    </div>
                   </div>
                 )}
               </div>
