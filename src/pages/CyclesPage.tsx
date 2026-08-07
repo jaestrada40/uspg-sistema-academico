@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Calendar,
   Plus,
@@ -16,7 +16,15 @@ import { ConfirmationDialog } from '../components/common/ConfirmationDialog';
 import { RoleGuard } from '../components/common/RoleGuard';
 
 export const CyclesPage: React.FC = () => {
-  const { cycles, addCycle, updateCycle, setCurrentCycleId } = useApp();
+  const { currentUser, cycles, addCycle, updateCycle, setCurrentCycleId } = useApp();
+  const [campuses, setCampuses] = useState<{ id: string; name: string; status: string }[]>([]);
+  useEffect(() => {
+    if (currentUser.role !== 'ADMIN') return;
+    fetch('/api/academic-structure')
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((result) => setCampuses(result.campuses.filter((campus: { status: string }) => campus.status === 'Activo')))
+      .catch(() => undefined);
+  }, [currentUser.role]);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -33,6 +41,7 @@ export const CyclesPage: React.FC = () => {
     gradeSubmissionDeadline: '2026-12-08',
     status: 'Planificado',
     isCurrent: false,
+    campusId: '',
   });
 
   const handleCreateCycle = async (e: React.FormEvent) => {
@@ -195,6 +204,21 @@ export const CyclesPage: React.FC = () => {
                   placeholder="ej. Primer Semestre 2027"
                   className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium"
                 />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#333333] mb-1">Campus</label>
+                <select
+                  required
+                  value={formData.campusId}
+                  onChange={(e) => setFormData({ ...formData, campusId: e.target.value })}
+                  className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium"
+                >
+                  <option value="">Selecciona campus</option>
+                  {campuses.map((campus) => (
+                    <option key={campus.id} value={campus.id}>{campus.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
