@@ -769,6 +769,77 @@ export function registerNotificationRoutes(
       // Resumen general
       return void reply(`Resumen administrativo:\n• Ciclo activo: ${currentCycle?.name || 'Ninguno'}\n• Estudiantes: ${students} (en mora: ${inDebtStudents})\n• Docentes: ${teachers}\n• Carreras: ${careers} · Cursos: ${courses}\n• Secciones: ${sections} (llenas: ${fullSections})\n• Expedientes pendientes: ${pendingDocuments}\n• Cargos pendientes/vencidos: ${pendingCharges}\n• Parqueo: ${vehiclesInside}/${parkingConfig?.totalCapacity || 0} dentro\n• Biblioteca: ${activeLoans} préstamos activos\n• Solicitudes pendientes: ${pendingRequests}`);
     }
+    if (user.role === 'EVENTOS') {
+      const now = new Date();
+      const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
+      const [
+        activeEvents, plannedEvents, finishedEvents,
+        upcomingList, totalGuests, pendingGuests,
+        config, insideNow,
+      ] = await Promise.all([
+        prisma.parkingEvent.count({ where: { status: 'EN_CURSO' } }),
+        prisma.parkingEvent.count({ where: { status: 'PLANIFICADO' } }),
+        prisma.parkingEvent.count({ where: { status: 'FINALIZADO' } }),
+        prisma.parkingEvent.findMany({
+          where: { status: { in: ['PLANIFICADO', 'EN_CURSO'] } },
+          include: { guests: { select: { id: true, status: true } } },
+          orderBy: { startsAt: 'asc' },
+          take: 10,
+        }),
+        prisma.parkingEventGuest.count(),
+        prisma.parkingEventGuest.count({ where: { status: 'AUTORIZADO' } }),
+        prisma.parkingConfig.findUnique({ where: { id: 1 } }),
+        prisma.parkingVisit.count({ where: { status: 'DENTRO' } }),
+      ]);
+
+      const available = Math.max(0, (config?.totalCapacity ?? 0) - insideNow);
+
+      // Resumen de eventos
+      if (/cu[aá]ntos.*evento|evento.*cu[aá]ntos|total.*evento/.test(question)) {
+        return void reply(`Eventos — En curso: ${activeEvents} · Planificados: ${plannedEvents} · Finalizados: ${finishedEvents}.`);
+      }
+
+      // Eventos en curso
+      if (/en curso|activo.*evento|evento.*activo/.test(question)) {
+        if (!activeEvents) return void reply('No hay eventos en curso actualmente.');
+        const active = upcomingList.filter((e) => e.status === 'EN_CURSO');
+        return void reply(`Eventos en curso (${activeEvents}):\n${active.map((e) => `• ${e.name}\n  Organizador: ${e.organizer}\n  Hasta: ${e.endsAt.toISOString().slice(0,10)}\n  Espacios reservados: ${e.reservedSpaces} · Invitados: ${e.guests.length}`).join('\n')}`);
+      }
+
+      // Eventos planificados / próximos
+      if (/planificado|pr[oó]ximo|pr[oó]xim/.test(question)) {
+        const planned = upcomingList.filter((e) => e.status === 'PLANIFICADO');
+        if (!planned.length) return void reply('No hay eventos planificados próximamente.');
+        return void reply(`Próximos eventos planificados (${plannedEvents}):\n${planned.map((e) => `• ${e.name}\n  Organizador: ${e.organizer}\n  ${e.startsAt.toISOString().slice(0,10)} al ${e.endsAt.toISOString().slice(0,10)}\n  Espacios reservados: ${e.reservedSpaces} · Invitados registrados: ${e.guests.length}`).join('\n')}`);
+      }
+
+      // Detalle de evento específico
+      if (/detalle|informaci[oó]n.*evento|evento.*informaci[oó]n/.test(question)) {
+        const nameMatch = question.match(/(?:detalle|sobre|evento)\s+(?:de\s+|del\s+)?(.+)/i);
+        const search = nameMatch?.[1]?.trim() || '';
+        if (!search) return void reply('Indica el nombre del evento que deseas consultar.');
+        const found = await prisma.parkingEvent.findFirst({
+          where: { name: { contains: search } },
+          include: { guests: { select: { guestName: true, plate: true, status: true } } },
+        });
+        if (!found) return void reply(`No encontré evento con "${search}".`);
+        return void reply(`Evento: ${found.name}\n• Organizador: ${found.organizer}\n• Estado: ${found.status}\n• Fecha: ${found.startsAt.toISOString().slice(0,10)} al ${found.endsAt.toISOString().slice(0,10)}\n• Espacios reservados: ${found.reservedSpaces}\n• Invitados: ${found.guests.length} (${found.guests.filter((g) => g.status === 'AUTORIZADO').length} autorizados)`);
+      }
+
+      // Invitados
+      if (/invitado/.test(question)) {
+        return void reply(`Invitados registrados en eventos — Total: ${totalGuests} · Autorizados/pendientes: ${pendingGuests}.`);
+      }
+
+      // Disponibilidad del parqueo para nuevos eventos
+      if (/disponib|espacio|capacidad|parqueo/.test(question)) {
+        return void reply(`Parqueo ahora — Dentro: ${insideNow}/${config?.totalCapacity ?? 0} · Espacios disponibles: ${available}. Espacios reservados por eventos activos: ${upcomingList.filter((e) => e.status === 'EN_CURSO').reduce((s, e) => s + e.reservedSpaces, 0)}.`);
+      }
+
+      // Resumen general
+      return void reply(`Gestión de eventos:\n• En curso: ${activeEvents}\n• Planificados: ${plannedEvents}\n• Finalizados: ${finishedEvents}\n• Total invitados registrados: ${totalGuests}\n• Parqueo disponible ahora: ${available}/${config?.totalCapacity ?? 0} espacios`);
+    }
+
     if (user.role === 'PARQUEO') {
       const now = new Date();
       const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
