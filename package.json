@@ -11,7 +11,7 @@
     "build": "vite build",
     "preview": "NODE_ENV=production tsx server.ts",
     "start": "NODE_ENV=production tsx server.ts",
-    "start:production": "npm run production:check && npm run db:postgres:migrate:deploy && npm run start",
+    "start:production": "npm run production:check && npm run db:postgres:migrate:deploy && npm run db:seed && npm run start",
     "db:migrate": "prisma migrate dev",
     "db:setup": "node scripts/setup-fresh-database.mjs && prisma generate",
     "db:setup:postgres": "npm run db:postgres:prepare && node scripts/setup-fresh-database.mjs --postgres && prisma generate --config prisma.postgresql.config.ts",
