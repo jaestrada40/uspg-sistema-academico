@@ -29,7 +29,7 @@ export const CoursesPage: React.FC = () => {
   const [areaFilter, setAreaFilter] = useState('ALL');
 
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 6;
+  const [pageSize, setPageSize] = useState(20);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -351,6 +351,8 @@ export const CoursesPage: React.FC = () => {
             totalItems={filteredCourses.length}
             pageSize={pageSize}
             onPageChange={setCurrentPage}
+            pageSizeOptions={[10, 20, 50, 100]}
+            onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
           />
         </div>
 

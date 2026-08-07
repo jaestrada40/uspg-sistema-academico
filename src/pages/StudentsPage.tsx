@@ -33,7 +33,7 @@ export const StudentsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('ALL');
 
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 5;
+  const [pageSize, setPageSize] = useState(20);
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -366,6 +366,8 @@ export const StudentsPage: React.FC = () => {
             totalItems={filteredStudents.length}
             pageSize={pageSize}
             onPageChange={setCurrentPage}
+            pageSizeOptions={[10, 20, 50, 100]}
+            onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
           />
         </div>
 
