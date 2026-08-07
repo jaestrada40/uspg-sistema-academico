@@ -49,6 +49,7 @@ export interface Teacher {
   assignedSectionIds: string[];
   status: 'Activo' | 'Inactivo';
   maxHoursPerWeek: number;
+  campusId: string;
 }
 
 export interface Career {
@@ -89,6 +90,8 @@ export interface AcademicCycle {
   gradeSubmissionDeadline: string;
   status: 'Planificado' | 'Inscripciones abiertas' | 'En curso' | 'Finalizado';
   isCurrent: boolean;
+  campusId: string;
+  campusName?: string;
 }
 
 export interface Section {
@@ -119,6 +122,7 @@ export interface Classroom {
   status: 'Disponible' | 'Mantenimiento' | 'Ocupada';
   hasProjector: boolean;
   hasAirConditioning: boolean;
+  campusId: string;
 }
 
 export interface Enrollment {
