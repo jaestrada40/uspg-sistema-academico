@@ -769,6 +769,75 @@ export function registerNotificationRoutes(
       // Resumen general
       return void reply(`Resumen administrativo:\n• Ciclo activo: ${currentCycle?.name || 'Ninguno'}\n• Estudiantes: ${students} (en mora: ${inDebtStudents})\n• Docentes: ${teachers}\n• Carreras: ${careers} · Cursos: ${courses}\n• Secciones: ${sections} (llenas: ${fullSections})\n• Expedientes pendientes: ${pendingDocuments}\n• Cargos pendientes/vencidos: ${pendingCharges}\n• Parqueo: ${vehiclesInside}/${parkingConfig?.totalCapacity || 0} dentro\n• Biblioteca: ${activeLoans} préstamos activos\n• Solicitudes pendientes: ${pendingRequests}`);
     }
+    if (user.role === 'SISTEMAS') {
+      const [
+        activeUsers, inactiveUsers, usersByRole, mfaUsers,
+        activeSessions, pendingResets, tempPasswordUsers,
+        auditLogs, unreadNotifications,
+        virtualClassrooms, vcErrors, vcPending,
+        cycles, campuses, assistantConversations,
+        students, teachers, courses, sections,
+      ] = await Promise.all([
+        prisma.user.count({ where: { active: true } }),
+        prisma.user.count({ where: { active: false } }),
+        prisma.user.groupBy({ by: ['role'], _count: { _all: true }, where: { active: true } }),
+        prisma.user.count({ where: { mfaEnabled: true, active: true } }),
+        prisma.session.count({ where: { expiresAt: { gt: new Date() } } }),
+        prisma.passwordResetToken.count({ where: { expiresAt: { gt: new Date() } } }),
+        prisma.user.count({ where: { mustChangePassword: true, active: true } }),
+        prisma.auditLog.count(),
+        prisma.appNotification.count({ where: { isRead: false } }),
+        prisma.virtualClassroom.count(),
+        prisma.virtualClassroom.count({ where: { syncStatus: { contains: 'ERROR' } } }),
+        prisma.virtualClassroom.count({ where: { syncStatus: 'PENDING_CONFIGURATION' } }),
+        prisma.academicCycle.count(),
+        prisma.campus.count({ where: { status: 'Activo' } }),
+        prisma.assistantConversation.count(),
+        prisma.student.count(),
+        prisma.teacher.count(),
+        prisma.course.count(),
+        prisma.section.count(),
+      ]);
+
+      const totalActive = (usersByRole as { role: string; _count: { _all: number } }[]).reduce((s, r) => s + r._count._all, 0);
+      const noMfa = totalActive - mfaUsers;
+
+      // Usuarios generales
+      if (/usuario.*rol|rol.*usuario|desglose|distribuc/.test(question)) {
+        const lines = (usersByRole as { role: string; _count: { _all: number } }[]).map((r) => `• ${r.role}: ${r._count._all}`).join('\n');
+        return void reply(`Usuarios activos por rol:\n${lines}\n\nTotal activos: ${activeUsers} · Inactivos: ${inactiveUsers}`);
+      }
+      if (/inactiv/.test(question)) return void reply(`Usuarios inactivos: ${inactiveUsers}. Usuarios activos: ${activeUsers}.`);
+      if (/cu[aá]nt.*usuario|usuario.*cu[aá]nt|total.*usuario/.test(question)) return void reply(`Usuarios activos: ${activeUsers} · Inactivos: ${inactiveUsers} · Total: ${activeUsers + inactiveUsers}.`);
+
+      // Seguridad
+      if (/mfa|doble factor|autenticaci[oó]n/.test(question)) return void reply(`MFA — Habilitado: ${mfaUsers} · Sin MFA: ${noMfa} · Total activos: ${totalActive}.`);
+      if (/sesi[oó]n.*activ|activ.*sesi[oó]n|cu[aá]ntas.*sesi/.test(question)) return void reply(`Sesiones activas actualmente: ${activeSessions}.`);
+      if (/reset.*contraseña|contraseña.*reset|token.*reset|recuper.*contraseña/.test(question)) return void reply(`Tokens de reset de contraseña vigentes: ${pendingResets}.`);
+      if (/contraseña temporal|temporal.*contraseña|must.*change|cambiar.*contraseña/.test(question)) return void reply(`Usuarios con contraseña temporal sin cambiar: ${tempPasswordUsers}.`);
+      if (/seguridad|acceso/.test(question)) return void reply(`Resumen de seguridad:\n• Sesiones activas: ${activeSessions}\n• Sin MFA: ${noMfa}\n• Contraseña temporal pendiente: ${tempPasswordUsers}\n• Tokens de reset vigentes: ${pendingResets}`);
+
+      // Aulas virtuales
+      if (/error.*aula|aula.*error|sync.*error|fallo.*aula/.test(question)) return void reply(`Aulas virtuales con error de sincronización: ${vcErrors} de ${virtualClassrooms} total.`);
+      if (/pendiente.*aula|aula.*pendiente|sin configurar/.test(question)) return void reply(`Aulas virtuales pendientes de configurar: ${vcPending} de ${virtualClassrooms} total.`);
+      if (/aula virtual|classroom|sincron/.test(question)) return void reply(`Aulas virtuales — Total: ${virtualClassrooms} · Con error: ${vcErrors} · Pendientes de configurar: ${vcPending} · Activas: ${virtualClassrooms - vcErrors - vcPending}.`);
+
+      // Logs y notificaciones
+      if (/log|audit[oó]ria|registro.*actividad/.test(question)) return void reply(`Registros de auditoría en el sistema: ${auditLogs.toLocaleString()}.`);
+      if (/notificaci/.test(question)) return void reply(`Notificaciones no leídas en el sistema: ${unreadNotifications}.`);
+
+      // Asistente / conversaciones
+      if (/asistente|conversaci[oó]n|chatbot/.test(question)) return void reply(`Conversaciones generadas con el asistente: ${assistantConversations.toLocaleString()}.`);
+
+      // Datos generales del sistema
+      if (/ciclo/.test(question)) return void reply(`Ciclos académicos registrados: ${cycles}.`);
+      if (/campus|sede/.test(question)) return void reply(`Campus activos: ${campuses}.`);
+      if (/base de datos|datos|registro/.test(question)) return void reply(`Registros principales:\n• Estudiantes: ${students}\n• Docentes: ${teachers}\n• Cursos: ${courses}\n• Secciones: ${sections}\n• Logs de auditoría: ${auditLogs.toLocaleString()}\n• Conversaciones asistente: ${assistantConversations}`);
+
+      // Resumen general
+      return void reply(`Resumen del sistema:\n• Usuarios activos: ${activeUsers} (${noMfa} sin MFA)\n• Sesiones activas: ${activeSessions}\n• Contraseñas temporales pendientes: ${tempPasswordUsers}\n• Aulas virtuales con error: ${vcErrors}/${virtualClassrooms}\n• Logs de auditoría: ${auditLogs.toLocaleString()}\n• Notificaciones no leídas: ${unreadNotifications}\n• Campus activos: ${campuses} · Ciclos: ${cycles}`);
+    }
+
     return void reply(`Hola ${user.name}. Puedo orientarte sobre los módulos disponibles para tu rol.`);
   });
 }
