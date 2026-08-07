@@ -78,6 +78,7 @@ export const INITIAL_CYCLES: AcademicCycle[] = [
     gradeSubmissionDeadline: '2026-06-25',
     status: 'Inscripciones abiertas',
     isCurrent: true,
+    campusId: 'CAMPUS-CENTRAL',
   },
   {
     id: 'CYC-2025-2',
@@ -90,6 +91,7 @@ export const INITIAL_CYCLES: AcademicCycle[] = [
     gradeSubmissionDeadline: '2025-12-10',
     status: 'Finalizado',
     isCurrent: false,
+    campusId: 'CAMPUS-CENTRAL',
   },
   {
     id: 'CYC-2025-1',
@@ -102,6 +104,7 @@ export const INITIAL_CYCLES: AcademicCycle[] = [
     gradeSubmissionDeadline: '2025-06-25',
     status: 'Finalizado',
     isCurrent: false,
+    campusId: 'CAMPUS-CENTRAL',
   },
   {
     id: 'CYC-2026-2',
@@ -114,6 +117,7 @@ export const INITIAL_CYCLES: AcademicCycle[] = [
     gradeSubmissionDeadline: '2026-12-08',
     status: 'Planificado',
     isCurrent: false,
+    campusId: 'CAMPUS-CENTRAL',
   },
 ];
 
@@ -302,6 +306,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     assignedSectionIds: ['SEC-INF-201-A', 'SEC-INF-301-A'],
     status: 'Activo',
     maxHoursPerWeek: 20,
+    campusId: 'CAMPUS-CENTRAL',
   },
   {
     code: 'DOC-1088',
@@ -313,6 +318,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     assignedSectionIds: ['SEC-ADM-101-A', 'SEC-ADM-201-A'],
     status: 'Activo',
     maxHoursPerWeek: 16,
+    campusId: 'CAMPUS-CENTRAL',
   },
   {
     code: 'DOC-1102',
@@ -324,6 +330,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     assignedSectionIds: ['SEC-INF-101-A', 'SEC-INF-401-A'],
     status: 'Activo',
     maxHoursPerWeek: 24,
+    campusId: 'CAMPUS-CENTRAL',
   },
   {
     code: 'DOC-1215',
@@ -335,6 +342,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     assignedSectionIds: ['SEC-DER-101-A'],
     status: 'Activo',
     maxHoursPerWeek: 15,
+    campusId: 'CAMPUS-CENTRAL',
   },
 ];
 
@@ -348,6 +356,7 @@ export const INITIAL_CLASSROOMS: Classroom[] = [
     status: 'Disponible',
     hasProjector: true,
     hasAirConditioning: true,
+    campusId: 'CAMPUS-CENTRAL',
   },
   {
     id: 'CLR-LAB1',
@@ -358,6 +367,7 @@ export const INITIAL_CLASSROOMS: Classroom[] = [
     status: 'Disponible',
     hasProjector: true,
     hasAirConditioning: true,
+    campusId: 'CAMPUS-CENTRAL',
   },
   {
     id: 'CLR-AUD',
@@ -368,6 +378,7 @@ export const INITIAL_CLASSROOMS: Classroom[] = [
     status: 'Disponible',
     hasProjector: true,
     hasAirConditioning: true,
+    campusId: 'CAMPUS-CENTRAL',
   },
   {
     id: 'CLR-VIR',
@@ -378,6 +389,7 @@ export const INITIAL_CLASSROOMS: Classroom[] = [
     status: 'Disponible',
     hasProjector: false,
     hasAirConditioning: false,
+    campusId: 'CAMPUS-CENTRAL',
   },
 ];
 
