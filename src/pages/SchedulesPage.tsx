@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Clock,
   MapPin,
@@ -18,6 +18,15 @@ import { RoleGuard } from '../components/common/RoleGuard';
 export const SchedulesPage: React.FC = () => {
   const { currentUser, sections, classrooms, currentCycle, enrollments, addClassroom, showToast } = useApp();
 
+  const [campuses, setCampuses] = useState<{ id: string; name: string; status: string }[]>([]);
+  useEffect(() => {
+    if (currentUser.role !== 'ADMIN') return;
+    fetch('/api/academic-structure')
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((result) => setCampuses(result.campuses.filter((campus: { status: string }) => campus.status === 'Activo')))
+      .catch(() => undefined);
+  }, [currentUser.role]);
+
   const [activeTab, setActiveTab] = useState<'grid' | 'classrooms'>('grid');
   const [selectedDay, setSelectedDay] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,11 +34,12 @@ export const SchedulesPage: React.FC = () => {
   const [teacherFilter, setTeacherFilter] = useState('ALL');
 
   const [showAddClassroomModal, setShowAddClassroomModal] = useState(false);
-  const [newClassroom, setNewClassroom] = useState<{ code: string; building: string; capacity: number; type: 'Teórica' | 'Laboratorio' | 'Auditorio' | 'Virtual' }>({
+  const [newClassroom, setNewClassroom] = useState<{ code: string; building: string; capacity: number; type: 'Teórica' | 'Laboratorio' | 'Auditorio' | 'Virtual'; campusId: string }>({
     code: '',
     building: 'Edificio Central USPG',
     capacity: 35,
     type: 'Teórica',
+    campusId: '',
   });
 
   const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -62,7 +72,7 @@ export const SchedulesPage: React.FC = () => {
 
   const handleCreateClassroom = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newClassroom.code) return;
+    if (!newClassroom.code || !newClassroom.campusId) return;
 
     if (!(await addClassroom({
       id: `AULA-${Date.now()}`,
@@ -73,6 +83,7 @@ export const SchedulesPage: React.FC = () => {
       status: 'Disponible',
       hasProjector: false,
       hasAirConditioning: false,
+      campusId: newClassroom.campusId,
     }))) return;
 
     setShowAddClassroomModal(false);
@@ -274,6 +285,21 @@ export const SchedulesPage: React.FC = () => {
                 onChange={(e) => setNewClassroom({ ...newClassroom, building: e.target.value })}
                 className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium"
               />
+            </div>
+
+            <div>
+              <label className="block font-bold text-[#333333] mb-1">Campus *</label>
+              <select
+                required
+                value={newClassroom.campusId}
+                onChange={(e) => setNewClassroom({ ...newClassroom, campusId: e.target.value })}
+                className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium"
+              >
+                <option value="">Selecciona campus</option>
+                {campuses.map((campus) => (
+                  <option key={campus.id} value={campus.id}>{campus.name}</option>
+                ))}
+              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
