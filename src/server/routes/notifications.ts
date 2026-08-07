@@ -456,18 +456,134 @@ export function registerNotificationRoutes(
       return void reply('Puedo ayudarte con:\n• Horarios y cursos inscritos\n• Calificaciones y promedio\n• Avance del pensum y créditos\n• Próximo semestre y cursos disponibles\n• Prerequisitos de cursos\n• Tareas y actividades\n• Asistencia y faltas\n• Pagos y saldo pendiente\n• Recuperaciones\n• Biblioteca (catálogo y préstamos)\n• Parqueo y vehículos\n• Solicitudes y trámites\n• Notificaciones\n¿Sobre qué necesitas información?');
     }
     if (user.role === 'DOCENTE') {
-      const teacher = await prisma.teacher.findUnique({ where: { userId: user.id }, include: { sections: { include: { course: true, classroom: true, cycle: true } } } });
-      if (!teacher) return void reply('No encontré tus secciones asignadas.');
-      groundedContext = JSON.stringify({ docente: teacher.name, secciones: teacher.sections.map((item) => ({ codigo: item.code, curso: item.course.name, horario: item.scheduleDays, hora: item.scheduleTime, aula: item.classroom.code, ciclo: item.cycle.name, inscritos: item.enrolledCount })) });
-      if (/horario|secci[oó]n|curso|clase|materia|asignatura/.test(question)) {
-        const lines = teacher.sections.map((item) => `${item.code} · ${item.course.code} ${item.course.name}: ${item.scheduleDays} ${item.scheduleTime}, aula ${item.classroom.code}, inscritos ${item.enrolledCount}`);
-        return void reply(lines.length ? `Tus secciones asignadas:\n${lines.join('\n')}` : 'No tienes secciones asignadas.');
+      const teacher = await prisma.teacher.findUnique({
+        where: { userId: user.id },
+        include: {
+          sections: {
+            where: { cycle: { isCurrent: true } },
+            include: {
+              course: true,
+              classroom: true,
+              cycle: true,
+              virtualClassroom: { select: { syncStatus: true, alternateLink: true } },
+              gradeRecords: { select: { total: true, recoveryExam: { select: { id: true, status: true } } } },
+              attendanceSessions: { select: { id: true } },
+              zoneActivities: { select: { id: true, name: true, grades: { select: { score: true } } } },
+            },
+          },
+        },
+      });
+      if (!teacher) return void reply('No encontré tu información de docente.');
+
+      const currentCycleForTeacher = teacher.sections[0]?.cycle ?? null;
+      groundedContext = JSON.stringify({ docente: teacher.name, secciones: teacher.sections.map((s) => ({ codigo: s.code, curso: s.course.name, horario: s.scheduleDays, hora: s.scheduleTime, aula: s.classroom.code, ciclo: s.cycle.name, inscritos: s.enrolledCount, acta: s.gradeActStatus })) });
+
+      // Ciclo / fechas
+      if (/límite.*nota|nota.*límite|entrega.*nota|cuándo.*nota/.test(question)) {
+        if (!currentCycleForTeacher) return void reply('No hay ciclo activo.');
+        return void reply(`Límite para entregar notas del ciclo ${currentCycleForTeacher.name}: ${currentCycleForTeacher.gradeSubmissionDeadline.toISOString().slice(0, 10)}.`);
       }
+      if (/examen.*final|final.*examen/.test(question)) {
+        if (!currentCycleForTeacher) return void reply('No hay ciclo activo.');
+        if (!currentCycleForTeacher.examStartDate) return void reply('El ciclo actual no tiene fechas de exámenes finales registradas.');
+        return void reply(`Exámenes finales del ciclo ${currentCycleForTeacher.name}: del ${currentCycleForTeacher.examStartDate.toISOString().slice(0, 10)} al ${(currentCycleForTeacher.examEndDate ?? currentCycleForTeacher.examStartDate).toISOString().slice(0, 10)}.`);
+      }
+      if (/cu[aá]ndo.*termin|fin.*clase|termina.*ciclo/.test(question)) {
+        if (!currentCycleForTeacher) return void reply('No hay ciclo activo.');
+        return void reply(`Las clases del ciclo ${currentCycleForTeacher.name} terminan el ${currentCycleForTeacher.endDate.toISOString().slice(0, 10)}.`);
+      }
+
+      // Actas de notas
+      if (/acta|actas|nota.*entreg|entreg.*nota/.test(question)) {
+        const entregadas = teacher.sections.filter((s) => s.gradeActStatus === 'ENTREGADA');
+        const pendientes = teacher.sections.filter((s) => s.gradeActStatus !== 'ENTREGADA');
+        if (!teacher.sections.length) return void reply('No tienes secciones asignadas en el ciclo actual.');
+        const lines = teacher.sections.map((s) => `• ${s.code} ${s.course.name}: ${s.gradeActStatus}`);
+        return void reply(`Actas de notas:\n${lines.join('\n')}\n\nEntregadas: ${entregadas.length} · Pendientes: ${pendientes.length}`);
+      }
+
+      // Notas reprobados / riesgo
+      if (/reprob/.test(question)) {
+        const total = teacher.sections.reduce((sum, s) => sum + s.gradeRecords.filter((g) => g.total < 61).length, 0);
+        return void reply(`Estudiantes con nota reprobatoria (< 61) en tus secciones del ciclo actual: ${total}.`);
+      }
+      if (/riesgo|entre.*40.*60|nota.*baja/.test(question)) {
+        const total = teacher.sections.reduce((sum, s) => sum + s.gradeRecords.filter((g) => g.total >= 40 && g.total < 61).length, 0);
+        return void reply(`Estudiantes en riesgo académico (nota entre 40 y 60) en tus secciones: ${total}.`);
+      }
+      if (/publicad|public.*nota|nota.*public/.test(question)) {
+        const lines = teacher.sections.map((s) => `• ${s.code} ${s.course.name}: ${s.gradeActStatus === 'PUBLICADA' || s.gradeActStatus === 'ENTREGADA' ? 'Publicadas' : 'No publicadas'}`);
+        return void reply(`Estado de publicación de notas:\n${lines.join('\n')}`);
+      }
+
+      // Asistencia
+      if (/asistencia|inasistencia|faltas/.test(question)) {
+        const secMatch = teacher.sections.find((s) => question.includes(s.code) || question.toLowerCase().includes(s.course.name.toLowerCase().slice(0, 5)));
+        if (secMatch) {
+          const highAbsence = await prisma.attendanceRecord.groupBy({
+            by: ['studentCarnet'],
+            where: { status: 'AUSENTE', session: { sectionId: secMatch.id } },
+            _count: { _all: true },
+          });
+          const threshold = Math.ceil(secMatch.attendanceSessions.length * 0.25);
+          const atRisk = highAbsence.filter((r) => r._count._all >= threshold);
+          return void reply(`Sección ${secMatch.code} (${secMatch.course.name}) — Sesiones registradas: ${secMatch.attendanceSessions.length}. Estudiantes con ≥25% inasistencias: ${atRisk.length}.`);
+        }
+        const totalSessions = teacher.sections.reduce((sum, s) => sum + s.attendanceSessions.length, 0);
+        return void reply(`Total de sesiones de asistencia registradas en tus secciones: ${totalSessions}. Indica una sección para ver detalle de inasistencias.`);
+      }
+
+      // Recuperaciones
+      if (/recuperaci/.test(question)) {
+        const sectionRecoveries = teacher.sections.map((s) => ({
+          ...s,
+          pendingRecoveries: s.gradeRecords.filter((g) => g.recoveryExam && ['SOLICITADA', 'AUTORIZADA'].includes(g.recoveryExam.status)).length,
+        }));
+        const total = sectionRecoveries.reduce((sum, s) => sum + s.pendingRecoveries, 0);
+        if (!total) return void reply('No tienes recuperaciones pendientes de calificar en el ciclo actual.');
+        const lines = sectionRecoveries.filter((s) => s.pendingRecoveries > 0).map((s) => `• ${s.code} ${s.course.name}: ${s.pendingRecoveries} recuperación(es)`);
+        return void reply(`Recuperaciones pendientes en tus secciones:\n${lines.join('\n')}`);
+      }
+
+      // Zona media / actividades
+      if (/zona|actividad/.test(question)) {
+        const secMatch = teacher.sections.find((s) => question.includes(s.code) || question.toLowerCase().includes(s.course.name.toLowerCase().slice(0, 5)));
+        if (secMatch) {
+          const lines = secMatch.zoneActivities.map((a) => {
+            const sinCalificar = a.grades.filter((g) => g.score === null).length;
+            return `• ${a.name}: ${sinCalificar} sin calificar`;
+          });
+          return void reply(lines.length ? `Actividades de zona en ${secMatch.code} (${secMatch.course.name}):\n${lines.join('\n')}` : `No hay actividades de zona registradas en ${secMatch.code}.`);
+        }
+        const total = teacher.sections.reduce((sum, s) => sum + s.zoneActivities.length, 0);
+        return void reply(`Total de actividades de zona en tus secciones: ${total}. Indica una sección para ver el detalle.`);
+      }
+
+      // Aula virtual
+      if (/aula virtual|classroom|clase virtual/.test(question)) {
+        const lines = teacher.sections.map((s) => {
+          const vc = s.virtualClassroom;
+          if (!vc) return `• ${s.code} ${s.course.name}: Sin aula virtual`;
+          return `• ${s.code} ${s.course.name}: ${vc.syncStatus}${vc.alternateLink ? ' — ' + vc.alternateLink : ''}`;
+        });
+        return void reply(`Estado de aulas virtuales en tus secciones:\n${lines.join('\n')}`);
+      }
+
+      // Horarios / secciones generales
+      if (/horario|secci[oó]n|curso|clase|materia|asignatura/.test(question)) {
+        const lines = teacher.sections.map((s) => `${s.code} · ${s.course.code} ${s.course.name}: ${s.scheduleDays} ${s.scheduleTime}, aula ${s.classroom.code}, inscritos ${s.enrolledCount}`);
+        return void reply(lines.length ? `Tus secciones asignadas en el ciclo actual:\n${lines.join('\n')}` : 'No tienes secciones asignadas en el ciclo actual.');
+      }
+
+      // Estudiantes / inscritos
       if (/inscrit|alumno|estudiante|cu[aá]nt/.test(question)) {
-        const total = teacher.sections.reduce((sum, item) => sum + item.enrolledCount, 0);
+        const secMatch = teacher.sections.find((s) => question.includes(s.code) || question.toLowerCase().includes(s.course.name.toLowerCase().slice(0, 5)));
+        if (secMatch) return void reply(`La sección ${secMatch.code} (${secMatch.course.name}) tiene ${secMatch.enrolledCount} estudiante(s) inscritos. Aula: ${secMatch.classroom.code}.`);
+        const total = teacher.sections.reduce((sum, s) => sum + s.enrolledCount, 0);
         return void reply(`Tienes ${total} estudiante(s) inscrito(s) en total, distribuidos en ${teacher.sections.length} sección(es).`);
       }
-      return void reply(`Tienes ${teacher.sections.length} secciones asignadas. Puedes preguntar por tus secciones, horarios, aulas o cantidad de inscritos.`);
+
+      return void reply(`Tienes ${teacher.sections.length} sección(es) asignada(s) en el ciclo actual. Puedo informarte sobre horarios, inscritos, notas, actas, asistencia, recuperaciones, actividades de zona y aulas virtuales.`);
     }
     if (user.role === 'ADMIN') {
       const [
