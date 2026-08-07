@@ -101,6 +101,7 @@ interface AppContextType {
   batchUpdateGrades: (updates: { id: string; zona: number; parcial: number; segundoParcial: number; final: number; recuperacion: number }[]) => Promise<void>;
   publishGrades: (sectionId: string) => Promise<void>;
   closeGrades: (sectionId: string) => Promise<boolean>;
+  refreshGrades: () => Promise<void>;
 
   // Notifications & UI Alerts
   notifications: NotificationItem[];
@@ -587,6 +588,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const response = await fetch(`/api/grades/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }); const result = await response.json(); if (!response.ok) { showToast(result.message, 'error'); return; } setGrades((prev) => prev.map((grade) => grade.id === id ? result : grade));
   };
 
+  const refreshGrades = async () => {
+    const response = await fetch('/api/grades');
+    if (response.ok) setGrades(await response.json());
+  };
+
   const batchUpdateGrades = async (
     updates: { id: string; zona: number; parcial: number; segundoParcial: number; final: number; recuperacion: number }[]
   ) => {
@@ -707,6 +713,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         batchUpdateGrades,
         publishGrades,
         closeGrades,
+        refreshGrades,
         notifications,
         markNotificationAsRead,
         toasts,

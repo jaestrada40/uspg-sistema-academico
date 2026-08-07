@@ -27,6 +27,7 @@ export const GradesControlPage: React.FC = () => {
     batchUpdateGrades,
     publishGrades,
     closeGrades,
+    refreshGrades,
     showToast,
   } = useApp();
 
@@ -36,8 +37,14 @@ export const GradesControlPage: React.FC = () => {
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [history, setHistory] = useState<Array<{ id: string; action: string; actorName: string; createdAt: string; details?: string }>>([]);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
-  // Sync section grades
+  // Refresh grades from server when section changes (picks up zona recalculated by zone activities)
+  useEffect(() => {
+    if (selectedSectionId) void refreshGrades();
+  }, [selectedSectionId]);
+
+  // Sync local state after grades update
   useEffect(() => {
     if (selectedSectionId) {
       const currentSectionGrades = grades.filter((g) => g.sectionId === selectedSectionId);
@@ -323,12 +330,17 @@ export const GradesControlPage: React.FC = () => {
             <p className="text-xs text-[#64748B]">Todavía no hay movimientos registrados.</p>
           ) : (
             <div className="space-y-2">
-              {history.slice(0, 12).map((item) => (
+              {(showAllHistory ? history : history.slice(0, 12)).map((item) => (
                 <div key={item.id} className="flex flex-col justify-between gap-1 rounded-lg bg-[#F8FAFC] px-3 py-2 text-xs sm:flex-row sm:items-center">
                   <span className="font-semibold text-[#333333]">{item.action === 'UPDATE_GRADE' ? 'Modificación de nota' : item.action === 'PUBLISH' ? 'Publicación del acta' : item.action === 'CLOSE' ? 'Cierre definitivo' : item.action}</span>
                   <span className="text-[#64748B]">{item.actorName} · {new Date(item.createdAt).toLocaleString('es-GT')}</span>
                 </div>
               ))}
+              {history.length > 12 && (
+                <button onClick={() => setShowAllHistory((v) => !v)} className="mt-1 text-xs font-bold text-[#800020] hover:underline">
+                  {showAllHistory ? 'Ver menos' : `Ver ${history.length - 12} entradas más`}
+                </button>
+              )}
             </div>
           )}
         </div>
