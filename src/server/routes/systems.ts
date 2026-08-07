@@ -66,4 +66,62 @@ export function registerSystemsRoutes(
     await prisma.auditLog.create({ data: { action: 'RETRY_OUTBOX_SYSTEMS', entityType: 'EMAIL_OUTBOX', entityId: record.id, actorId: res.locals.authUser.id } });
     res.json(await prisma.emailOutbox.findUnique({ where: { id: record.id }, select: { id: true, status: true, attempts: true, lastError: true } }));
   });
+
+  app.get('/api/systems/sessions', requireUser, requireSystems, async (_req, res) => {
+    const sessions = await prisma.session.findMany({
+      where: { expiresAt: { gt: new Date() } },
+      include: { user: { select: { id: true, name: true, email: true, role: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(sessions.map((s) => ({ id: s.id, userId: s.userId, name: s.user.name, email: s.user.email, role: s.user.role, createdAt: s.createdAt, expiresAt: s.expiresAt })));
+  });
+
+  app.delete('/api/systems/sessions/:id', requireUser, requireSystems, async (req, res) => {
+    const session = await prisma.session.findUnique({ where: { id: req.params.id } });
+    if (!session) return void res.status(404).json({ message: 'Sesión no encontrada.' });
+    const user = await prisma.user.findUnique({ where: { id: session.userId } });
+    if (user?.role === 'ADMIN') return void res.status(403).json({ message: 'No se puede cerrar sesión de ADMIN.' });
+    await prisma.session.delete({ where: { id: req.params.id } });
+    await prisma.auditLog.create({ data: { action: 'SESSION_CLOSED_SYSTEMS', entityType: 'SESSION', entityId: req.params.id, actorId: res.locals.authUser.id, details: JSON.stringify({ userId: session.userId }) } });
+    res.json({ ok: true });
+  });
+
+  app.get('/api/systems/inactive-users', requireUser, requireSystems, async (_req, res) => {
+    const users = await prisma.user.findMany({
+      where: { active: false, role: { not: 'ADMIN' } },
+      select: { id: true, name: true, email: true, role: true, active: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    res.json(users);
+  });
+
+  app.patch('/api/systems/accounts/:id/toggle-active', requireUser, requireSystems, async (req, res) => {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!user || user.role === 'ADMIN') return void res.status(404).json({ message: 'Usuario no disponible para soporte técnico.' });
+    const updated = await prisma.user.update({ where: { id: user.id }, data: { active: !user.active } });
+    if (!updated.active) await prisma.session.deleteMany({ where: { userId: user.id } });
+    await prisma.auditLog.create({ data: { action: updated.active ? 'USER_ACTIVATED_SYSTEMS' : 'USER_DEACTIVATED_SYSTEMS', entityType: 'USER', entityId: user.id, actorId: res.locals.authUser.id } });
+    res.json({ active: updated.active });
+  });
+
+  app.get('/api/systems/audit', requireUser, requireSystems, async (req, res) => {
+    const page = Math.max(1, parseInt(String(req.query.page || '1')));
+    const pageSize = 50;
+    const where: Record<string, unknown> = {};
+    if (req.query.action) where.action = { contains: String(req.query.action) };
+    if (req.query.actorId) where.actorId = String(req.query.actorId);
+    const [total, records] = await Promise.all([
+      prisma.auditLog.count({ where }),
+      prisma.auditLog.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize, include: { actor: { select: { name: true, role: true } } } }),
+    ]);
+    res.json({ total, page, pageSize, records: records.map((r) => ({ id: r.id, action: r.action, entityType: r.entityType, entityId: r.entityId, actor: r.actor?.name || 'Sistema', actorRole: r.actor?.role || null, details: r.details, createdAt: r.createdAt })) });
+  });
+
+  app.get('/api/systems/virtual-classrooms', requireUser, requireSystems, async (_req, res) => {
+    const classrooms = await prisma.virtualClassroom.findMany({
+      include: { section: { include: { course: { select: { name: true, code: true } } } } },
+      orderBy: { updatedAt: 'desc' },
+    });
+    res.json(classrooms.map((vc) => ({ id: vc.id, provider: vc.provider, syncStatus: vc.syncStatus, externalCourseId: vc.externalCourseId, syncError: vc.syncError, lastSyncedAt: vc.lastSyncedAt, courseName: vc.section.course.name, courseCode: vc.section.course.code, sectionId: vc.sectionId, updatedAt: vc.updatedAt })));
+  });
 }
