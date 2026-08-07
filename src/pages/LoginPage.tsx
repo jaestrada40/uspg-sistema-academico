@@ -187,7 +187,7 @@ export const LoginPage: React.FC = () => {
           </div>
           <div className="relative z-10 max-w-md">
             <InstitutionLogo
-              className="mb-10 h-24 w-80 rounded-2xl bg-white/10 p-4 text-xl text-white ring-1 ring-white/25"
+              className="mb-10 h-32 w-96 rounded-2xl bg-white/10 p-4 text-xl text-white ring-1 ring-white/25"
               imageClassName="h-full w-full object-contain drop-shadow-[0_6px_16px_rgba(0,0,0,0.25)]"
             />
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.22em] text-white/70">{institution.name}</p>
