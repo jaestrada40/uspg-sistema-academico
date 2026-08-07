@@ -123,7 +123,7 @@ export function registerNotificationRoutes(
       if (!student) return void reply('No encontré tu expediente de estudiante asociado a esta cuenta.');
       const currentCycle = await prisma.academicCycle.findFirst({ where: { isCurrent: true, campusId: student.campusId } });
       const currentEnrollments = student.enrollments.filter((e) => !currentCycle || e.section.cycleId === currentCycle.id);
-      const [tasks, attendance, loans, requests, cycles, institution, offeredSections] = await Promise.all([
+      const [tasks, attendance, loans, requests, cycles, institution, offeredSections, parkingVehicles, recentParkingVisits] = await Promise.all([
         prisma.zoneActivity.findMany({ where: { isPublished: true, section: { enrollments: { some: { studentCarnet: student.carnet, status: 'Inscrito' } } } }, include: { section: { include: { course: true } }, grades: { where: { studentCarnet: student.carnet }, select: { score: true, feedback: true } } }, orderBy: { dueDate: 'asc' } }),
         prisma.attendanceRecord.findMany({ where: { studentCarnet: student.carnet }, include: { session: { include: { section: { include: { course: true } } } } }, orderBy: { session: { classDate: 'desc' } } }),
         prisma.libraryLoan.findMany({ where: { borrowerId: user.id, status: { not: 'DEVUELTO' } }, include: { copy: { include: { book: true } } }, orderBy: { dueAt: 'asc' } }),
@@ -131,6 +131,8 @@ export function registerNotificationRoutes(
         prisma.academicCycle.findMany({ where: { campusId: student.campusId }, orderBy: { startDate: 'desc' }, take: 4 }),
         prisma.institutionConfig.findUnique({ where: { id: 1 } }),
         prisma.section.findMany({ where: { status: 'Abierta' }, select: { cycleId: true, courseCode: true } }),
+        prisma.parkingVehicle.findMany({ where: { ownerId: user.id }, orderBy: { createdAt: 'desc' } }),
+        prisma.parkingVisit.findMany({ where: { userId: user.id }, orderBy: { enteredAt: 'desc' }, take: 10 }),
       ]);
       // El dashboard muestra el expediente acumulado del estudiante, no solo las
       // actas publicadas del ciclo actual. Esta misma fuente/lógica se usa aquí.
@@ -140,7 +142,7 @@ export function registerNotificationRoutes(
       const approvedCodes = new Set(approvedGrades.map((item) => item.section.courseCode));
       const pendingPlanCourses = (student.plan?.courses || []).filter((item) => !approvedCodes.has(item.courseCode));
       const pendingBalance = student.financialCharges.reduce((sum, charge) => sum + Math.max(0, charge.amount - charge.adjustments.reduce((a, item) => a + item.amount, 0) - charge.payments.reduce((a, item) => a + item.amount, 0)), 0);
-      const verifiedContext = JSON.stringify({ estudiante: { carnet: student.carnet, nombre: student.name, carrera: student.careerName, plan: student.plan?.name }, cursosInscritos: currentEnrollments.map((item) => ({ codigo: item.section.course.code, nombre: item.section.course.name, dias: item.section.scheduleDays, hora: item.section.scheduleTime, aula: item.section.classroom.code, docente: item.section.teacher.name })), calificacionesDelExpediente: visibleGrades.map((item) => ({ curso: item.section.course.name, total: Number(item.total), estado: item.status, visible: item.isPublished || item.section.gradeActStatus !== 'BORRADOR' })), promedioGeneral: Number(student.gpa), creditos: { aprobados: Number(student.creditsEarned), requeridos: Number(student.totalCreditsRequired), pendientes: Math.max(0, Number(student.totalCreditsRequired) - Number(student.creditsEarned)) }, pensumPendiente: pendingPlanCourses.map((item) => ({ curso: item.course.name, semestre: item.semester, creditos: item.course.credits })), tareas: tasks.map((item) => ({ nombre: item.name, curso: item.section.course.name, vence: item.dueDate, entregada: item.grades.length > 0, calificacion: item.grades[0]?.score ?? null })), asistencia: attendance.map((item) => ({ curso: item.session.section.course.name, fecha: item.session.classDate, estado: item.status })), pagos: { saldoPendiente: pendingBalance, cargos: student.financialCharges.map((item) => ({ concepto: item.concept, vencimiento: item.dueDate, estado: item.status })) }, biblioteca: loans.map((item) => ({ libro: item.copy.book.title, vence: item.dueAt, estado: item.status })), tramites: requests.map((item) => ({ tipo: item.type, estado: item.status, proposito: item.purpose })), calendario: cycles.map((item) => ({ nombre: item.name, inicio: item.startDate, fin: item.endDate, inscripcionDesde: item.enrollmentStartDate, inscripcionHasta: item.enrollmentEndDate })), institucion: institution ? { nombre: institution.name, siglas: institution.shortName } : null });
+      const verifiedContext = JSON.stringify({ estudiante: { carnet: student.carnet, nombre: student.name, carrera: student.careerName, plan: student.plan?.name }, cursosInscritos: currentEnrollments.map((item) => ({ codigo: item.section.course.code, nombre: item.section.course.name, dias: item.section.scheduleDays, hora: item.section.scheduleTime, aula: item.section.classroom.code, docente: item.section.teacher.name })), calificacionesDelExpediente: visibleGrades.map((item) => ({ curso: item.section.course.name, total: Number(item.total), estado: item.status, visible: item.isPublished || item.section.gradeActStatus !== 'BORRADOR' })), promedioGeneral: Number(student.gpa), creditos: { aprobados: Number(student.creditsEarned), requeridos: Number(student.totalCreditsRequired), pendientes: Math.max(0, Number(student.totalCreditsRequired) - Number(student.creditsEarned)) }, pensumPendiente: pendingPlanCourses.map((item) => ({ curso: item.course.name, semestre: item.semester, creditos: item.course.credits })), tareas: tasks.map((item) => ({ nombre: item.name, curso: item.section.course.name, vence: item.dueDate, entregada: item.grades.length > 0, calificacion: item.grades[0]?.score ?? null })), asistencia: attendance.map((item) => ({ curso: item.session.section.course.name, fecha: item.session.classDate, estado: item.status })), pagos: { saldoPendiente: pendingBalance, cargos: student.financialCharges.map((item) => ({ concepto: item.concept, vencimiento: item.dueDate, estado: item.status })) }, biblioteca: loans.map((item) => ({ libro: item.copy.book.title, vence: item.dueAt, estado: item.status })), tramites: requests.map((item) => ({ tipo: item.type, estado: item.status, proposito: item.purpose })), calendario: cycles.map((item) => ({ nombre: item.name, inicio: item.startDate, fin: item.endDate, inscripcionDesde: item.enrollmentStartDate, inscripcionHasta: item.enrollmentEndDate })), institucion: institution ? { nombre: institution.name, siglas: institution.shortName } : null, parqueo: { vehiculos: parkingVehicles.map((v) => ({ placa: v.plate, marca: v.make, modelo: v.model, color: v.color, tipo: v.type, estado: v.status, codigoAcceso: v.accessCode })), visitasRecientes: recentParkingVisits.map((v) => ({ placa: v.plate, entrada: v.enteredAt, salida: v.exitedAt, estado: v.status })) } });
       groundedContext = verifiedContext;
       if (/pr[oó]ximo semestre|siguiente semestre|puedo llevar|puedo cursar|asignar|segundo semestre|siguiente ciclo/.test(question)) {
         const explicitSemester = question.match(/(primer|segundo) semestre/);
@@ -159,7 +161,23 @@ export function registerNotificationRoutes(
       if (/aprob|ganad/.test(question)) return void reply(approvedGrades.length ? `Cursos aprobados:\n${approvedGrades.map((item) => `• ${item.section.course.name}: ${Number(item.total).toFixed(1)}`).join('\n')}` : 'No tienes cursos aprobados registrados.');
       if (/reprob|perdid/.test(question)) return void reply(failedGrades.length ? `Cursos reprobados:\n${failedGrades.map((item) => `• ${item.section.course.name}: ${Number(item.total).toFixed(1)}`).join('\n')}` : 'No tienes cursos reprobados registrados.');
       if (/tarea|asignaci[oó]n/.test(question)) return void reply(tasks.length ? `Tareas y asignaciones publicadas:\n${tasks.map((item) => `• ${item.name} · ${item.section.course.name} · vence ${item.dueDate.toLocaleDateString('es-GT')} · ${item.grades.length ? 'entregada' : 'pendiente'}`).join('\n')}` : 'No hay tareas publicadas para tus cursos.');
-      if (/biblioteca|libro|préstamo|prestamo/.test(question)) return void reply(loans.length ? `Tus préstamos de biblioteca:\n${loans.map((item) => `• ${item.copy.book.title} · vence ${item.dueAt.toLocaleDateString('es-GT')} · ${item.status}`).join('\n')}` : 'No tienes préstamos activos en biblioteca.');
+      if (/biblioteca|libro|préstamo|prestamo/.test(question)) {
+        const wantsCatalog = /qu[eé] libros|cat[aá]logo|disponibles|buscar libro|hay en la biblioteca|libros tienen|libros hay/.test(question);
+        if (wantsCatalog) {
+          const searchMatch = question.match(/(?:buscar|busca|sobre|de|título|titulo|autor)\s+(.+)/i);
+          const search = searchMatch?.[1]?.trim();
+          const books = await prisma.libraryBook.findMany({ where: { status: 'ACTIVO', ...(search && search.length > 2 ? { OR: [{ title: { contains: search } }, { author: { contains: search } }, { category: { contains: search } }] } : {}) }, include: { copies: { where: { status: 'DISPONIBLE' }, select: { id: true } } }, orderBy: { title: 'asc' }, take: 20 });
+          return void reply(books.length ? `Libros en biblioteca${search ? ` para "${search}"` : ''}:\n${books.map((b) => `• ${b.title} · ${b.author} · ${b.category} · ${b.copies.length} copia(s) disponible(s)`).join('\n')}` : `No encontré libros${search ? ` para "${search}"` : ''} en el catálogo.`);
+        }
+        return void reply(loans.length ? `Tus préstamos activos en biblioteca:\n${loans.map((item) => `• ${item.copy.book.title} · vence ${item.dueAt.toLocaleDateString('es-GT')} · ${item.status}`).join('\n')}` : 'No tienes préstamos activos en biblioteca.');
+      }
+      if (/parqueo|estacionamiento|veh[ií]culo|placa|ticket|tiquete|acceso parqueo/.test(question)) {
+        if (!parkingVehicles.length) return void reply('No tienes vehículos registrados en el sistema de parqueo. Puedes registrar tu vehículo desde el módulo Parqueo Inteligente.');
+        const lines = parkingVehicles.map((v) => `• ${v.plate} · ${v.make} ${v.model} · ${v.color} · Código de acceso: ${v.accessCode} · Estado: ${v.status}`);
+        const lastVisit = recentParkingVisits[0];
+        const visitLine = lastVisit ? `\nÚltima visita: entrada ${lastVisit.enteredAt.toLocaleString('es-GT')}${lastVisit.exitedAt ? `, salida ${lastVisit.exitedAt.toLocaleString('es-GT')}` : ' · aún dentro'}.` : '';
+        return void reply(`Tus vehículos registrados:\n${lines.join('\n')}${visitLine}`);
+      }
       if (/docente|catedr/.test(question)) return void reply(currentEnrollments.length ? `Docentes por curso:\n${currentEnrollments.map((item) => `• ${item.section.course.name}: ${item.section.teacher.name}`).join('\n')}` : 'No tienes cursos inscritos actualmente.');
       if (/calendario|inicio de clases|fin de clases|examen|semestre|per[ií]odo acad/.test(question)) {
         return void reply(currentCycle ? `El ciclo académico actual es "${currentCycle.name}". Inicia el ${currentCycle.startDate.toLocaleDateString('es-GT')} y finaliza el ${currentCycle.endDate.toLocaleDateString('es-GT')}.` : 'No hay un ciclo académico actual configurado en el sistema.');
@@ -208,10 +226,7 @@ export function registerNotificationRoutes(
         const notifications = await prisma.appNotification.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 10, select: { title: true, message: true, isRead: true } });
         return void reply(notifications.length ? `Tus notificaciones recientes:\n${notifications.map((item) => `• ${item.title}${item.isRead ? ' · leída' : ' · pendiente'}\n  ${item.message}`).join('\n')}` : 'No tienes notificaciones.');
       }
-      if (/biblioteca|libro|préstamo|prestamo/.test(question)) {
-        return void reply(loans.length ? `Tus préstamos de biblioteca:\n${loans.map((item) => `• ${item.copy.book.title} · vence ${item.dueAt.toLocaleDateString('es-GT')} · ${item.status}`).join('\n')}` : 'No tienes préstamos activos en biblioteca.');
-      }
-      return void reply('Puedo ayudarte con cursos, horarios, notas, asistencia, pagos, recuperaciones, biblioteca, solicitudes y avance del pensum. Indícame qué necesitas consultar.');
+      return void reply('Puedo ayudarte con cursos, horarios, notas, asistencia, pagos, recuperaciones, biblioteca, parqueo, solicitudes y avance del pensum. Indícame qué necesitas consultar.');
     }
     if (user.role === 'DOCENTE') {
       const teacher = await prisma.teacher.findUnique({ where: { userId: user.id }, include: { sections: { include: { course: true, classroom: true, cycle: true } } } });
