@@ -27,6 +27,7 @@
     "test:library": "node scripts/test-library-flow.mjs",
     "test:mfa": "node scripts/test-mfa.mjs",
     "test:assistant": "node scripts/test-assistant.mjs",
+    "test:campus-cycles": "node scripts/test-campus-cycles.mjs",
     "verify:release": "npm run lint && npm run build && npm audit --omit=dev",
     "db:import:systems-curriculum": "tsx scripts/import-systems-curriculum.ts",
     "db:sync:systems-validation": "tsx scripts/sync-systems-validation.ts",
