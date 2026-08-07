@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   UserPlus,
   Edit2,
@@ -23,7 +23,15 @@ import { EmptyState } from '../components/common/EmptyState';
 import { RoleGuard } from '../components/common/RoleGuard';
 
 export const TeachersPage: React.FC = () => {
-  const { teachers, sections, addTeacher, updateTeacher, toggleTeacherStatus } = useApp();
+  const { currentUser, teachers, sections, addTeacher, updateTeacher, toggleTeacherStatus } = useApp();
+  const [campuses, setCampuses] = useState<{ id: string; name: string; status: string }[]>([]);
+  useEffect(() => {
+    if (currentUser.role !== 'ADMIN') return;
+    fetch('/api/academic-structure')
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((result) => setCampuses(result.campuses.filter((campus: { status: string }) => campus.status === 'Activo')))
+      .catch(() => undefined);
+  }, [currentUser.role]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -45,6 +53,7 @@ export const TeachersPage: React.FC = () => {
     academicDegree: '',
     status: 'Activo',
     maxHoursPerWeek: 20,
+    campusId: '',
   });
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -72,6 +81,7 @@ export const TeachersPage: React.FC = () => {
     if (!formData.email?.trim()) errors.email = 'El correo es obligatorio';
     else if (!formData.email.toLowerCase().endsWith('@catedratico.uspg.edu.gt')) errors.email = 'Debe usar un correo @catedratico.uspg.edu.gt';
     if (!formData.specialty?.trim()) errors.specialty = 'La especialidad es obligatoria';
+    if (!formData.campusId) errors.campusId = 'Selecciona el campus';
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -91,6 +101,7 @@ export const TeachersPage: React.FC = () => {
       assignedSectionIds: [],
       status: 'Activo',
       maxHoursPerWeek: formData.maxHoursPerWeek || 20,
+      campusId: formData.campusId!,
     };
 
     if (!(await addTeacher(newTeacher))) return;
@@ -129,6 +140,7 @@ export const TeachersPage: React.FC = () => {
       academicDegree: '',
       status: 'Activo',
       maxHoursPerWeek: 20,
+      campusId: '',
     });
     setFormErrors({});
   };
@@ -347,6 +359,21 @@ export const TeachersPage: React.FC = () => {
               </div>
 
               <div>
+                <label className="block text-xs font-bold text-[#333333] mb-1">Campus *</label>
+                <select
+                  value={formData.campusId || ''}
+                  onChange={(e) => setFormData({ ...formData, campusId: e.target.value })}
+                  className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333]"
+                >
+                  <option value="">Selecciona campus</option>
+                  {campuses.map((campus) => (
+                    <option key={campus.id} value={campus.id}>{campus.name}</option>
+                  ))}
+                </select>
+                {formErrors.campusId && <p className="text-[10px] font-semibold text-[#C53030] mt-0.5">{formErrors.campusId}</p>}
+              </div>
+
+              <div>
                 <label className="block text-xs font-bold text-[#333333] mb-1">Grado Académico</label>
                 <input
                   type="text"
@@ -412,6 +439,20 @@ export const TeachersPage: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
                   className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333]"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#333333] mb-1">Campus</label>
+                <select
+                  value={formData.campusId || ''}
+                  onChange={(e) => setFormData({ ...formData, campusId: e.target.value })}
+                  className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333]"
+                >
+                  <option value="">Selecciona campus</option>
+                  {campuses.map((campus) => (
+                    <option key={campus.id} value={campus.id}>{campus.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
