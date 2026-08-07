@@ -140,8 +140,12 @@ export function registerAdminRoutes(
 
   app.get('/api/classrooms', requireAdmin, async (_req, res) => res.json(await prisma.classroom.findMany({ orderBy: [{ building: 'asc' }, { code: 'asc' }] })));
   app.post('/api/classrooms', requireAdmin, async (req, res) => {
+    if (!req.body.campusId) return void res.status(400).json({ message: 'Selecciona el campus del aula.' });
     try { const classroom = await prisma.classroom.create({ data: req.body }); res.status(201).json(classroom); }
     catch (error) { if (!handleUniqueError(error, res)) throw error; }
   });
-  app.patch('/api/classrooms/:id', requireAdmin, async (req, res) => res.json(await prisma.classroom.update({ where: { id: req.params.id }, data: req.body })));
+  app.patch('/api/classrooms/:id', requireAdmin, async (req, res) => {
+    if ('campusId' in req.body && !req.body.campusId) return void res.status(400).json({ message: 'Selecciona el campus del aula.' });
+    res.json(await prisma.classroom.update({ where: { id: req.params.id }, data: req.body }));
+  });
 }

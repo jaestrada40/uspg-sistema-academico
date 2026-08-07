@@ -128,7 +128,7 @@ export function registerNotificationRoutes(
         prisma.attendanceRecord.findMany({ where: { studentCarnet: student.carnet }, include: { session: { include: { section: { include: { course: true } } } } }, orderBy: { session: { classDate: 'desc' } } }),
         prisma.libraryLoan.findMany({ where: { borrowerId: user.id, status: { not: 'DEVUELTO' } }, include: { copy: { include: { book: true } } }, orderBy: { dueAt: 'asc' } }),
         prisma.studentServiceRequest.findMany({ where: { studentCarnet: student.carnet }, orderBy: { createdAt: 'desc' }, take: 10 }),
-        prisma.academicCycle.findMany({ orderBy: { startDate: 'desc' }, take: 4 }),
+        prisma.academicCycle.findMany({ where: { campusId: student.campusId }, orderBy: { startDate: 'desc' }, take: 4 }),
         prisma.institutionConfig.findUnique({ where: { id: 1 } }),
         prisma.section.findMany({ where: { status: 'Abierta' }, select: { cycleId: true, courseCode: true } }),
       ]);

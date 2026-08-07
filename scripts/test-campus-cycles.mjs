@@ -54,5 +54,19 @@ const missingCampusResponse = await fetch(`${baseUrl}/api/cycles`, {
 });
 assert.equal(missingCampusResponse.status, 400, 'Crear un ciclo sin campusId debe rechazarse');
 
+// Regresión: el GET de ciclos (con campus incluido) debe poder alimentarse directo a PATCH,
+// tal como hace CyclesPage.tsx al hacer setFormData(cycle) y luego guardar sin editar nada más.
+const roundTripGetResponse = await fetch(`${baseUrl}/api/cycles`, { headers: { Cookie: cookie } });
+assert.equal(roundTripGetResponse.status, 200);
+const roundTripCycles = await roundTripGetResponse.json();
+const roundTripCycle = roundTripCycles.find((cycle) => cycle.id === created.id);
+assert.ok(roundTripCycle, 'El ciclo recién creado debe aparecer en el listado');
+const roundTripPatchResponse = await fetch(`${baseUrl}/api/cycles/${roundTripCycle.id}`, {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json', Cookie: cookie },
+  body: JSON.stringify(roundTripCycle),
+});
+assert.equal(roundTripPatchResponse.status, 200, 'PATCH con el objeto tal como lo devuelve GET /api/cycles debe funcionar (regresión cycleView)');
+
 await fetch(`${baseUrl}/api/auth/logout`, { method: 'POST', headers: { Cookie: cookie } });
 console.log('PASS Ciclos por campus: listado con campus, nombre sin sufijo incrustado, creación con y sin campus.');
