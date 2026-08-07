@@ -960,9 +960,9 @@ export function registerNotificationRoutes(
       if (/dañado|mal estado|condici[oó]n/.test(question)) return void reply(`Ejemplares en mal estado (dañado o malo): ${damagedCopies} de ${totalCopies} total.`);
 
       // Búsqueda de libro específico
-      if (/buscar|busca|existe.*libro|hay.*libro|libro.*disponible/.test(question)) {
-        const titleMatch = question.match(/(?:buscar?|existe|hay|libro)\s+(?:el libro\s+)?["']?(.+?)["']?\s*(?:\?|$)/i);
-        const search = titleMatch?.[1]?.trim() || '';
+      if (/buscar|busca|existe.*libro|hay.*libro|libro.*disponible|qu[eé].*libro.*hay|libro.*de\s+\w+|tienen.*libro|libros.*de\s+\w+/.test(question)) {
+        const titleMatch = question.match(/(?:buscar?|existe|hay|libro[s]?|tienen|de)\s+(?:el libro[s]?\s+|libros?\s+de\s+|sobre\s+)?["']?([a-záéíóúüñ][a-záéíóúüñ0-9\s\-]+?)["']?\s*(?:\?|$)/i);
+        const search = titleMatch?.[1]?.trim().replace(/^(hay|de|que|el|la|los|las)\s+/i, '') || '';
         if (!search || search.length < 3) return void reply('Indica el título o autor que deseas buscar.');
         const books = await prisma.libraryBook.findMany({
           where: { OR: [{ title: { contains: search } }, { author: { contains: search } }] },
