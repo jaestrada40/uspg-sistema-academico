@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Eye, EyeOff, Lock, User, KeyRound, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -20,6 +20,13 @@ export const LoginPage: React.FC = () => {
   const [recoverSuccess, setRecoverSuccess] = useState(false);
   const [mfaChallengeToken, setMfaChallengeToken] = useState('');
   const [mfaCode, setMfaCode] = useState('');
+  const [secsLeft, setSecsLeft] = useState(() => 30 - (Math.floor(Date.now() / 1000) % 30));
+
+  useEffect(() => {
+    if (!mfaChallengeToken) return;
+    const timer = window.setInterval(() => setSecsLeft(30 - (Math.floor(Date.now() / 1000) % 30)), 1000);
+    return () => window.clearInterval(timer);
+  }, [mfaChallengeToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,6 +104,12 @@ export const LoginPage: React.FC = () => {
                 <div>
                   <label className="mb-1 block text-xs font-bold text-[#333333]">Código MFA</label>
                   <input autoFocus autoComplete="one-time-code" value={mfaCode} onChange={(e) => { setMfaCode(e.target.value.toUpperCase()); setErrorMessage(''); }} placeholder="000000 o XXXX-XXXX" className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-center font-mono text-base font-bold tracking-[0.2em] focus:border-[#800020] focus:outline-hidden" />
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                      <div className={`h-full rounded-full ${secsLeft <= 5 ? 'bg-red-500' : secsLeft <= 10 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${(secsLeft / 30) * 100}%`, transition: 'width 1s linear' }} />
+                    </div>
+                    <span className={`shrink-0 text-[11px] font-bold tabular-nums ${secsLeft <= 5 ? 'text-red-600' : secsLeft <= 10 ? 'text-amber-600' : 'text-green-700'}`}>{secsLeft}s</span>
+                  </div>
                 </div>
               </>
             ) : (

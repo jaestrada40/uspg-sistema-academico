@@ -4,6 +4,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { RoleGuard } from '../components/common/RoleGuard';
 import { Pagination } from '../components/common/Pagination';
 import { useApp } from '../context/AppContext';
+import { translateAction, translateEntity, translateProvider, translateSyncStatus } from '../utils/auditLabels';
 
 type Account = { id: string; name: string; email: string; role: string; active: boolean; mustChangePassword: boolean; mfaEnabled: boolean };
 type Audit = { id: string; action: string; entityType: string; actor: string; actorRole: string | null; details?: string | null; createdAt: string };
@@ -182,8 +183,8 @@ export const SystemsPage: React.FC = () => {
                   <div className="divide-y">
                     {overview.audit.map((record) => (
                       <div key={record.id} className="p-3 text-xs">
-                        <p className="font-bold">{record.action}</p>
-                        <p className="text-slate-500">{record.entityType} · {record.actor} {record.actorRole ? `(${record.actorRole})` : ''} · {new Date(record.createdAt).toLocaleString('es-GT')}</p>
+                        <p className="font-bold">{translateAction(record.action)}</p>
+                        <p className="text-slate-500">{translateEntity(record.entityType)} · {record.actor} {record.actorRole ? `(${record.actorRole})` : ''} · {new Date(record.createdAt).toLocaleString('es-GT')}</p>
                       </div>
                     ))}
                   </div>
@@ -301,8 +302,8 @@ export const SystemsPage: React.FC = () => {
                     <div className="divide-y">
                       {auditPage.records.map((r) => (
                         <div key={r.id} className="p-3 text-xs">
-                          <p className="font-bold">{r.action}</p>
-                          <p className="text-slate-500">{r.entityType} · {r.actor} {r.actorRole ? `(${r.actorRole})` : ''} · {new Date(r.createdAt).toLocaleString('es-GT')}</p>
+                          <p className="font-bold">{translateAction(r.action)}</p>
+                          <p className="text-slate-500">{translateEntity(r.entityType)} · {r.actor} {r.actorRole ? `(${r.actorRole})` : ''} · {new Date(r.createdAt).toLocaleString('es-GT')}</p>
                           {r.details && <p className="mt-1 font-mono text-[10px] text-slate-400 truncate">{r.details}</p>}
                         </div>
                       ))}
@@ -325,9 +326,9 @@ export const SystemsPage: React.FC = () => {
                         {pagedClassrooms.map((vc) => (
                           <tr key={vc.id}>
                             <td className="p-3"><p className="font-bold">{vc.courseName}</p><p className="text-[10px] text-slate-500">{vc.courseCode}</p></td>
-                            <td className="p-3 text-slate-500">{vc.provider}</td>
+                            <td className="p-3 text-slate-500">{translateProvider(vc.provider)}</td>
                             <td className="p-3">
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${vc.syncStatus === 'SYNCED' ? 'bg-green-100 text-green-800' : vc.syncStatus === 'ERROR' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>{vc.syncStatus}</span>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${vc.syncStatus === 'SYNCED' ? 'bg-green-100 text-green-800' : vc.syncStatus === 'ERROR' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>{translateSyncStatus(vc.syncStatus)}</span>
                             </td>
                             <td className="p-3 text-slate-500">{vc.lastSyncedAt ? new Date(vc.lastSyncedAt).toLocaleString('es-GT') : '—'}</td>
                             <td className="p-3 text-red-600 max-w-xs truncate">{vc.syncError ? <><AlertTriangle className="inline h-3.5 w-3.5 mr-1" />{vc.syncError}</> : '—'}</td>

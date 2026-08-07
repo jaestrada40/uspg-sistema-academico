@@ -3,6 +3,7 @@ import { ClipboardList, KeyRound, Plus, RefreshCw, Search, ShieldOff, ToggleLeft
 import { PageHeader } from '../components/common/PageHeader';
 import { PasswordInput } from '../components/common/PasswordInput';
 import { useApp } from '../context/AppContext';
+import { translateAction, translateEntity } from '../utils/auditLabels';
 
 type ManagedUser = { id: string; name: string; email: string; role: string; carnetOrCode?: string; active: boolean; mustChangePassword: boolean; mfaEnabled: boolean };
 type AuditRecord = { id: string; action: string; entityType: string; entityId?: string; details?: string; actorName: string; actorRole?: string; createdAt: string };
@@ -168,8 +169,8 @@ export const UsersPage: React.FC = () => {
               {paginatedAudit.map((record) => (
                 <tr key={record.id}>
                   <td className="px-4 py-3 text-[#64748B]">{new Date(record.createdAt).toLocaleString('es-GT')}</td>
-                  <td className="px-4 py-3 font-mono font-bold text-[#800020]">{record.action}</td>
-                  <td className="px-4 py-3">{record.entityType}{record.entityId ? ` · ${record.entityId.slice(0, 8)}` : ''}</td>
+                  <td className="px-4 py-3 font-bold text-[#800020]">{translateAction(record.action)}</td>
+                  <td className="px-4 py-3">{translateEntity(record.entityType)}{record.entityId ? ` · ${record.entityId.slice(0, 8)}` : ''}</td>
                   <td className="px-4 py-3 font-semibold">{record.actorName}<span className="ml-1 text-[10px] text-[#64748B]">{record.actorRole}</span></td>
                   <td className="px-4 py-3 font-mono text-[10px] text-[#64748B]">{record.details ? String(record.details).slice(0, 80) : '—'}</td>
                 </tr>
