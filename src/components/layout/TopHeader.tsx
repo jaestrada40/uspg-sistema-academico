@@ -96,19 +96,26 @@ export const TopHeader: React.FC = () => {
       {/* Right section: Cycle selector, Notifications, Profile */}
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Active Cycle Selector Badge */}
+        {(currentUser.role === 'ESTUDIANTE' || currentUser.role === 'DOCENTE') ? (
+          <div className="flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-2.5 py-1.5 text-xs font-semibold text-[#333333]">
+            <Calendar className="h-3.5 w-3.5 text-[#800020]" />
+            <span className="hidden sm:inline">{currentCycle?.name}{currentCycle?.campusName ? ` · ${currentCycle.campusName}` : ''}</span>
+            <span className="sm:hidden">{currentCycle?.name.split(' ')[0]}</span>
+          </div>
+        ) : (
         <div className="relative">
           <button
             onClick={() => setShowCycleMenu(!showCycleMenu)}
             className="flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-2.5 py-1.5 text-xs font-semibold text-[#333333] hover:border-[#800020] transition-colors"
           >
             <Calendar className="h-3.5 w-3.5 text-[#800020]" />
-            <span className="hidden sm:inline">{currentCycle?.name}</span>
+            <span className="hidden sm:inline">{currentCycle?.name}{currentCycle?.campusName ? ` · ${currentCycle.campusName}` : ''}</span>
             <span className="sm:hidden">{currentCycle?.name.split(' ')[0]}</span>
             <ChevronDown className="h-3.5 w-3.5 text-[#64748B]" />
           </button>
 
           {showCycleMenu && (
-            <div className="absolute right-0 mt-2 w-56 rounded-xl border border-[#E2E8F0] bg-white p-2 shadow-xl z-50">
+            <div className="absolute right-0 mt-2 w-64 rounded-xl border border-[#E2E8F0] bg-white p-2 shadow-xl z-50">
               <div className="px-3 py-1.5 text-[10px] font-bold uppercase text-[#7D8490] border-b border-[#E2E8F0] mb-1">
                 Seleccionar Ciclo Activo
               </div>
@@ -123,13 +130,17 @@ export const TopHeader: React.FC = () => {
                     c.isCurrent ? 'bg-[#800020]/10 text-[#800020] font-bold' : 'text-[#333333] hover:bg-slate-100'
                   }`}
                 >
-                  <span>{c.name}</span>
+                  <span className="text-left">
+                    <span className="block">{c.name}</span>
+                    {c.campusName && <span className="block text-[10px] font-normal text-[#7D8490]">{c.campusName}</span>}
+                  </span>
                   {c.isCurrent && <Check className="h-3.5 w-3.5 text-[#800020]" />}
                 </button>
               ))}
             </div>
           )}
         </div>
+        )}
 
         {/* Notifications Dropdown */}
         <div className="relative">
