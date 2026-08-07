@@ -87,6 +87,8 @@ const SYNC_STATUS_LABELS: Record<string, string> = {
   PENDING: 'Pendiente',
   ERROR: 'Error de sincronización',
   PENDING_SYNC: 'Pendiente de sincronización',
+  PENDING_CONFIGURATION: 'Configuración pendiente',
+  FAILED: 'Fallido',
 };
 
 const PROVIDER_LABELS: Record<string, string> = {

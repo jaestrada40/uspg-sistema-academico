@@ -354,7 +354,7 @@ export const SystemsPage: React.FC = () => {
                       <div key={email.id} className="flex items-center justify-between gap-3 p-4 text-xs">
                         <div className="min-w-0">
                           <p className="truncate font-bold">{email.subject}</p>
-                          <p className="truncate text-slate-500">{email.recipientEmail} · {email.status} · intento {email.attempts}</p>
+                          <p className="truncate text-slate-500">{email.recipientEmail} · {translateSyncStatus(email.status)} · intento {email.attempts}</p>
                           {email.lastError && <p className="mt-1 text-red-700">{email.lastError}</p>}
                         </div>
                         <button disabled={Boolean(busy)} onClick={() => void retry(email.id)} className="shrink-0 rounded-lg border px-3 py-2 font-bold disabled:opacity-50">Reintentar</button>
