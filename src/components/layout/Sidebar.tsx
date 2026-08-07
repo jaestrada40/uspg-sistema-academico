@@ -85,15 +85,11 @@ export const Sidebar: React.FC = () => {
       >
         {/* USPG Institutional Logo Header */}
         <div className="flex min-h-28 items-center justify-between border-b-4 border-[#800020] px-5 py-3 bg-[#1E293B] text-white">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-1 items-center justify-center">
             <InstitutionLogo
               className="h-20 w-20 text-white text-sm"
               imageClassName="h-full w-full object-contain drop-shadow-[0_3px_8px_rgba(0,0,0,0.4)]"
             />
-            <div className="min-w-0">
-              <h2 className="text-sm font-bold tracking-tight leading-tight">{institution.shortName}</h2>
-              <p className="text-[11px] font-medium text-white/80 leading-snug line-clamp-3">{institution.name}</p>
-            </div>
           </div>
           <button
             onClick={() => setSidebarOpen(false)}
