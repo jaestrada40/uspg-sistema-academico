@@ -89,6 +89,8 @@ export interface AcademicCycle {
   enrollmentStartDate: string;
   enrollmentEndDate: string;
   gradeSubmissionDeadline: string;
+  examStartDate?: string;
+  examEndDate?: string;
   status: 'Planificado' | 'Inscripciones abiertas' | 'En curso' | 'Finalizado';
   isCurrent: boolean;
   campusId: string;

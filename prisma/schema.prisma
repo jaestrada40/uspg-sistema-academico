@@ -278,6 +278,8 @@ model AcademicCycle {
   enrollmentStartDate     DateTime  @map("enrollment_start_date")
   enrollmentEndDate       DateTime  @map("enrollment_end_date")
   gradeSubmissionDeadline DateTime  @map("grade_submission_deadline")
+  examStartDate           DateTime? @map("exam_start_date")
+  examEndDate             DateTime? @map("exam_end_date")
   status                  String
   isCurrent               Boolean   @default(false) @map("is_current")
   campusId                String    @map("campus_id")

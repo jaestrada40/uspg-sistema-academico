@@ -146,6 +146,77 @@ export function registerNotificationRoutes(
       groundedContext = verifiedContext;
       const approvedCredits = approvedGrades.reduce((sum, item) => sum + item.section.course.credits, 0);
 
+      // ── Detección de preguntas combinadas (2 temas en una) ──────────────────────
+      type TopicKey = 'grades' | 'payments' | 'schedule' | 'attendance' | 'tasks' | 'library' | 'parking';
+      const topicPatterns: [TopicKey, RegExp][] = [
+        ['grades', /nota|calificaci[oó]n|promedio|aprob|reprob/],
+        ['payments', /pago|saldo|debo|finanz|deuda|mora/],
+        ['schedule', /horario|clase|inscrit|materia|llevo/],
+        ['attendance', /asistencia|faltas|presencia/],
+        ['tasks', /tarea|asignaci[oó]n/],
+        ['library', /biblioteca|libro|pr[eé]stamo/],
+        ['parking', /parqueo|veh[ií]culo|placa|carro/],
+      ];
+      const matchedTopics = topicPatterns.filter(([, pattern]) => pattern.test(question)).map(([key]) => key);
+      if (matchedTopics.length >= 2 && /\by\b|tambi[eé]n|adem[aá]s/.test(question)) {
+        const parts: string[] = [];
+        if (matchedTopics.includes('grades')) {
+          const lines = visibleGrades.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, 5).map((item) => `${item.section.course.name}: ${Number(item.total).toFixed(1)} · ${item.status}`);
+          parts.push(lines.length ? `Calificaciones:\n${lines.join('\n')}` : 'Sin calificaciones registradas.');
+        }
+        if (matchedTopics.includes('payments')) {
+          const balance = student.financialCharges.reduce((sum, charge) => sum + Math.max(0, charge.amount - charge.payments.reduce((paid, payment) => paid + payment.amount, 0)), 0);
+          parts.push(`Saldo pendiente: Q${balance.toFixed(2)}.`);
+        }
+        if (matchedTopics.includes('schedule')) {
+          const lines = currentEnrollments.map((item) => `${item.section.course.name} · ${item.section.scheduleTime}`);
+          parts.push(lines.length ? `Cursos inscritos:\n${lines.join('\n')}` : 'Sin cursos inscritos actualmente.');
+        }
+        if (matchedTopics.includes('attendance')) {
+          const present = attendance.filter((item) => item.status === 'PRESENTE').length;
+          parts.push(`Asistencia: ${present} presentes, ${attendance.length - present} ausencias/tardanzas.`);
+        }
+        if (matchedTopics.includes('tasks')) {
+          const pending = tasks.filter((item) => item.grades.length === 0);
+          parts.push(pending.length ? `Tareas pendientes: ${pending.map((item) => item.name).join(', ')}.` : 'Sin tareas pendientes.');
+        }
+        if (matchedTopics.includes('library')) {
+          parts.push(loans.length ? `Préstamos activos: ${loans.map((item) => `${item.copy.book.title} (vence ${item.dueAt.toLocaleDateString('es-GT')})`).join(', ')}.` : 'Sin préstamos activos.');
+        }
+        if (matchedTopics.includes('parking')) {
+          parts.push(parkingVehicles.length ? `Vehículos: ${parkingVehicles.map((v) => v.plate).join(', ')}.` : 'Sin vehículos registrados.');
+        }
+        return void reply(parts.join('\n\n'));
+      }
+
+      // ── Exámenes finales ────────────────────────────────────────────────────────
+      if (/examen.*final|final.*examen|ex[aá]menes|semana.*examen|examen.*cu[aá]ndo|cu[aá]ndo.*examen/.test(question)) {
+        if (!currentCycle) return void reply('No hay un ciclo académico actual configurado.');
+        if ((currentCycle as any).examStartDate) {
+          const start = new Date((currentCycle as any).examStartDate).toLocaleDateString('es-GT');
+          const end = (currentCycle as any).examEndDate ? new Date((currentCycle as any).examEndDate).toLocaleDateString('es-GT') : null;
+          return void reply(`Los exámenes finales del ${currentCycle.name} están programados del ${start}${end ? ` al ${end}` : ''}.`);
+        }
+        return void reply(`No hay fechas de exámenes finales configuradas para ${currentCycle.name}. Consulta con tu docente o administración.`);
+      }
+
+      // ── Renovar préstamo de biblioteca ──────────────────────────────────────────
+      if (/renovar|renovaci[oó]n|extender.*pr[eé]stamo|pr[eé]stamo.*extender|alargar.*pr[eé]stamo/.test(question)) {
+        if (!loans.length) return void reply('No tienes préstamos activos para renovar.');
+        const renewable = loans.filter((item) => item.renewalCount === 0);
+        if (!renewable.length) return void reply('Tus préstamos ya han sido renovados el máximo de 1 vez permitida. Devuelve el libro y solicita uno nuevo si es necesario.');
+        return void reply(`Puedes renovar ${renewable.length} préstamo(s):\n${renewable.map((item) => `• ${item.copy.book.title} · vence ${item.dueAt.toLocaleDateString('es-GT')}`).join('\n')}\nVe al módulo Biblioteca y selecciona la opción de renovación.`);
+      }
+
+      // ── Disponibilidad de un libro para otra persona ────────────────────────────
+      if (/compa[ñn]ero|amigo|amiga|otra persona|alguien m[aá]s|puede prestar|puede llevar/.test(question) && /libro|biblioteca|pr[eé]stamo/.test(question)) {
+        const searchMatch = question.match(/(?:el libro|libro de|de|sobre|título)\s+([a-z0-9\s]+)/i);
+        const search = searchMatch?.[1]?.trim();
+        const books = await prisma.libraryBook.findMany({ where: { status: 'ACTIVO', ...(search && search.length > 2 ? { OR: [{ title: { contains: search } }, { author: { contains: search } }] } : {}) }, include: { copies: { where: { status: 'DISPONIBLE' }, select: { id: true } } }, orderBy: { title: 'asc' }, take: 10 });
+        if (!books.length) return void reply(search ? `No encontré el libro "${search}" en el catálogo.` : 'Indica el nombre del libro que buscas.');
+        return void reply(`Disponibilidad${search ? ` de "${search}"` : ''}:\n${books.map((b) => `• ${b.title} · ${b.author} · ${b.copies.length} copia(s) disponible(s)`).join('\n')}\nCualquier estudiante o docente puede solicitarlo desde el módulo Biblioteca.`);
+      }
+
       // ── Graduación ─────────────────────────────────────────────────────────────
       if (/graduar|recibirme|titularme|terminar la carrera|falta para terminar|cu[aá]nto me falta|cu[aá]nto falta para graduarme/.test(question)) {
         const remainingCredits = Math.max(0, student.totalCreditsRequired - approvedCredits);
@@ -316,10 +387,14 @@ export function registerNotificationRoutes(
       // ── Calendario académico ────────────────────────────────────────────────────
       if (/calendario|inicio de clases|fin de clases|per[ií]odo acad|fechas del semestre/.test(question)) {
         if (!currentCycle) return void reply('No hay un ciclo académico actual configurado en el sistema.');
+        const cycle = currentCycle as any;
         const enrollInfo = currentCycle.enrollmentStartDate && currentCycle.enrollmentEndDate
-          ? ` Inscripción: ${new Date(currentCycle.enrollmentStartDate).toLocaleDateString('es-GT')} al ${new Date(currentCycle.enrollmentEndDate).toLocaleDateString('es-GT')}.`
+          ? `\nInscripción: ${new Date(currentCycle.enrollmentStartDate).toLocaleDateString('es-GT')} al ${new Date(currentCycle.enrollmentEndDate).toLocaleDateString('es-GT')}.`
           : '';
-        return void reply(`Ciclo actual: "${currentCycle.name}". Inicia el ${currentCycle.startDate.toLocaleDateString('es-GT')} y finaliza el ${currentCycle.endDate.toLocaleDateString('es-GT')}.${enrollInfo}`);
+        const examInfo = cycle.examStartDate
+          ? `\nExámenes finales: ${new Date(cycle.examStartDate).toLocaleDateString('es-GT')}${cycle.examEndDate ? ` al ${new Date(cycle.examEndDate).toLocaleDateString('es-GT')}` : ''}.`
+          : '';
+        return void reply(`Ciclo actual: "${currentCycle.name}".\nClases: ${currentCycle.startDate.toLocaleDateString('es-GT')} al ${currentCycle.endDate.toLocaleDateString('es-GT')}.${enrollInfo}${examInfo}`);
       }
 
       // ── Horario y cursos ────────────────────────────────────────────────────────

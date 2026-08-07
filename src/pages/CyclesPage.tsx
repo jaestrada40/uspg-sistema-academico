@@ -130,10 +130,16 @@ export const CyclesPage: React.FC = () => {
                     {cycle.startDate} al {cycle.endDate}
                   </span>
                 </div>
-                <div className="col-span-2">
+                <div className={cycle.examStartDate ? '' : 'col-span-2'}>
                   <span className="text-[10px] text-[#7D8490] block">Límite de Entrega de Notas</span>
                   <span className="font-bold text-[#C53030]">{cycle.gradeSubmissionDeadline}</span>
                 </div>
+                {cycle.examStartDate && (
+                  <div>
+                    <span className="text-[10px] text-[#7D8490] block">Exámenes Finales</span>
+                    <span className="font-semibold text-[#333333]">{cycle.examStartDate} al {cycle.examEndDate ?? '—'}</span>
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
@@ -267,6 +273,26 @@ export const CyclesPage: React.FC = () => {
                   type="date"
                   value={formData.gradeSubmissionDeadline}
                   onChange={(e) => setFormData({ ...formData, gradeSubmissionDeadline: e.target.value })}
+                  className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#333333] mb-1">Inicio de Exámenes Finales <span className="font-normal text-[#7D8490]">(opcional)</span></label>
+                <input
+                  type="date"
+                  value={formData.examStartDate ?? ''}
+                  onChange={(e) => setFormData({ ...formData, examStartDate: e.target.value || undefined })}
+                  className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#333333] mb-1">Fin de Exámenes Finales <span className="font-normal text-[#7D8490]">(opcional)</span></label>
+                <input
+                  type="date"
+                  value={formData.examEndDate ?? ''}
+                  onChange={(e) => setFormData({ ...formData, examEndDate: e.target.value || undefined })}
                   className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium"
                 />
               </div>
