@@ -228,5 +228,112 @@ for (const book of sampleBooks) {
   }
 }
 
+// ── Biblioteca: préstamos y reservaciones de prueba ──────────────────────────
+const studentUserIds: Record<string, string> = {};
+for (const s of INITIAL_STUDENTS.slice(0, 4)) {
+  const u = await prisma.user.findFirst({ where: { carnetOrCode: s.carnet } });
+  if (u) studentUserIds[s.carnet] = u.id;
+}
+
+const loanData = [
+  { id: 'LOAN-001', copyId: 'BK-001-C1', carnet: INITIAL_STUDENTS[0].carnet, dueAt: new Date(Date.now() - 3 * 86400000), returnedAt: null as Date | null, status: 'VENCIDO' },
+  { id: 'LOAN-002', copyId: 'BK-003-C1', carnet: INITIAL_STUDENTS[0].carnet, dueAt: new Date(Date.now() + 7 * 86400000), returnedAt: null as Date | null, status: 'PRESTADO' },
+  { id: 'LOAN-003', copyId: 'BK-004-C1', carnet: INITIAL_STUDENTS[1].carnet, dueAt: new Date(Date.now() + 5 * 86400000), returnedAt: null as Date | null, status: 'PRESTADO' },
+  { id: 'LOAN-004', copyId: 'BK-008-C1', carnet: INITIAL_STUDENTS[2].carnet, dueAt: new Date(Date.now() - 10 * 86400000), returnedAt: new Date(Date.now() - 8 * 86400000) as Date | null, status: 'DEVUELTO' },
+  { id: 'LOAN-005', copyId: 'BK-002-C1', carnet: INITIAL_STUDENTS[3].carnet, dueAt: new Date(Date.now() + 3 * 86400000), returnedAt: null as Date | null, status: 'PRESTADO' },
+];
+
+for (const loan of loanData) {
+  const borrowerId = studentUserIds[loan.carnet];
+  if (!borrowerId) continue;
+  await prisma.libraryCopy.update({ where: { id: loan.copyId }, data: { status: loan.status === 'DEVUELTO' ? 'DISPONIBLE' : loan.status === 'PRESTADO' ? 'PRESTADO' : 'VENCIDO' } }).catch(() => {});
+  await prisma.libraryLoan.upsert({
+    where: { id: loan.id },
+    update: {},
+    create: { id: loan.id, copyId: loan.copyId, borrowerId, dueAt: loan.dueAt, returnedAt: loan.returnedAt, status: loan.status, loanedAt: new Date(Date.now() - 14 * 86400000) },
+  });
+}
+
+const reservationData = [
+  { id: 'RES-001', bookId: 'BK-005', carnet: INITIAL_STUDENTS[0].carnet, expiresAt: new Date(Date.now() + 2 * 86400000), status: 'SOLICITADA' },
+  { id: 'RES-002', bookId: 'BK-007', carnet: INITIAL_STUDENTS[1].carnet, expiresAt: new Date(Date.now() + 1 * 86400000), status: 'SOLICITADA' },
+];
+
+for (const res of reservationData) {
+  const userId = studentUserIds[res.carnet];
+  if (!userId) continue;
+  await prisma.libraryReservation.upsert({
+    where: { id: res.id },
+    update: {},
+    create: { id: res.id, bookId: res.bookId, userId, expiresAt: res.expiresAt, status: res.status },
+  });
+}
+
+// ── Parqueo: configuración, vehículos, visitas y evento ───────────────────────
+await prisma.parkingConfig.upsert({
+  where: { id: 1 },
+  update: {},
+  create: { id: 1, totalCapacity: 200, regularReserve: 20, entry1Name: 'Entrada Principal', entry2Name: 'Entrada Lateral' },
+});
+
+const vehicleData = [
+  { id: 'VEH-001', plate: 'P123ABC', make: 'Toyota', model: 'Corolla', color: 'Blanco', type: 'AUTOMOVIL', status: 'ACTIVO', accessCode: 'USPG-VEHD01', ownerId: studentUserIds[INITIAL_STUDENTS[0].carnet] },
+  { id: 'VEH-002', plate: 'O456DEF', make: 'Honda', model: 'Civic', color: 'Gris', type: 'AUTOMOVIL', status: 'ACTIVO', accessCode: 'USPG-VEHD02', ownerId: studentUserIds[INITIAL_STUDENTS[1].carnet] },
+  { id: 'VEH-003', plate: 'M789GHI', make: 'Yamaha', model: 'FZ25', color: 'Negro', type: 'MOTOCICLETA', status: 'ACTIVO', accessCode: 'USPG-VEHD03', ownerId: studentUserIds[INITIAL_STUDENTS[2].carnet] },
+];
+
+for (const v of vehicleData) {
+  if (!v.ownerId) continue;
+  await prisma.parkingVehicle.upsert({ where: { id: v.id }, update: {}, create: v });
+}
+
+// Una visita activa (dentro) y dos históricas
+if (vehicleData[0].ownerId) {
+  await prisma.parkingVisit.upsert({
+    where: { id: 'VIS-001' },
+    update: {},
+    create: { id: 'VIS-001', plate: 'P123ABC', entryGate: 'ENTRADA_1', status: 'DENTRO', vehicleId: 'VEH-001', userId: vehicleData[0].ownerId, enteredAt: new Date(Date.now() - 45 * 60000) },
+  });
+}
+if (vehicleData[1].ownerId) {
+  await prisma.parkingVisit.upsert({
+    where: { id: 'VIS-002' },
+    update: {},
+    create: { id: 'VIS-002', plate: 'O456DEF', entryGate: 'ENTRADA_2', status: 'SALIO', vehicleId: 'VEH-002', userId: vehicleData[1].ownerId, enteredAt: new Date(Date.now() - 3 * 3600000), exitedAt: new Date(Date.now() - 1 * 3600000), exitGate: 'SALIDA_1' },
+  });
+}
+if (vehicleData[2].ownerId) {
+  await prisma.parkingVisit.upsert({
+    where: { id: 'VIS-003' },
+    update: {},
+    create: { id: 'VIS-003', plate: 'M789GHI', entryGate: 'ENTRADA_1', status: 'SALIO', vehicleId: 'VEH-003', userId: vehicleData[2].ownerId, enteredAt: new Date(Date.now() - 5 * 3600000), exitedAt: new Date(Date.now() - 2 * 3600000), exitGate: 'SALIDA_1' },
+  });
+}
+
+// Evento de graduación con invitados
+const gradEventId = 'EVT-GRAD-001';
+await prisma.parkingEvent.upsert({
+  where: { id: gradEventId },
+  update: {},
+  create: { id: gradEventId, name: 'Graduación Ing. Sistemas 2026', organizer: 'Sandra Ruiz', startsAt: new Date(Date.now() + 2 * 86400000), endsAt: new Date(Date.now() + 2 * 86400000 + 4 * 3600000), reservedSpaces: 50, status: 'ACTIVO', createdBy: 'Sandra Ruiz' },
+});
+
+const guestData = [
+  { id: 'GUE-001', guestName: 'María González', plate: 'G111AAA', accessCode: 'EVT-A1B2C3', status: 'AUTORIZADO' },
+  { id: 'GUE-002', guestName: 'Pedro Ramírez', plate: null, accessCode: 'EVT-D4E5F6', status: 'AUTORIZADO' },
+  { id: 'GUE-003', guestName: 'Laura Castillo', plate: 'G222BBB', accessCode: 'EVT-G7H8I9', status: 'AUTORIZADO' },
+];
+
+for (const g of guestData) {
+  await prisma.parkingEventGuest.upsert({ where: { id: g.id }, update: {}, create: { ...g, eventId: gradEventId } });
+}
+
+// Alerta de prueba
+await prisma.parkingAlert.upsert({
+  where: { dedupeKey: 'DEMO-ALERT-001' },
+  update: {},
+  create: { dedupeKey: 'DEMO-ALERT-001', type: 'OCUPACION', severity: 'MEDIA', message: 'El parqueo alcanzó 80% de ocupación durante el horario pico matutino.', status: 'ACTIVA' },
+});
+
 await prisma.$disconnect();
 console.log('Base inicial creada. Usuarios demo usan la contraseña Demo123!');
