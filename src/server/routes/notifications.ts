@@ -769,6 +769,96 @@ export function registerNotificationRoutes(
       // Resumen general
       return void reply(`Resumen administrativo:\n• Ciclo activo: ${currentCycle?.name || 'Ninguno'}\n• Estudiantes: ${students} (en mora: ${inDebtStudents})\n• Docentes: ${teachers}\n• Carreras: ${careers} · Cursos: ${courses}\n• Secciones: ${sections} (llenas: ${fullSections})\n• Expedientes pendientes: ${pendingDocuments}\n• Cargos pendientes/vencidos: ${pendingCharges}\n• Parqueo: ${vehiclesInside}/${parkingConfig?.totalCapacity || 0} dentro\n• Biblioteca: ${activeLoans} préstamos activos\n• Solicitudes pendientes: ${pendingRequests}`);
     }
+    if (user.role === 'PARQUEO') {
+      const now = new Date();
+      const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const [
+        config, inside, todayVisits, monthVisits,
+        registeredVehicles, activeVehicles,
+        activeEvents, upcomingEvents,
+        activeAlerts, criticalAlerts,
+        deniedToday, offlineOps,
+      ] = await Promise.all([
+        prisma.parkingConfig.findUnique({ where: { id: 1 } }),
+        prisma.parkingVisit.count({ where: { status: 'DENTRO' } }),
+        prisma.parkingVisit.count({ where: { enteredAt: { gte: startOfDay } } }),
+        prisma.parkingVisit.count({ where: { enteredAt: { gte: startOfMonth } } }),
+        prisma.parkingVehicle.count(),
+        prisma.parkingVehicle.count({ where: { status: 'ACTIVO' } }),
+        prisma.parkingEvent.count({ where: { status: 'EN_CURSO' } }),
+        prisma.parkingEvent.findMany({ where: { status: { in: ['PLANIFICADO', 'EN_CURSO'] } }, select: { name: true, status: true, startsAt: true, endsAt: true, reservedSpaces: true, organizer: true }, orderBy: { startsAt: 'asc' }, take: 5 }),
+        prisma.parkingAlert.count({ where: { status: 'ACTIVA' } }),
+        prisma.parkingAlert.count({ where: { status: 'ACTIVA', severity: 'CRITICA' } }),
+        prisma.parkingAccessAttempt.count({ where: { outcome: 'DENEGADO', createdAt: { gte: startOfDay } } }),
+        prisma.parkingOfflineOperation.count({ where: { recordedAt: { gte: startOfDay } } }),
+      ]);
+
+      const capacity = config?.totalCapacity ?? 0;
+      const available = Math.max(0, capacity - inside);
+      const occupancy = capacity > 0 ? Math.round((inside / capacity) * 100) : 0;
+
+      // Ocupación / disponibilidad
+      if (/cu[aá]ntos.*dentro|veh[ií]culo.*dentro|dentro.*ahora|ocupaci[oó]n|disponib/.test(question)) {
+        return void reply(`Parqueo ahora — Dentro: ${inside}/${capacity} (${occupancy}% ocupado) · Espacios disponibles: ${available}.`);
+      }
+      if (/capacidad/.test(question)) return void reply(`Capacidad total del parqueo: ${capacity} espacios · Reserva regular: ${config?.regularReserve ?? 0} · Disponibles ahora: ${available}.`);
+
+      // Ingresos / visitas
+      if (/ingresaron.*hoy|hoy.*ingres|visita.*hoy|hoy.*visita/.test(question)) return void reply(`Vehículos que ingresaron hoy: ${todayVisits}.`);
+      if (/ingresaron.*mes|mes.*ingres|visita.*mes/.test(question)) return void reply(`Vehículos que ingresaron este mes: ${monthVisits}.`);
+
+      // Vehículos registrados
+      if (/veh[ií]culo.*registrado|registrado.*veh[ií]culo|cu[aá]ntos.*veh[ií]culo/.test(question)) return void reply(`Vehículos registrados: ${registeredVehicles} total · ${activeVehicles} activos.`);
+
+      // Búsqueda de vehículo por placa
+      if (/buscar.*placa|placa|buscar.*veh[ií]culo/.test(question)) {
+        const plateMatch = question.match(/placa\s+([A-Za-z0-9\-]+)/i);
+        const plate = plateMatch?.[1]?.toUpperCase().trim();
+        if (!plate) return void reply('Indica la placa que deseas buscar. Ej: "buscar placa ABC-123"');
+        const vehicle = await prisma.parkingVehicle.findFirst({ where: { plate: { contains: plate } }, include: { owner: { select: { name: true } } } });
+        if (!vehicle) return void reply(`No encontré vehículo con placa "${plate}".`);
+        const lastVisit = await prisma.parkingVisit.findFirst({ where: { plate: vehicle.plate }, orderBy: { enteredAt: 'desc' }, select: { enteredAt: true, status: true } });
+        return void reply(`Vehículo: ${vehicle.plate} · ${vehicle.make} ${vehicle.model} ${vehicle.color}\nPropietario: ${vehicle.owner.name} · Estado: ${vehicle.status}${lastVisit ? `\nÚltimo ingreso: ${lastVisit.enteredAt.toISOString().slice(0,10)} (${lastVisit.status})` : ''}`);
+      }
+
+      // Eventos
+      if (/evento.*activo|activo.*evento|evento.*curso/.test(question)) {
+        if (!activeEvents) return void reply('No hay eventos en curso actualmente.');
+        const ev = upcomingEvents.filter((e) => e.status === 'EN_CURSO');
+        return void reply(`Eventos en curso: ${activeEvents}\n${ev.map((e) => `• ${e.name} — ${e.organizer} · hasta ${e.endsAt.toISOString().slice(0,10)} · ${e.reservedSpaces} espacios reservados`).join('\n')}`);
+      }
+      if (/evento.*planificado|pr[oó]ximo.*evento|evento.*planif/.test(question)) {
+        const planned = upcomingEvents.filter((e) => e.status === 'PLANIFICADO');
+        if (!planned.length) return void reply('No hay eventos planificados próximamente.');
+        return void reply(`Eventos planificados:\n${planned.map((e) => `• ${e.name} — ${e.organizer}\n  ${e.startsAt.toISOString().slice(0,10)} al ${e.endsAt.toISOString().slice(0,10)} · ${e.reservedSpaces} espacios`).join('\n')}`);
+      }
+      if (/evento/.test(question)) {
+        if (!upcomingEvents.length) return void reply('No hay eventos activos ni planificados.');
+        return void reply(`Eventos activos/planificados:\n${upcomingEvents.map((e) => `• ${e.name} · ${e.status} · ${e.startsAt.toISOString().slice(0,10)}`).join('\n')}`);
+      }
+
+      // Alertas
+      if (/alerta.*cr[ií]tica|cr[ií]tica.*alerta/.test(question)) return void reply(`Alertas críticas activas: ${criticalAlerts} de ${activeAlerts} alertas totales.`);
+      if (/alerta/.test(question)) {
+        if (!activeAlerts) return void reply('No hay alertas activas en el parqueo.');
+        const alerts = await prisma.parkingAlert.findMany({ where: { status: 'ACTIVA' }, select: { type: true, severity: true, message: true }, orderBy: { createdAt: 'desc' }, take: 5 });
+        return void reply(`Alertas activas (${activeAlerts}):\n${alerts.map((a) => `• [${a.severity}] ${a.type}: ${a.message}`).join('\n')}`);
+      }
+
+      // Accesos denegados
+      if (/denegado|rechazado|acceso.*neg/.test(question)) return void reply(`Accesos denegados hoy: ${deniedToday}.`);
+
+      // Operaciones offline
+      if (/offline|sin conexi[oó]n|fuera de l[ií]nea/.test(question)) return void reply(`Operaciones registradas offline hoy: ${offlineOps}.`);
+
+      // Puertas / gates
+      if (/puerta|entrada|salida|gate/.test(question)) return void reply(`Puertas configuradas:\n• ${config?.entry1Name ?? 'Entrada 1'}\n• ${config?.entry2Name ?? 'Entrada 2'}\n• ${config?.exitName ?? 'Salida principal'}`);
+
+      // Resumen general
+      return void reply(`Parqueo — Estado actual:\n• Dentro: ${inside}/${capacity} (${occupancy}% ocupado)\n• Disponibles: ${available}\n• Ingresos hoy: ${todayVisits} · Este mes: ${monthVisits}\n• Eventos activos: ${activeEvents}\n• Alertas activas: ${activeAlerts}${criticalAlerts ? ` (${criticalAlerts} críticas)` : ''}\n• Accesos denegados hoy: ${deniedToday}`);
+    }
+
     if (user.role === 'BIBLIOTECA') {
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
