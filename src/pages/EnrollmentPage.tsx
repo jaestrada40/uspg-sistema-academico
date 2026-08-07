@@ -34,6 +34,8 @@ export const EnrollmentPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [jornadaFilter, setJornadaFilter] = useState('ALL');
   const [selectedStudent, setSelectedStudent] = useState(currentUser.carnetOrCode || '');
+  const [secPage, setSecPage] = useState(1);
+  const [secPageSize, setSecPageSize] = useState(20);
   const { students } = useApp();
 
   // Student details
@@ -152,9 +154,9 @@ export const EnrollmentPage: React.FC = () => {
 
         {/* Section Cards List */}
         <div>
-          <h3 className="text-sm font-bold text-[#333333] mb-3">Secciones Disponibles para Matrícula</h3>
+          <h3 className="text-sm font-bold text-[#333333] mb-3">Secciones Disponibles para Matrícula ({availableSections.length})</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {availableSections.map((sec) => {
+            {availableSections.slice((secPage - 1) * secPageSize, secPage * secPageSize).map((sec) => {
               const courseObj = courses.find((c) => c.code === sec.courseCode);
               const isAlreadyEnrolled = myEnrollments.some((e) => e.sectionId === sec.id);
 
@@ -224,6 +226,21 @@ export const EnrollmentPage: React.FC = () => {
               );
             })}
           </div>
+          {availableSections.length > secPageSize && (
+            <div className="flex items-center justify-between rounded-xl border bg-white px-4 py-3 text-xs mt-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[#64748B]">{availableSections.length} secciones</span>
+                <select value={secPageSize} onChange={(e) => { setSecPageSize(Number(e.target.value)); setSecPage(1); }} className="rounded-lg border border-[#E2E8F0] px-2 py-1 font-bold">
+                  {[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n} por página</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[#64748B]">Página {secPage} de {Math.ceil(availableSections.length / secPageSize) || 1}</span>
+                <button disabled={secPage <= 1} onClick={() => setSecPage(secPage - 1)} className="rounded-lg border px-3 py-1.5 font-bold disabled:opacity-40">‹</button>
+                <button disabled={secPage * secPageSize >= availableSections.length} onClick={() => setSecPage(secPage + 1)} className="rounded-lg border px-3 py-1.5 font-bold disabled:opacity-40">›</button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Mis Inscripciones Activas */}

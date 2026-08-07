@@ -28,6 +28,16 @@ export const SystemsPage: React.FC = () => {
   const [accountSearch, setAccountSearch] = useState('');
   const [busy, setBusy] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'sessions' | 'inactive' | 'audit' | 'classrooms' | 'outbox'>('overview');
+  const [accountsPage, setAccountsPage] = useState(1);
+  const [accountsPageSize, setAccountsPageSize] = useState(20);
+  const [sessionsPage, setSessionsPage] = useState(1);
+  const [sessionsPageSize, setSessionsPageSize] = useState(20);
+  const [inactivePage, setInactivePage] = useState(1);
+  const [inactivePageSize, setInactivePageSize] = useState(20);
+  const [classroomsPage, setClassroomsPage] = useState(1);
+  const [classroomsPageSize, setClassroomsPageSize] = useState(20);
+  const [outboxPage, setOutboxPage] = useState(1);
+  const [outboxPageSize, setOutboxPageSize] = useState(20);
 
   const loadOverview = async () => {
     const [overviewResponse, accountsResponse, outboxResponse] = await Promise.all([fetch('/api/systems/overview'), fetch('/api/systems/accounts'), fetch('/api/systems/outbox')]);
@@ -108,6 +118,11 @@ export const SystemsPage: React.FC = () => {
   };
 
   const filteredAccounts = accounts.filter((a) => !accountSearch || a.name.toLowerCase().includes(accountSearch.toLowerCase()) || a.email.toLowerCase().includes(accountSearch.toLowerCase()) || a.role.toLowerCase().includes(accountSearch.toLowerCase()));
+  const pagedAccounts = filteredAccounts.slice((accountsPage - 1) * accountsPageSize, accountsPage * accountsPageSize);
+  const pagedSessions = sessions.slice((sessionsPage - 1) * sessionsPageSize, sessionsPage * sessionsPageSize);
+  const pagedInactive = inactiveUsers.slice((inactivePage - 1) * inactivePageSize, inactivePage * inactivePageSize);
+  const pagedClassrooms = classrooms.slice((classroomsPage - 1) * classroomsPageSize, classroomsPage * classroomsPageSize);
+  const pagedOutbox = outbox.slice((outboxPage - 1) * outboxPageSize, outboxPage * outboxPageSize);
 
   const tabs: { id: typeof activeTab; label: string }[] = [
     { id: 'overview', label: 'Resumen' },
@@ -193,7 +208,7 @@ export const SystemsPage: React.FC = () => {
                       <tr><th className="p-3">Usuario</th><th className="p-3">Rol</th><th className="p-3">Seguridad</th><th className="p-3">Estado</th><th className="p-3 text-right">Soporte</th></tr>
                     </thead>
                     <tbody className="divide-y">
-                      {filteredAccounts.map((account) => (
+                      {pagedAccounts.map((account) => (
                         <tr key={account.id} className={!account.active ? 'bg-slate-50 opacity-60' : ''}>
                           <td className="p-3"><p className="font-bold">{account.name}</p><p className="text-[10px] text-slate-500">{account.email}</p></td>
                           <td className="p-3 font-bold">{account.role}</td>
@@ -211,6 +226,7 @@ export const SystemsPage: React.FC = () => {
                     </tbody>
                   </table>
                   {filteredAccounts.length === 0 && <p className="p-5 text-xs text-slate-500">Sin resultados.</p>}
+                  {filteredAccounts.length > 0 && <PaginationBar total={filteredAccounts.length} page={accountsPage} pageSize={accountsPageSize} onPage={(p) => setAccountsPage(p)} onSize={(s) => { setAccountsPageSize(s); setAccountsPage(1); }} />}
                 </div>
               </section>
             )}
@@ -223,7 +239,7 @@ export const SystemsPage: React.FC = () => {
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Usuario</th><th className="p-3">Rol</th><th className="p-3">Inicio</th><th className="p-3">Expira</th><th className="p-3 text-right">Acción</th></tr></thead>
                       <tbody className="divide-y">
-                        {sessions.map((s) => (
+                        {pagedSessions.map((s) => (
                           <tr key={s.id}>
                             <td className="p-3"><p className="font-bold">{s.name}</p><p className="text-[10px] text-slate-500">{s.email}</p></td>
                             <td className="p-3 font-bold">{s.role}</td>
@@ -234,6 +250,7 @@ export const SystemsPage: React.FC = () => {
                         ))}
                       </tbody>
                     </table>
+                    <PaginationBar total={sessions.length} page={sessionsPage} pageSize={sessionsPageSize} onPage={(p) => setSessionsPage(p)} onSize={(s) => { setSessionsPageSize(s); setSessionsPage(1); }} />
                   </div>
                 )}
               </section>
@@ -247,7 +264,7 @@ export const SystemsPage: React.FC = () => {
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Usuario</th><th className="p-3">Rol</th><th className="p-3">Última actualización</th><th className="p-3 text-right">Acción</th></tr></thead>
                       <tbody className="divide-y">
-                        {inactiveUsers.map((u) => (
+                        {pagedInactive.map((u) => (
                           <tr key={u.id}>
                             <td className="p-3"><p className="font-bold">{u.name}</p><p className="text-[10px] text-slate-500">{u.email}</p></td>
                             <td className="p-3 font-bold">{u.role}</td>
@@ -257,6 +274,7 @@ export const SystemsPage: React.FC = () => {
                         ))}
                       </tbody>
                     </table>
+                    <PaginationBar total={inactiveUsers.length} page={inactivePage} pageSize={inactivePageSize} onPage={(p) => setInactivePage(p)} onSize={(s) => { setInactivePageSize(s); setInactivePage(1); }} />
                   </div>
                 )}
               </section>
@@ -309,7 +327,7 @@ export const SystemsPage: React.FC = () => {
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="p-3">Curso</th><th className="p-3">Proveedor</th><th className="p-3">Estado</th><th className="p-3">Última sincronización</th><th className="p-3">Error</th></tr></thead>
                       <tbody className="divide-y">
-                        {classrooms.map((vc) => (
+                        {pagedClassrooms.map((vc) => (
                           <tr key={vc.id}>
                             <td className="p-3"><p className="font-bold">{vc.courseName}</p><p className="text-[10px] text-slate-500">{vc.courseCode}</p></td>
                             <td className="p-3 text-slate-500">{vc.provider}</td>
@@ -322,6 +340,7 @@ export const SystemsPage: React.FC = () => {
                         ))}
                       </tbody>
                     </table>
+                    <PaginationBar total={classrooms.length} page={classroomsPage} pageSize={classroomsPageSize} onPage={(p) => setClassroomsPage(p)} onSize={(s) => { setClassroomsPageSize(s); setClassroomsPage(1); }} />
                   </div>
                 )}
               </section>
@@ -331,8 +350,8 @@ export const SystemsPage: React.FC = () => {
               <section className="overflow-hidden rounded-xl border bg-white shadow-xs">
                 <div className="border-b p-5"><h2 className="text-sm font-bold">Cola de correo con incidencias</h2></div>
                 {outbox.length === 0 ? <p className="p-5 text-xs text-slate-500">No hay correos pendientes o fallidos.</p> : (
-                  <div className="divide-y">
-                    {outbox.map((email) => (
+                  <><div className="divide-y">
+                    {pagedOutbox.map((email) => (
                       <div key={email.id} className="flex items-center justify-between gap-3 p-4 text-xs">
                         <div className="min-w-0">
                           <p className="truncate font-bold">{email.subject}</p>
@@ -343,6 +362,7 @@ export const SystemsPage: React.FC = () => {
                       </div>
                     ))}
                   </div>
+                  <PaginationBar total={outbox.length} page={outboxPage} pageSize={outboxPageSize} onPage={(p) => setOutboxPage(p)} onSize={(s) => { setOutboxPageSize(s); setOutboxPage(1); }} /></>
                 )}
               </section>
             )}
@@ -369,3 +389,23 @@ const Row = ({ label, value }: { label: string; value: string }) => (
     <dd className="font-bold">{value}</dd>
   </div>
 );
+
+const PaginationBar = ({ total, page, pageSize, onPage, onSize }: { total: number; page: number; pageSize: number; onPage: (p: number) => void; onSize: (s: number) => void }) => {
+  const totalPages = Math.ceil(total / pageSize) || 1;
+  if (total === 0) return null;
+  return (
+    <div className="flex items-center justify-between border-t px-4 py-3 text-xs">
+      <div className="flex items-center gap-2">
+        <span className="text-slate-500">{total} registros</span>
+        <select value={pageSize} onChange={(e) => onSize(Number(e.target.value))} className="rounded-lg border border-slate-200 px-2 py-1 font-bold">
+          {[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n} por página</option>)}
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-slate-500">Página {page} de {totalPages}</span>
+        <button disabled={page <= 1} onClick={() => onPage(page - 1)} className="rounded-lg border px-3 py-1.5 font-bold disabled:opacity-40"><ChevronLeft className="h-3.5 w-3.5" /></button>
+        <button disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="rounded-lg border px-3 py-1.5 font-bold disabled:opacity-40"><ChevronRight className="h-3.5 w-3.5" /></button>
+      </div>
+    </div>
+  );
+};
