@@ -23,6 +23,7 @@ export const SystemsPage: React.FC = () => {
   const [auditPage, setAuditPage] = useState<AuditPage | null>(null);
   const [auditFilter, setAuditFilter] = useState('');
   const [auditCurrentPage, setAuditCurrentPage] = useState(1);
+  const [auditPageSize, setAuditPageSize] = useState(20);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [accountSearch, setAccountSearch] = useState('');
   const [busy, setBusy] = useState('');
@@ -46,8 +47,8 @@ export const SystemsPage: React.FC = () => {
     if (r.ok) setInactiveUsers(await r.json());
   };
 
-  const loadAudit = async (page = 1, action = '') => {
-    const params = new URLSearchParams({ page: String(page) });
+  const loadAudit = async (page = 1, action = '', pageSize = 20) => {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (action) params.set('action', action);
     const r = await fetch(`/api/systems/audit?${params}`);
     if (r.ok) setAuditPage(await r.json());
@@ -63,7 +64,7 @@ export const SystemsPage: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'sessions') void loadSessions();
     if (activeTab === 'inactive') void loadInactive();
-    if (activeTab === 'audit') void loadAudit(auditCurrentPage, auditFilter);
+    if (activeTab === 'audit') void loadAudit(auditCurrentPage, auditFilter, auditPageSize);
     if (activeTab === 'classrooms') void loadClassrooms();
   }, [activeTab]);
 
@@ -270,7 +271,10 @@ export const SystemsPage: React.FC = () => {
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                       <input value={auditFilter} onChange={(e) => setAuditFilter(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { setAuditCurrentPage(1); void loadAudit(1, auditFilter); } }} placeholder="Filtrar por acción..." className="rounded-lg border border-slate-200 py-2 pl-8 pr-3 text-xs w-52" />
                     </div>
-                    <button onClick={() => { setAuditCurrentPage(1); void loadAudit(1, auditFilter); }} className="rounded-lg bg-[#800020] px-3 py-2 text-xs font-bold text-white">Buscar</button>
+                    <button onClick={() => { setAuditCurrentPage(1); void loadAudit(1, auditFilter, auditPageSize); }} className="rounded-lg bg-[#800020] px-3 py-2 text-xs font-bold text-white">Buscar</button>
+                    <select value={auditPageSize} onChange={(e) => { const s = Number(e.target.value); setAuditPageSize(s); setAuditCurrentPage(1); void loadAudit(1, auditFilter, s); }} className="rounded-lg border border-slate-200 py-2 px-3 text-xs font-bold">
+                      {[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n} por página</option>)}
+                    </select>
                   </div>
                 </div>
                 {!auditPage ? <p className="p-5 text-xs text-slate-500">Cargando...</p> : (
@@ -288,8 +292,8 @@ export const SystemsPage: React.FC = () => {
                     <div className="flex items-center justify-between border-t p-4 text-xs">
                       <span className="text-slate-500">Total: {auditPage.total} · Página {auditPage.page} de {Math.ceil(auditPage.total / auditPage.pageSize) || 1}</span>
                       <div className="flex gap-2">
-                        <button disabled={auditPage.page <= 1} onClick={() => { const p = auditPage.page - 1; setAuditCurrentPage(p); void loadAudit(p, auditFilter); }} className="rounded-lg border px-3 py-2 font-bold disabled:opacity-40"><ChevronLeft className="h-3.5 w-3.5" /></button>
-                        <button disabled={auditPage.page * auditPage.pageSize >= auditPage.total} onClick={() => { const p = auditPage.page + 1; setAuditCurrentPage(p); void loadAudit(p, auditFilter); }} className="rounded-lg border px-3 py-2 font-bold disabled:opacity-40"><ChevronRight className="h-3.5 w-3.5" /></button>
+                        <button disabled={auditPage.page <= 1} onClick={() => { const p = auditPage.page - 1; setAuditCurrentPage(p); void loadAudit(p, auditFilter, auditPageSize); }} className="rounded-lg border px-3 py-2 font-bold disabled:opacity-40"><ChevronLeft className="h-3.5 w-3.5" /></button>
+                        <button disabled={auditPage.page * auditPage.pageSize >= auditPage.total} onClick={() => { const p = auditPage.page + 1; setAuditCurrentPage(p); void loadAudit(p, auditFilter, auditPageSize); }} className="rounded-lg border px-3 py-2 font-bold disabled:opacity-40"><ChevronRight className="h-3.5 w-3.5" /></button>
                       </div>
                     </div>
                   </>

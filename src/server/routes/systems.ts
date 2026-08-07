@@ -106,7 +106,7 @@ export function registerSystemsRoutes(
 
   app.get('/api/systems/audit', requireUser, requireSystems, async (req, res) => {
     const page = Math.max(1, parseInt(String(req.query.page || '1')));
-    const pageSize = 50;
+    const pageSize = [10, 20, 50, 100].includes(Number(req.query.pageSize)) ? Number(req.query.pageSize) : 20;
     const where: Record<string, unknown> = {};
     if (req.query.action) where.action = { contains: String(req.query.action) };
     if (req.query.actorId) where.actorId = String(req.query.actorId);
