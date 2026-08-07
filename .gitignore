@@ -14,3 +14,4 @@ backups/
 tmp/
 
 /src/generated/prisma
+sdd-workspace/
