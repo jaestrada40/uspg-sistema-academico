@@ -37,6 +37,7 @@ const LibraryPage = lazyPage(() => import('./pages/LibraryPage'), 'LibraryPage')
 const ParkingPage = lazyPage(() => import('./pages/ParkingPage'), 'ParkingPage');
 const UsersPage = lazyPage(() => import('./pages/UsersPage'), 'UsersPage');
 const SystemsPage = lazyPage(() => import('./pages/SystemsPage'), 'SystemsPage');
+const EventsPage = lazyPage(() => import('./pages/EventsPage'), 'EventsPage');
 
 const PageLoader = () => <div className="flex min-h-[40vh] items-center justify-center text-sm font-semibold text-[#64748B]">Cargando módulo...</div>;
 
@@ -57,7 +58,8 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to="/perfil" replace />;
   }
   if (currentUser.role === 'BIBLIOTECA' && location.pathname === '/dashboard') return <Navigate to="/biblioteca" replace />;
-  if (['PARQUEO', 'EVENTOS'].includes(currentUser.role) && location.pathname === '/dashboard') return <Navigate to="/parqueo" replace />;
+  if (currentUser.role === 'PARQUEO' && location.pathname === '/dashboard') return <Navigate to="/parqueo" replace />;
+  if (currentUser.role === 'EVENTOS' && location.pathname === '/dashboard') return <Navigate to="/eventos" replace />;
   if (currentUser.role === 'SISTEMAS' && location.pathname === '/dashboard') return <Navigate to="/sistemas" replace />;
   return <AppLayout>{children}<AcademicAssistant /></AppLayout>;
 };
@@ -86,6 +88,7 @@ export default function App() {
           <Route path="/estructura-academica" element={<ProtectedRoute><AcademicStructurePage /></ProtectedRoute>} />
           <Route path="/biblioteca" element={<ProtectedRoute><LibraryPage /></ProtectedRoute>} />
           <Route path="/parqueo" element={<ProtectedRoute><ParkingPage /></ProtectedRoute>} />
+          <Route path="/eventos" element={<ProtectedRoute><EventsPage /></ProtectedRoute>} />
 
           <Route
             path="/dashboard"

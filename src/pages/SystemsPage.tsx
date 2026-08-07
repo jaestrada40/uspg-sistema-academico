@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, KeyRound, MailWarning, RefreshCw, ShieldCheck, Wrench, LogOut, UserCheck, UserX, Search, ChevronLeft, ChevronRight, Monitor, AlertTriangle } from 'lucide-react';
+import { Activity, KeyRound, MailWarning, RefreshCw, ShieldCheck, Wrench, LogOut, UserCheck, UserX, Search, Monitor, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '../components/common/PageHeader';
 import { RoleGuard } from '../components/common/RoleGuard';
+import { Pagination } from '../components/common/Pagination';
 import { useApp } from '../context/AppContext';
 
 type Account = { id: string; name: string; email: string; role: string; active: boolean; mustChangePassword: boolean; mfaEnabled: boolean };
@@ -226,7 +227,7 @@ export const SystemsPage: React.FC = () => {
                     </tbody>
                   </table>
                   {filteredAccounts.length === 0 && <p className="p-5 text-xs text-slate-500">Sin resultados.</p>}
-                  {filteredAccounts.length > 0 && <PaginationBar total={filteredAccounts.length} page={accountsPage} pageSize={accountsPageSize} onPage={(p) => setAccountsPage(p)} onSize={(s) => { setAccountsPageSize(s); setAccountsPage(1); }} />}
+                  {filteredAccounts.length > 0 && <Pagination currentPage={accountsPage} totalPages={Math.ceil(filteredAccounts.length / accountsPageSize) || 1} totalItems={filteredAccounts.length} pageSize={accountsPageSize} onPageChange={setAccountsPage} pageSizeOptions={[10, 20, 50, 100]} onPageSizeChange={(s) => { setAccountsPageSize(s); setAccountsPage(1); }} />}
                 </div>
               </section>
             )}
@@ -250,7 +251,7 @@ export const SystemsPage: React.FC = () => {
                         ))}
                       </tbody>
                     </table>
-                    <PaginationBar total={sessions.length} page={sessionsPage} pageSize={sessionsPageSize} onPage={(p) => setSessionsPage(p)} onSize={(s) => { setSessionsPageSize(s); setSessionsPage(1); }} />
+                    <Pagination currentPage={sessionsPage} totalPages={Math.ceil(sessions.length / sessionsPageSize) || 1} totalItems={sessions.length} pageSize={sessionsPageSize} onPageChange={setSessionsPage} pageSizeOptions={[10, 20, 50, 100]} onPageSizeChange={(s) => { setSessionsPageSize(s); setSessionsPage(1); }} />
                   </div>
                 )}
               </section>
@@ -274,7 +275,7 @@ export const SystemsPage: React.FC = () => {
                         ))}
                       </tbody>
                     </table>
-                    <PaginationBar total={inactiveUsers.length} page={inactivePage} pageSize={inactivePageSize} onPage={(p) => setInactivePage(p)} onSize={(s) => { setInactivePageSize(s); setInactivePage(1); }} />
+                    <Pagination currentPage={inactivePage} totalPages={Math.ceil(inactiveUsers.length / inactivePageSize) || 1} totalItems={inactiveUsers.length} pageSize={inactivePageSize} onPageChange={setInactivePage} pageSizeOptions={[10, 20, 50, 100]} onPageSizeChange={(s) => { setInactivePageSize(s); setInactivePage(1); }} />
                   </div>
                 )}
               </section>
@@ -307,13 +308,7 @@ export const SystemsPage: React.FC = () => {
                       ))}
                       {auditPage.records.length === 0 && <p className="p-5 text-xs text-slate-500">Sin registros.</p>}
                     </div>
-                    <div className="flex items-center justify-between border-t p-4 text-xs">
-                      <span className="text-slate-500">Total: {auditPage.total} · Página {auditPage.page} de {Math.ceil(auditPage.total / auditPage.pageSize) || 1}</span>
-                      <div className="flex gap-2">
-                        <button disabled={auditPage.page <= 1} onClick={() => { const p = auditPage.page - 1; setAuditCurrentPage(p); void loadAudit(p, auditFilter, auditPageSize); }} className="rounded-lg border px-3 py-2 font-bold disabled:opacity-40"><ChevronLeft className="h-3.5 w-3.5" /></button>
-                        <button disabled={auditPage.page * auditPage.pageSize >= auditPage.total} onClick={() => { const p = auditPage.page + 1; setAuditCurrentPage(p); void loadAudit(p, auditFilter, auditPageSize); }} className="rounded-lg border px-3 py-2 font-bold disabled:opacity-40"><ChevronRight className="h-3.5 w-3.5" /></button>
-                      </div>
-                    </div>
+                    <Pagination currentPage={auditPage.page} totalPages={Math.ceil(auditPage.total / auditPage.pageSize) || 1} totalItems={auditPage.total} pageSize={auditPage.pageSize} onPageChange={(p) => { setAuditCurrentPage(p); void loadAudit(p, auditFilter, auditPageSize); }} />
                   </>
                 )}
               </section>
@@ -340,7 +335,7 @@ export const SystemsPage: React.FC = () => {
                         ))}
                       </tbody>
                     </table>
-                    <PaginationBar total={classrooms.length} page={classroomsPage} pageSize={classroomsPageSize} onPage={(p) => setClassroomsPage(p)} onSize={(s) => { setClassroomsPageSize(s); setClassroomsPage(1); }} />
+                    <Pagination currentPage={classroomsPage} totalPages={Math.ceil(classrooms.length / classroomsPageSize) || 1} totalItems={classrooms.length} pageSize={classroomsPageSize} onPageChange={setClassroomsPage} pageSizeOptions={[10, 20, 50, 100]} onPageSizeChange={(s) => { setClassroomsPageSize(s); setClassroomsPage(1); }} />
                   </div>
                 )}
               </section>
@@ -362,7 +357,7 @@ export const SystemsPage: React.FC = () => {
                       </div>
                     ))}
                   </div>
-                  <PaginationBar total={outbox.length} page={outboxPage} pageSize={outboxPageSize} onPage={(p) => setOutboxPage(p)} onSize={(s) => { setOutboxPageSize(s); setOutboxPage(1); }} /></>
+                  <Pagination currentPage={outboxPage} totalPages={Math.ceil(outbox.length / outboxPageSize) || 1} totalItems={outbox.length} pageSize={outboxPageSize} onPageChange={setOutboxPage} pageSizeOptions={[10, 20, 50, 100]} onPageSizeChange={(s) => { setOutboxPageSize(s); setOutboxPage(1); }} /></>
                 )}
               </section>
             )}
@@ -390,22 +385,3 @@ const Row = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
-const PaginationBar = ({ total, page, pageSize, onPage, onSize }: { total: number; page: number; pageSize: number; onPage: (p: number) => void; onSize: (s: number) => void }) => {
-  const totalPages = Math.ceil(total / pageSize) || 1;
-  if (total === 0) return null;
-  return (
-    <div className="flex items-center justify-between border-t px-4 py-3 text-xs">
-      <div className="flex items-center gap-2">
-        <span className="text-slate-500">{total} registros</span>
-        <select value={pageSize} onChange={(e) => onSize(Number(e.target.value))} className="rounded-lg border border-slate-200 px-2 py-1 font-bold">
-          {[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n} por página</option>)}
-        </select>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-slate-500">Página {page} de {totalPages}</span>
-        <button disabled={page <= 1} onClick={() => onPage(page - 1)} className="rounded-lg border px-3 py-1.5 font-bold disabled:opacity-40"><ChevronLeft className="h-3.5 w-3.5" /></button>
-        <button disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="rounded-lg border px-3 py-1.5 font-bold disabled:opacity-40"><ChevronRight className="h-3.5 w-3.5" /></button>
-      </div>
-    </div>
-  );
-};

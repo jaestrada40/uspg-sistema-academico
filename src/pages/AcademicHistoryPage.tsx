@@ -22,6 +22,7 @@ export const AcademicHistoryPage: React.FC = () => {
   const [selectedCarnet, setSelectedCarnet] = useState<string>(
     currentUser.role === 'ESTUDIANTE' ? currentUser.carnetOrCode || '20230142' : students[0]?.carnet || '20230142'
   );
+  const [docenteSearch, setDocenteSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
 
@@ -53,7 +54,7 @@ export const AcademicHistoryPage: React.FC = () => {
   };
 
   return (
-    <RoleGuard allowedRoles={['ADMIN', 'ESTUDIANTE']}>
+    <RoleGuard allowedRoles={['ADMIN', 'ESTUDIANTE', 'DOCENTE']}>
       <div className="space-y-6">
         <PageHeader
           title="Historial Académico y Certificación"
@@ -73,23 +74,61 @@ export const AcademicHistoryPage: React.FC = () => {
           }
         />
 
-        {/* Student Selector for Admins */}
-        {currentUser.role === 'ADMIN' && (
+        {/* Student Selector for Admins and Docentes */}
+        {(currentUser.role === 'ADMIN' || currentUser.role === 'DOCENTE') && (
           <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-xs">
             <label className="block text-xs font-bold text-[#64748B] uppercase mb-1">
               Consultar Expediente de Estudiante
             </label>
-            <select
-              value={selectedCarnet}
-              onChange={(e) => handleSelectStudent(e.target.value)}
-              className="w-full max-w-md rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-bold text-[#333333]"
-            >
-              {students.map((s) => (
-                <option key={s.carnet} value={s.carnet}>
-                  {s.carnet} - {s.name} ({s.careerName})
-                </option>
-              ))}
-            </select>
+            {currentUser.role === 'ADMIN' ? (
+              <select
+                value={selectedCarnet}
+                onChange={(e) => handleSelectStudent(e.target.value)}
+                className="w-full max-w-md rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-bold text-[#333333]"
+              >
+                {students.map((s) => (
+                  <option key={s.carnet} value={s.carnet}>
+                    {s.carnet} - {s.name} ({s.careerName})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  value={docenteSearch}
+                  onChange={(e) => setDocenteSearch(e.target.value)}
+                  placeholder="Buscar por carné o nombre..."
+                  className="w-full max-w-md rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs text-[#333333]"
+                />
+                {docenteSearch.trim().length >= 2 && (
+                  <div className="max-w-md rounded-lg border border-[#E2E8F0] bg-white shadow-xs max-h-48 overflow-y-auto">
+                    {students.filter((s) =>
+                      s.carnet.toLowerCase().includes(docenteSearch.toLowerCase()) ||
+                      s.name.toLowerCase().includes(docenteSearch.toLowerCase())
+                    ).slice(0, 10).map((s) => (
+                      <button
+                        key={s.carnet}
+                        type="button"
+                        onClick={() => { handleSelectStudent(s.carnet); setDocenteSearch(''); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-[#F8FAFC] border-b border-[#E2E8F0] last:border-0"
+                      >
+                        <span className="font-bold text-[#800020]">{s.carnet}</span> — {s.name}
+                        <span className="text-[#64748B]"> ({s.careerName})</span>
+                      </button>
+                    ))}
+                    {students.filter((s) =>
+                      s.carnet.toLowerCase().includes(docenteSearch.toLowerCase()) ||
+                      s.name.toLowerCase().includes(docenteSearch.toLowerCase())
+                    ).length === 0 && (
+                      <p className="p-3 text-xs text-[#64748B]">Sin resultados.</p>
+                    )}
+                  </div>
+                )}
+                {selectedCarnet && (
+                  <p className="text-xs text-[#64748B]">Estudiante seleccionado: <span className="font-bold text-[#333333]">{students.find((s) => s.carnet === selectedCarnet)?.name ?? selectedCarnet}</span></p>
+                )}
+              </div>
+            )}
           </div>
         )}
 

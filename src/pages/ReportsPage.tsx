@@ -27,6 +27,17 @@ import { PageHeader } from '../components/common/PageHeader';
 import { FilterBar } from '../components/common/FilterBar';
 import { RoleGuard } from '../components/common/RoleGuard';
 
+const exportToCSV = (filename: string, rows: string[][], headers: string[]) => {
+  const escape = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = [headers.map(escape).join(','), ...rows.map((r) => r.map(escape).join(','))].join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
 export const ReportsPage: React.FC = () => {
   const { students, careers, sections, grades, currentCycle, showToast } = useApp();
 
@@ -56,19 +67,28 @@ export const ReportsPage: React.FC = () => {
     Capacidad: s.capacity,
   }));
 
-  const handleExportCSV = () => {
-    const headers = 'Carné,Nombre,Carrera,Promedio,Estado\n';
-    const rows = students
-      .map((s) => `"${s.carnet}","${s.name}","${s.careerName}","${s.gpa}","${s.status}"`)
-      .join('\n');
+  const handleExportStudentsCSV = () => {
+    exportToCSV('Reporte_Estudiantes_USPG.csv', students.map((s) => [s.carnet, s.name, s.careerName, String(s.gpa), s.status]), ['Carné', 'Nombre', 'Carrera', 'Promedio', 'Estado']);
+    showToast('Reporte de estudiantes exportado', 'success');
+  };
 
-    const blob = new Blob([headers + rows], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Reporte_Estadistico_USPG.csv`;
-    a.click();
-    showToast('Reporte exportado exitosamente', 'success');
+  const handleExportGradesCSV = () => {
+    exportToCSV('Reporte_Notas_USPG.csv', grades.map((g) => [g.studentCarnet, g.courseName, g.courseCode, String(g.total), g.status]), ['Carné', 'Curso', 'Código', 'Nota', 'Estado']);
+    showToast('Reporte de notas exportado', 'success');
+  };
+
+  const handleExportSectionsCSV = () => {
+    exportToCSV('Reporte_Secciones_USPG.csv', sections.map((s) => [s.code, s.courseName ?? '', String(s.enrolledCount), String(s.capacity)]), ['Sección', 'Curso', 'Inscritos', 'Capacidad']);
+    showToast('Reporte de secciones exportado', 'success');
+  };
+
+  const handleExportCSV = () => {
+    exportToCSV('Reporte_Completo_USPG.csv', [
+      ...students.map((s) => ['Estudiante', s.carnet, s.name, s.careerName, String(s.gpa), s.status, '', '']),
+      ...grades.map((g) => ['Nota', g.studentCarnet, g.courseName, g.courseCode, String(g.total), g.status, '', '']),
+      ...sections.map((s) => ['Sección', s.code, s.courseName ?? '', '', String(s.enrolledCount), String(s.capacity), '', '']),
+    ], ['Tipo', 'ID/Carné', 'Nombre/Curso', 'Carrera/Código', 'GPA/Nota', 'Estado/Capacidad', '_', '_']);
+    showToast('Reporte completo exportado', 'success');
   };
 
   return (
@@ -95,7 +115,7 @@ export const ReportsPage: React.FC = () => {
                 className="flex items-center gap-2 rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white hover:bg-[#5F0018] transition-colors shadow-xs"
               >
                 <FileSpreadsheet className="h-4 w-4" />
-                Exportar CSV
+                Descargar Reporte Completo
               </button>
             </div>
           }
@@ -119,9 +139,10 @@ export const ReportsPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Chart 1: Students per Career */}
           <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs">
-            <h3 className="text-sm font-bold text-[#333333] mb-4">
-              Distribución de Estudiantes por Carrera
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#333333]">Distribución de Estudiantes por Carrera</h3>
+              <button onClick={handleExportStudentsCSV} className="flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-xs font-bold text-[#800020] hover:bg-[#800020]/5"><Download className="h-3.5 w-3.5" />Descargar CSV</button>
+            </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={studentsPerCareerData}>
@@ -137,9 +158,10 @@ export const ReportsPage: React.FC = () => {
 
           {/* Chart 2: Approval Ratio */}
           <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs">
-            <h3 className="text-sm font-bold text-[#333333] mb-4">
-              Rendimiento Académico Global (Aprobación vs Reprobación)
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#333333]">Rendimiento Académico Global (Aprobación vs Reprobación)</h3>
+              <button onClick={handleExportGradesCSV} className="flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-xs font-bold text-[#800020] hover:bg-[#800020]/5"><Download className="h-3.5 w-3.5" />Descargar CSV</button>
+            </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -165,9 +187,10 @@ export const ReportsPage: React.FC = () => {
 
           {/* Chart 3: Section Capacity vs Enrolled */}
           <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs lg:col-span-2">
-            <h3 className="text-sm font-bold text-[#333333] mb-4">
-              Ocupación de Secciones Aperturadas
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#333333]">Ocupación de Secciones Aperturadas</h3>
+              <button onClick={handleExportSectionsCSV} className="flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-xs font-bold text-[#800020] hover:bg-[#800020]/5"><Download className="h-3.5 w-3.5" />Descargar CSV</button>
+            </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={sectionOccupancyData}>

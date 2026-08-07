@@ -18,6 +18,7 @@ import { SearchInput } from '../components/common/SearchInput';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { Modal } from '../components/common/Modal';
 import { RoleGuard } from '../components/common/RoleGuard';
+import { Pagination } from '../components/common/Pagination';
 
 export const CareersPage: React.FC = () => {
   const { careers, courses, students, addCareer, updateCareer, toggleCareerStatus } = useApp();
@@ -280,16 +281,7 @@ export const CareersPage: React.FC = () => {
         )}
 
         {/* Pagination */}
-        <div className="flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-white px-5 py-3 text-xs shadow-xs">
-          <span className="text-[#64748B]">{filteredCareers.length} carreras · pág. {page} de {Math.max(1, Math.ceil(filteredCareers.length / pageSize))}</span>
-          <div className="flex items-center gap-2">
-            <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="rounded-lg border px-2 py-1 text-xs">
-              {[10, 20, 50, 100].map((n) => <option key={n}>{n}</option>)}
-            </select>
-            <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="rounded-lg border px-3 py-1 disabled:opacity-40">‹</button>
-            <button disabled={page * pageSize >= filteredCareers.length} onClick={() => setPage((p) => p + 1)} className="rounded-lg border px-3 py-1 disabled:opacity-40">›</button>
-          </div>
-        </div>
+        <Pagination currentPage={page} totalPages={Math.max(1, Math.ceil(filteredCareers.length / pageSize))} totalItems={filteredCareers.length} pageSize={pageSize} onPageChange={setPage} pageSizeOptions={[10, 20, 50, 100]} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} />
 
         {/* Modal: Add Career */}
         <Modal

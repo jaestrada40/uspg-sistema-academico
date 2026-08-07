@@ -17,6 +17,7 @@ import { ProgressBar } from '../components/common/ProgressBar';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { RoleGuard } from '../components/common/RoleGuard';
 import { StudentPicker } from '../components/common/StudentPicker';
+import { Pagination } from '../components/common/Pagination';
 
 export const EnrollmentPage: React.FC = () => {
   const {
@@ -226,19 +227,9 @@ export const EnrollmentPage: React.FC = () => {
               );
             })}
           </div>
-          {availableSections.length > secPageSize && (
-            <div className="flex items-center justify-between rounded-xl border bg-white px-4 py-3 text-xs mt-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[#64748B]">{availableSections.length} secciones</span>
-                <select value={secPageSize} onChange={(e) => { setSecPageSize(Number(e.target.value)); setSecPage(1); }} className="rounded-lg border border-[#E2E8F0] px-2 py-1 font-bold">
-                  {[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n} por página</option>)}
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[#64748B]">Página {secPage} de {Math.ceil(availableSections.length / secPageSize) || 1}</span>
-                <button disabled={secPage <= 1} onClick={() => setSecPage(secPage - 1)} className="rounded-lg border px-3 py-1.5 font-bold disabled:opacity-40">‹</button>
-                <button disabled={secPage * secPageSize >= availableSections.length} onClick={() => setSecPage(secPage + 1)} className="rounded-lg border px-3 py-1.5 font-bold disabled:opacity-40">›</button>
-              </div>
+          {availableSections.length > 0 && (
+            <div className="mt-2">
+              <Pagination currentPage={secPage} totalPages={Math.ceil(availableSections.length / secPageSize) || 1} totalItems={availableSections.length} pageSize={secPageSize} onPageChange={setSecPage} pageSizeOptions={[10, 20, 50, 100]} onPageSizeChange={(s) => { setSecPageSize(s); setSecPage(1); }} />
             </div>
           )}
         </div>
