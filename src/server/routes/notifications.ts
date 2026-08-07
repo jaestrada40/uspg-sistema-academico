@@ -769,6 +769,85 @@ export function registerNotificationRoutes(
       // Resumen general
       return void reply(`Resumen administrativo:\n• Ciclo activo: ${currentCycle?.name || 'Ninguno'}\n• Estudiantes: ${students} (en mora: ${inDebtStudents})\n• Docentes: ${teachers}\n• Carreras: ${careers} · Cursos: ${courses}\n• Secciones: ${sections} (llenas: ${fullSections})\n• Expedientes pendientes: ${pendingDocuments}\n• Cargos pendientes/vencidos: ${pendingCharges}\n• Parqueo: ${vehiclesInside}/${parkingConfig?.totalCapacity || 0} dentro\n• Biblioteca: ${activeLoans} préstamos activos\n• Solicitudes pendientes: ${pendingRequests}`);
     }
+    if (user.role === 'BIBLIOTECA') {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const [
+        totalBooks, activeBooks, totalCopies, availableCopies, damagedCopies,
+        activeLoans, overdueLoans, loansToday, loansThisMonth,
+        pendingReservations, readyReservations,
+        suspendedUsers, topBorrowed,
+      ] = await Promise.all([
+        prisma.libraryBook.count(),
+        prisma.libraryBook.count({ where: { status: 'ACTIVO' } }),
+        prisma.libraryCopy.count(),
+        prisma.libraryCopy.count({ where: { status: 'DISPONIBLE' } }),
+        prisma.libraryCopy.count({ where: { condition: { in: ['DAÑADO', 'MALO'] } } }),
+        prisma.libraryLoan.count({ where: { status: 'PRESTADO' } }),
+        prisma.libraryLoan.count({ where: { status: 'PRESTADO', dueAt: { lt: now } } }),
+        prisma.libraryLoan.count({ where: { loanedAt: { gte: new Date(now.setHours(0, 0, 0, 0)) } } }),
+        prisma.libraryLoan.count({ where: { loanedAt: { gte: startOfMonth } } }),
+        prisma.libraryReservation.count({ where: { status: 'SOLICITADA' } }),
+        prisma.libraryReservation.count({ where: { status: 'LISTA' } }),
+        prisma.user.count({ where: { librarySuspendedUntil: { gt: now } } }),
+        prisma.libraryLoan.groupBy({ by: ['copyId'], _count: { _all: true }, orderBy: { _count: { copyId: 'desc' } }, take: 5 }),
+      ]);
+
+      // Catálogo / libros
+      if (/cu[aá]ntos.*libro|libro.*cat[aá]logo|cat[aá]logo|total.*libro/.test(question)) return void reply(`Catálogo: ${totalBooks} título(s) registrados (${activeBooks} activos) · ${totalCopies} ejemplares en total · ${availableCopies} disponibles.`);
+      if (/ejemplar|copia|disponible/.test(question)) return void reply(`Ejemplares — Total: ${totalCopies} · Disponibles: ${availableCopies} · En préstamo: ${activeLoans} · Dañados/malos: ${damagedCopies}.`);
+      if (/dañado|mal estado|condici[oó]n/.test(question)) return void reply(`Ejemplares en mal estado (dañado o malo): ${damagedCopies} de ${totalCopies} total.`);
+
+      // Búsqueda de libro específico
+      if (/buscar|busca|existe.*libro|hay.*libro|libro.*disponible/.test(question)) {
+        const titleMatch = question.match(/(?:buscar?|existe|hay|libro)\s+(?:el libro\s+)?["']?(.+?)["']?\s*(?:\?|$)/i);
+        const search = titleMatch?.[1]?.trim() || '';
+        if (!search || search.length < 3) return void reply('Indica el título o autor que deseas buscar.');
+        const books = await prisma.libraryBook.findMany({
+          where: { OR: [{ title: { contains: search } }, { author: { contains: search } }] },
+          include: { copies: { select: { status: true } } },
+          take: 8,
+        });
+        if (!books.length) return void reply(`No encontré libros con "${search}" en el catálogo.`);
+        const lines = books.map((b) => {
+          const avail = b.copies.filter((c) => c.status === 'DISPONIBLE').length;
+          return `• ${b.title} — ${b.author} (${avail}/${b.copies.length} disponibles)`;
+        });
+        return void reply(`Resultados para "${search}":\n${lines.join('\n')}`);
+      }
+
+      // Préstamos
+      if (/vencido|atrasado|mora.*pr[eé]stamo|pr[eé]stamo.*vencido/.test(question)) return void reply(`Préstamos vencidos (no devueltos a tiempo): ${overdueLoans}.`);
+      if (/pr[eé]stamo.*hoy|hoy.*pr[eé]stamo/.test(question)) return void reply(`Préstamos realizados hoy: ${loansToday}.`);
+      if (/pr[eé]stamo.*mes|mes.*pr[eé]stamo/.test(question)) return void reply(`Préstamos realizados este mes: ${loansThisMonth}.`);
+      if (/pr[eé]stamo.*activ|activ.*pr[eé]stamo|cu[aá]ntos.*pr[eé]stamo/.test(question)) return void reply(`Préstamos activos: ${activeLoans} · Vencidos: ${overdueLoans} · Hoy: ${loansToday} · Este mes: ${loansThisMonth}.`);
+
+      // Reservaciones
+      if (/reserva.*pendiente|pendiente.*reserva/.test(question)) return void reply(`Reservaciones pendientes de atender: ${pendingReservations}.`);
+      if (/reserva.*lista|lista.*reserva|listas para retirar/.test(question)) return void reply(`Reservaciones listas para retirar: ${readyReservations}.`);
+      if (/reserva/.test(question)) return void reply(`Reservaciones — Pendientes: ${pendingReservations} · Listas para retirar: ${readyReservations}.`);
+
+      // Usuarios suspendidos
+      if (/suspendido|suspensi[oó]n/.test(question)) return void reply(`Usuarios con suspensión de biblioteca activa: ${suspendedUsers}.`);
+
+      // Libros más prestados
+      if (/m[aá]s prestado|popular|m[aá]s solicitado/.test(question)) {
+        if (!topBorrowed.length) return void reply('No hay préstamos registrados aún.');
+        const copyIds = topBorrowed.map((r) => r.copyId);
+        const copies = await prisma.libraryCopy.findMany({ where: { id: { in: copyIds } }, include: { book: { select: { title: true, author: true } } } });
+        const lines = topBorrowed.map((r) => {
+          const copy = copies.find((c) => c.id === r.copyId);
+          return `• ${copy?.book.title ?? 'Desconocido'} — ${copy?.book.author ?? ''}: ${r._count._all} préstamo(s)`;
+        });
+        return void reply(`Libros más prestados:\n${lines.join('\n')}`);
+      }
+
+      // Resumen general
+      if (/biblioteca|pr[eé]stamo|libro/.test(question)) return void reply(`Biblioteca:\n• Títulos: ${totalBooks} (${activeBooks} activos)\n• Ejemplares: ${totalCopies} (${availableCopies} disponibles)\n• Préstamos activos: ${activeLoans} (vencidos: ${overdueLoans})\n• Reservaciones pendientes: ${pendingReservations}\n• Usuarios suspendidos: ${suspendedUsers}`);
+
+      return void reply(`Hola ${user.name}. Puedo informarte sobre el catálogo, préstamos, reservaciones y estado general de la biblioteca.`);
+    }
+
     if (user.role === 'SISTEMAS') {
       const [
         activeUsers, inactiveUsers, usersByRole, mfaUsers,
