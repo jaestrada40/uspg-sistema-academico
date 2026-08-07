@@ -11,7 +11,7 @@ export function registerAcademicRoutes(
 ) {
   const { handleUniqueError, hashPassword, temporaryPassword, roleFromEmail } = helpers;
   const enrollmentView = (record: any) => ({ id: record.id, studentCarnet: record.studentCarnet, studentName: record.student?.name, sectionId: record.sectionId, courseCode: record.section?.courseCode, courseName: record.section?.course?.name, cycleId: record.section?.cycleId, enrollmentDate: record.enrollmentDate.toISOString().slice(0, 10), status: record.status });
-  const cycleView = (cycle: any) => ({ ...cycle, startDate: cycle.startDate.toISOString().slice(0, 10), endDate: cycle.endDate.toISOString().slice(0, 10), enrollmentStartDate: cycle.enrollmentStartDate.toISOString().slice(0, 10), enrollmentEndDate: cycle.enrollmentEndDate.toISOString().slice(0, 10), gradeSubmissionDeadline: cycle.gradeSubmissionDeadline.toISOString().slice(0, 10) });
+  const cycleView = (cycle: any) => ({ ...cycle, startDate: cycle.startDate.toISOString().slice(0, 10), endDate: cycle.endDate.toISOString().slice(0, 10), enrollmentStartDate: cycle.enrollmentStartDate.toISOString().slice(0, 10), enrollmentEndDate: cycle.enrollmentEndDate.toISOString().slice(0, 10), gradeSubmissionDeadline: cycle.gradeSubmissionDeadline.toISOString().slice(0, 10), campusName: cycle.campus?.name, campusCode: cycle.campus?.code });
   const { requireAdmin, requireUser } = middleware;
 
   const studentView = (student: any) => ({ ...student, campusName: student.campus?.name, planCode: student.plan?.code, planName: student.plan?.name, planVersion: student.plan?.version, campus: undefined, plan: undefined });
@@ -424,14 +424,15 @@ export function registerAcademicRoutes(
 
   // ── Cycles ──────────────────────────────────────────────────────────────────
 
-  app.get('/api/cycles', requireUser, async (_req, res) => res.json((await prisma.academicCycle.findMany({ orderBy: { startDate: 'desc' } })).map(cycleView)));
+  app.get('/api/cycles', requireUser, async (_req, res) => res.json((await prisma.academicCycle.findMany({ orderBy: { startDate: 'desc' }, include: { campus: true } })).map(cycleView)));
   app.post('/api/cycles', requireAdmin, async (req, res) => {
     const data = req.body;
     if (new Date(data.startDate) >= new Date(data.endDate) || new Date(data.enrollmentStartDate) > new Date(data.enrollmentEndDate)) return void res.status(400).json({ message: 'Las fechas del ciclo no son válidas.' });
+    if (!data.campusId) return void res.status(400).json({ message: 'Selecciona el campus del ciclo.' });
     const id = `CYC-${data.year}-${Date.now().toString().slice(-5)}`;
     const cycle = await prisma.$transaction(async (tx) => {
-      if (data.isCurrent) await tx.academicCycle.updateMany({ data: { isCurrent: false } });
-      const created = await tx.academicCycle.create({ data: { ...data, id, startDate: new Date(data.startDate), endDate: new Date(data.endDate), enrollmentStartDate: new Date(data.enrollmentStartDate), enrollmentEndDate: new Date(data.enrollmentEndDate), gradeSubmissionDeadline: new Date(data.gradeSubmissionDeadline) } });
+      if (data.isCurrent) await tx.academicCycle.updateMany({ where: { campusId: data.campusId }, data: { isCurrent: false } });
+      const created = await tx.academicCycle.create({ data: { ...data, id, startDate: new Date(data.startDate), endDate: new Date(data.endDate), enrollmentStartDate: new Date(data.enrollmentStartDate), enrollmentEndDate: new Date(data.enrollmentEndDate), gradeSubmissionDeadline: new Date(data.gradeSubmissionDeadline) }, include: { campus: true } });
       await tx.auditLog.create({ data: { action: 'CREATE', entityType: 'CYCLE', entityId: id, actorId: res.locals.authUser.id } });
       return created;
     });
@@ -450,10 +451,10 @@ export function registerAcademicRoutes(
     if ([start, end, enrollmentStart, enrollmentEnd, gradeDeadline].some((date) => Number.isNaN(date.getTime())) || start >= end || enrollmentStart > enrollmentEnd || gradeDeadline < end) return void res.status(400).json({ message: 'Revisa las fechas: las clases, inscripciones y límite de actas deben mantener un orden válido.' });
     if (data.status === 'Finalizado' && current.isCurrent) return void res.status(409).json({ message: 'Primero establece otro ciclo como activo antes de finalizar este ciclo.' });
     const cycle = await prisma.$transaction(async (tx) => {
-      if (data.isCurrent) await tx.academicCycle.updateMany({ where: { id: { not: current.id } }, data: { isCurrent: false } });
-      const saved = await tx.academicCycle.update({ where: { id: current.id }, data: { ...data, id: undefined, startDate: data.startDate ? new Date(data.startDate) : undefined, endDate: data.endDate ? new Date(data.endDate) : undefined, enrollmentStartDate: data.enrollmentStartDate ? new Date(data.enrollmentStartDate) : undefined, enrollmentEndDate: data.enrollmentEndDate ? new Date(data.enrollmentEndDate) : undefined, gradeSubmissionDeadline: data.gradeSubmissionDeadline ? new Date(data.gradeSubmissionDeadline) : undefined } });
+      if (data.isCurrent) await tx.academicCycle.updateMany({ where: { id: { not: current.id }, campusId: current.campusId }, data: { isCurrent: false } });
+      const saved = await tx.academicCycle.update({ where: { id: current.id }, data: { ...data, id: undefined, startDate: data.startDate ? new Date(data.startDate) : undefined, endDate: data.endDate ? new Date(data.endDate) : undefined, enrollmentStartDate: data.enrollmentStartDate ? new Date(data.enrollmentStartDate) : undefined, enrollmentEndDate: data.enrollmentEndDate ? new Date(data.enrollmentEndDate) : undefined, gradeSubmissionDeadline: data.gradeSubmissionDeadline ? new Date(data.gradeSubmissionDeadline) : undefined }, include: { campus: true } });
       if (data.isCurrent) {
-        const openEnrollments = await tx.enrollment.findMany({ where: { status: 'Inscrito', section: { cycleId: { not: current.id }, cycle: { isCurrent: false } } }, select: { id: true } });
+        const openEnrollments = await tx.enrollment.findMany({ where: { status: 'Inscrito', student: { campusId: current.campusId }, section: { cycleId: { not: current.id }, cycle: { isCurrent: false, campusId: current.campusId } } }, select: { id: true } });
         if (openEnrollments.length) await tx.enrollment.updateMany({ where: { id: { in: openEnrollments.map((e) => e.id) } }, data: { status: 'Retirado' } });
       }
       await tx.auditLog.create({ data: { action: 'UPDATE', entityType: 'CYCLE', entityId: current.id, actorId: res.locals.authUser.id, details: JSON.stringify({ before: current.status, after: saved.status }) } });
