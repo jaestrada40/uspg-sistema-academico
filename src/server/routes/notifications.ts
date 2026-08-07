@@ -593,7 +593,14 @@ export function registerNotificationRoutes(
       if (/parqueo|estacionamiento|vehículo|vehiculo/.test(question)) return void reply(`Parqueo — Dentro ahora: ${vehiclesInside}/${parkingConfig?.totalCapacity || 0} · Ingresos hoy: ${parkingTodayVisits} · Eventos activos: ${activeEvents}.`);
 
       // Solicitudes / notificaciones
-      if (/solicitud|trámite|tramite/.test(question)) return void reply(`Solicitudes estudiantiles pendientes o en revisión: ${pendingRequests}.`);
+      if (/solicitud|trámite|tramite/.test(question)) {
+        if (/tipo|frecuente|más piden|más solicit/.test(question)) {
+          const byType = await prisma.studentServiceRequest.groupBy({ by: ['type'], _count: { _all: true }, orderBy: { _count: { type: 'desc' } }, take: 5 });
+          if (!byType.length) return void reply('No hay solicitudes registradas.');
+          return void reply(`Tipos de solicitudes más frecuentes:\n${byType.map((r) => `• ${r.type}: ${r._count._all}`).join('\n')}`);
+        }
+        return void reply(`Solicitudes estudiantiles pendientes o en revisión: ${pendingRequests}.`);
+      }
       if (/notificaci|aviso/.test(question)) return void reply(`Notificaciones no leídas: ${unreadNotifications}.`);
 
       // Asistencia / recuperaciones / zona / aulas
@@ -614,18 +621,32 @@ export function registerNotificationRoutes(
         return void reply(records.length ? `Listado de estudiantes${search ? ` para "${search}"` : ''}:\n${records.map((item) => `• ${item.carnet} · ${item.name}\n  ${item.careerName || 'Sin carrera'} · ${item.status}`).join('\n')}` : 'No encontré estudiantes con ese criterio.');
       }
 
-      // Docentes sin sección
+      // Docentes
       if (/docente.*sin seccion|docente.*sin sección|sin.*asignaci/.test(question)) {
         const unassigned = await prisma.teacher.findMany({ where: { status: 'Activo', sections: { none: { cycle: { isCurrent: true } } } }, select: { code: true, name: true }, take: 20 });
         if (!unassigned.length) return void reply('Todos los docentes activos tienen al menos una sección asignada en el ciclo actual.');
         return void reply(`Docentes sin sección en el ciclo actual:\n${unassigned.map((t) => `• ${t.code} · ${t.name}`).join('\n')}`);
+      }
+      if (/cuántas.*secci.*docente|secciones.*tiene.*docente|docente.*cuántas/.test(question)) {
+        const nameMatch = question.match(/docente\s+(.+)|de\s+(.+)/i);
+        const search = (nameMatch?.[1] || nameMatch?.[2] || '').trim();
+        if (!search) return void reply('Indica el nombre o código del docente que deseas consultar.');
+        const found = await prisma.teacher.findFirst({ where: { OR: [{ name: { contains: search } }, { code: { contains: search } }] }, include: { sections: { where: { cycle: { isCurrent: true } }, select: { code: true, course: { select: { name: true } } } } } });
+        if (!found) return void reply(`No encontré docente con "${search}".`);
+        return void reply(`${found.name} (${found.code}) tiene ${found.sections.length} sección(es) en el ciclo actual${found.sections.length ? ':\n' + found.sections.map((s) => `• ${s.code} · ${s.course.name}`).join('\n') : '.'}`);
       }
       if (/docente|catedr/.test(question)) return void reply(`Docentes registrados: ${teachers}. Puedes revisar sus asignaciones desde el módulo Docentes.`);
 
       // Cursos / secciones / carreras / expedientes / pagos
       if (/curso/.test(question)) return void reply(`Cursos en el catálogo: ${courses}. Administra cursos y prerrequisitos desde Cursos y Prerrequisitos.`);
       if (/seccion|sección|horario/.test(question)) return void reply(`Secciones registradas: ${sections} · Llenas en ciclo actual: ${fullSections}.`);
-      if (/carrera/.test(question)) return void reply(`Carreras registradas: ${careers}. Consulta pensums y cursos desde Carreras.`);
+      if (/carrera/.test(question)) {
+        if (/estudiante.*carrera|por carrera|distribuc/.test(question)) {
+          const byCareer = await prisma.student.groupBy({ by: ['careerName'], _count: { _all: true }, orderBy: { _count: { careerName: 'desc' } }, take: 10 });
+          return void reply(`Estudiantes por carrera:\n${byCareer.map((r) => `• ${r.careerName || 'Sin carrera'}: ${r._count._all}`).join('\n')}`);
+        }
+        return void reply(`Carreras registradas: ${careers}. Consulta pensums y cursos desde Carreras.`);
+      }
       if (/expediente|document/.test(question)) return void reply(`Expedientes pendientes de revisión: ${pendingDocuments}. Puedes validarlos desde Expediente.`);
       if (/pago|saldo|mora|finanz/.test(question)) return void reply(`Cargos pendientes o vencidos: ${pendingCharges} · Monto total: Q${Number(totalDebtAmount._sum.amount ?? 0).toFixed(2)} · Estudiantes en mora: ${inDebtStudents}.`);
 
