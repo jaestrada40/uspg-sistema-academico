@@ -7,6 +7,7 @@ data/*.db-*
 .DS_Store
 *.log
 backups/
+*.dump
 .env*
 !.env.example
 !.env.production.example

@@ -2,17 +2,18 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const server = await readFile(new URL('../server.ts', import.meta.url), 'utf8');
+const notifications = await readFile(new URL('../src/server/routes/notifications.ts', import.meta.url), 'utf8');
 const ui = await readFile(new URL('../src/components/common/AcademicAssistant.tsx', import.meta.url), 'utf8');
 
 // Contract tests: protect the assistant's security and conversation capabilities.
-assert.match(server, /app\.post\('\/api\/assistant', requireUser/);
-assert.match(server, /assistantHistory\(/);
-assert.match(server, /assistantConversationForUser/);
-assert.match(server, /assistant_messages|assistantMessage/);
-assert.match(server, /const links = \(\(\) =>/);
-assert.match(server, /role === 'ESTUDIANTE'/);
-assert.match(server, /role === 'DOCENTE'/);
-assert.match(server, /role === 'ADMIN'/);
+assert.match(notifications, /app\.post\('\/api\/assistant', requireUser/);
+assert.match(notifications, /assistantHistory\(/);
+assert.match(notifications, /assistantConversationForUser/);
+assert.match(notifications, /assistant_messages|assistantMessage/);
+assert.match(notifications, /const links = \(\(\) =>/);
+assert.match(notifications, /role === 'ESTUDIANTE'/);
+assert.match(notifications, /role === 'DOCENTE'/);
+assert.match(notifications, /role === 'ADMIN'/);
 assert.match(server, /No inventes/);
 assert.match(ui, /history: nextMessages\.slice\(-8\)/);
 assert.match(ui, /message\.links/);

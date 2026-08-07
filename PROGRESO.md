@@ -240,6 +240,20 @@ completada y su distribución alimenta automáticamente `Plan de Estudios`.
 
 ## Cómo continuar
 
+Primera vez en una base de datos nueva (crea `data/system.db` si no existe):
+
+```bash
+npm run db:setup
+npm run db:seed
+```
+
+`db:setup` aplica las 41 migraciones y omite automáticamente
+`20260804015000_finalize_historical_sections`: esa migración inserta el historial
+académico real del estudiante de demostración (carnet 20230142) y depende de filas
+que solo existen en la base de datos de producción original, nunca creadas por
+ninguna migración. En una base nueva no aplica; `db:seed` la reemplaza con datos de
+demostración generales y funcionales.
+
 Desde la carpeta del proyecto:
 
 ```bash
