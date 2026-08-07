@@ -49,6 +49,20 @@ export function registerAdminRoutes(
     res.json({ temporaryPassword: password, mustChangePassword: true, emailQueued: true });
   });
 
+  app.patch('/api/admin/users/:id/toggle-active', requireAdmin, async (req, res) => {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!user) return void res.status(404).json({ message: 'Usuario no encontrado.' });
+    if (user.id === res.locals.authUser.id) return void res.status(400).json({ message: 'No puedes desactivar tu propia cuenta.' });
+    if (user.role === 'ADMIN') return void res.status(400).json({ message: 'No puedes desactivar cuentas de administrador.' });
+    const active = !user.active;
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: user.id }, data: { active } });
+      await tx.auditLog.create({ data: { action: active ? 'USER_ACTIVATED' : 'USER_DEACTIVATED', entityType: 'USER', entityId: user.id, actorId: res.locals.authUser.id, details: JSON.stringify({ email: user.email }) } });
+      if (!active) await tx.session.deleteMany({ where: { userId: user.id } });
+    });
+    res.json({ active });
+  });
+
   app.post('/api/admin/users/:id/reset-mfa', requireAdmin, async (req, res) => {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!user) return void res.status(404).json({ message: 'Usuario no encontrado.' });

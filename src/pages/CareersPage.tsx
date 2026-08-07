@@ -41,12 +41,16 @@ export const CareersPage: React.FC = () => {
     status: 'Activo',
   });
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
   const filteredCareers = careers.filter(
     (c) =>
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.faculty.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  const paginatedCareers = filteredCareers.slice((page - 1) * pageSize, page * pageSize);
 
   const handleCreateCareer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -157,7 +161,7 @@ export const CareersPage: React.FC = () => {
         {/* Grid View */}
         {viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCareers.map((career) => {
+            {paginatedCareers.map((career) => {
               const careerCourses = courses.filter((c) => c.careerId === career.code);
               const careerStudents = students.filter((s) => s.careerId === career.code);
 
@@ -245,7 +249,7 @@ export const CareersPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E2E8F0] text-xs">
-                {filteredCareers.map((c) => (
+                {paginatedCareers.map((c) => (
                   <tr key={c.code} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 font-bold text-[#800020]">{c.code}</td>
                     <td className="px-6 py-4 font-bold text-[#333333]">{c.name}</td>
@@ -274,6 +278,18 @@ export const CareersPage: React.FC = () => {
             </table>
           </div>
         )}
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-white px-5 py-3 text-xs shadow-xs">
+          <span className="text-[#64748B]">{filteredCareers.length} carreras · pág. {page} de {Math.max(1, Math.ceil(filteredCareers.length / pageSize))}</span>
+          <div className="flex items-center gap-2">
+            <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="rounded-lg border px-2 py-1 text-xs">
+              {[10, 20, 50, 100].map((n) => <option key={n}>{n}</option>)}
+            </select>
+            <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="rounded-lg border px-3 py-1 disabled:opacity-40">‹</button>
+            <button disabled={page * pageSize >= filteredCareers.length} onClick={() => setPage((p) => p + 1)} className="rounded-lg border px-3 py-1 disabled:opacity-40">›</button>
+          </div>
+        </div>
 
         {/* Modal: Add Career */}
         <Modal

@@ -41,6 +41,8 @@ export const SchedulesPage: React.FC = () => {
     type: 'Teórica',
     campusId: '',
   });
+  const [editClassroomId, setEditClassroomId] = useState<string | null>(null);
+  const [editClassroomForm, setEditClassroomForm] = useState({ code: '', building: '', capacity: 35, type: 'Teórica' });
 
   const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   const enrolledSectionIds = new Set(enrollments.filter((item) => item.studentCarnet === currentUser.carnetOrCode && item.cycleId === currentCycle.id && item.status === 'Inscrito').map((item) => item.sectionId));
@@ -69,6 +71,16 @@ export const SchedulesPage: React.FC = () => {
   };
   const hasConflict = (section: typeof visibleSections[number]) => roleSections.some((other) => other.id !== section.id && overlaps(section, other));
   const teachersWithSchedule = Array.from(new Map(roleSections.map((section) => [section.teacherId, section.teacherName || section.teacherId])).entries());
+
+  const handleEditClassroom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editClassroomId) return;
+    const response = await fetch(`/api/classrooms/${editClassroomId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...editClassroomForm, capacity: Number(editClassroomForm.capacity) }) });
+    if (!response.ok) { const result = await response.json(); showToast(result.message || 'No se pudo actualizar el aula', 'error'); return; }
+    showToast('Aula actualizada', 'success');
+    setEditClassroomId(null);
+    window.location.reload();
+  };
 
   const handleCreateClassroom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -253,10 +265,44 @@ export const SchedulesPage: React.FC = () => {
                     <span className="font-bold text-[#333333]">{clr.capacity} Alumnos</span>
                   </div>
                 </div>
+                {currentUser.role === 'ADMIN' && <button onClick={() => { setEditClassroomId(clr.id); setEditClassroomForm({ code: clr.code, building: clr.building, capacity: clr.capacity, type: clr.type }); }} className="mt-3 w-full rounded-lg border border-[#E2E8F0] py-1.5 text-[11px] font-bold text-[#64748B] hover:bg-slate-50">Editar aula</button>}
               </div>
             ))}
           </div>
         )}
+
+        {/* Modal: Edit Classroom */}
+        <Modal isOpen={!!editClassroomId} onClose={() => setEditClassroomId(null)} title="Editar Aula">
+          <form onSubmit={handleEditClassroom} className="space-y-4 text-xs">
+            <div>
+              <label className="block font-bold text-[#333333] mb-1">Código / Nombre del Aula *</label>
+              <input type="text" required value={editClassroomForm.code} onChange={(e) => setEditClassroomForm({ ...editClassroomForm, code: e.target.value })} className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium" />
+            </div>
+            <div>
+              <label className="block font-bold text-[#333333] mb-1">Edificio / Módulo</label>
+              <input type="text" value={editClassroomForm.building} onChange={(e) => setEditClassroomForm({ ...editClassroomForm, building: e.target.value })} className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block font-bold text-[#333333] mb-1">Capacidad</label>
+                <input type="number" value={editClassroomForm.capacity} onChange={(e) => setEditClassroomForm({ ...editClassroomForm, capacity: parseInt(e.target.value) })} className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium" />
+              </div>
+              <div>
+                <label className="block font-bold text-[#333333] mb-1">Tipo</label>
+                <select value={editClassroomForm.type} onChange={(e) => setEditClassroomForm({ ...editClassroomForm, type: e.target.value })} className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 font-medium">
+                  <option value="Teórica">Teórica</option>
+                  <option value="Laboratorio">Laboratorio</option>
+                  <option value="Audiovisual">Audiovisual</option>
+                  <option value="Virtual">Virtual</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t border-[#E2E8F0]">
+              <button type="button" onClick={() => setEditClassroomId(null)} className="rounded-lg border border-[#E2E8F0] px-4 py-2 font-medium">Cancelar</button>
+              <button type="submit" className="rounded-lg bg-[#800020] px-5 py-2 font-bold text-white">Guardar cambios</button>
+            </div>
+          </form>
+        </Modal>
 
         {/* Modal: Add Classroom */}
         <Modal
