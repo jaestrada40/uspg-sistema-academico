@@ -84,10 +84,10 @@ export const Sidebar: React.FC = () => {
         }`}
       >
         {/* USPG Institutional Logo Header */}
-        <div className="flex min-h-28 items-center justify-between border-b-4 border-[#800020] px-5 py-3 bg-[#1E293B] text-white">
+        <div className="flex min-h-36 items-center justify-between border-b-4 border-[#800020] px-5 py-4 bg-[#1E293B] text-white">
           <div className="flex flex-1 items-center justify-center">
             <InstitutionLogo
-              className="h-20 w-20 text-white text-sm"
+              className="h-32 w-32 text-white text-sm"
               imageClassName="h-full w-full object-contain drop-shadow-[0_3px_8px_rgba(0,0,0,0.4)]"
             />
           </div>
