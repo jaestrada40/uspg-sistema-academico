@@ -30,6 +30,8 @@ export const SystemsPage: React.FC = () => {
   const [accountSearch, setAccountSearch] = useState('');
   const [busy, setBusy] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'sessions' | 'inactive' | 'audit' | 'classrooms' | 'outbox'>('overview');
+  const [overviewAuditPage, setOverviewAuditPage] = useState(1);
+  const [overviewAuditPageSize, setOverviewAuditPageSize] = useState(10);
   const [accountsPage, setAccountsPage] = useState(1);
   const [accountsPageSize, setAccountsPageSize] = useState(20);
   const [sessionsPage, setSessionsPage] = useState(1);
@@ -181,13 +183,14 @@ export const SystemsPage: React.FC = () => {
                 <section className="overflow-hidden rounded-xl border bg-white shadow-xs lg:col-span-2">
                   <div className="border-b p-5"><h2 className="text-sm font-bold">Auditoría reciente</h2></div>
                   <div className="divide-y">
-                    {overview.audit.map((record) => (
+                    {overview.audit.slice((overviewAuditPage - 1) * overviewAuditPageSize, overviewAuditPage * overviewAuditPageSize).map((record) => (
                       <div key={record.id} className="p-3 text-xs">
                         <p className="font-bold">{translateAction(record.action)}</p>
                         <p className="text-slate-500">{translateEntity(record.entityType)} · {record.actor} {record.actorRole ? `(${record.actorRole})` : ''} · {new Date(record.createdAt).toLocaleString('es-GT')}</p>
                       </div>
                     ))}
                   </div>
+                  <Pagination currentPage={overviewAuditPage} totalPages={Math.ceil(overview.audit.length / overviewAuditPageSize) || 1} totalItems={overview.audit.length} pageSize={overviewAuditPageSize} onPageChange={setOverviewAuditPage} pageSizeOptions={[10, 20, 50, 100]} onPageSizeChange={(s) => { setOverviewAuditPageSize(s); setOverviewAuditPage(1); }} />
                 </section>
               </div>
             )}
