@@ -35,8 +35,7 @@ export type ServerHelpers = {
 
   // Gemini / assistant
   gemini: InstanceType<typeof GoogleGenAI> | null;
-  improveAssistantAnswer: (question: string, role: string, answer: string) => Promise<string>;
-  answerWithGemini: (question: string, role: string, context: string, fallback: string) => Promise<string>;
+  answerWithGemini: (question: string, role: string, context: string, fallback: string) => Promise<{ text: string; source: 'gemini' | 'disabled' | 'error' }>;
   assistantHistory: (history: unknown) => string;
 
   // Auth / rate limiting

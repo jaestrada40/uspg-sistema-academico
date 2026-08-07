@@ -14,7 +14,9 @@ assert.match(notifications, /const links = \(\(\) =>/);
 assert.match(notifications, /role === 'ESTUDIANTE'/);
 assert.match(notifications, /role === 'DOCENTE'/);
 assert.match(notifications, /role === 'ADMIN'/);
-assert.match(server, /No inventes/);
+assert.match(server, /no inventes/);
+assert.match(server, /source: 'error'/);
+assert.match(notifications, /ASSISTANT_AI_FALLBACK/);
 assert.match(ui, /history: nextMessages\.slice\(-8\)/);
 assert.match(ui, /message\.links/);
 
