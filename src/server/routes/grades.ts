@@ -221,6 +221,72 @@ export function registerGradeRoutes(
     doc.end();
   });
 
+  app.get('/api/grades/certification.pdf', requireUser, async (req, res) => {
+    const user = res.locals.authUser;
+    if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode || '' : String(req.query.studentCarnet || '');
+    if (!studentCarnet) return void res.status(400).json({ message: 'Selecciona un estudiante.' });
+    const student = await prisma.student.findUnique({ where: { carnet: studentCarnet }, include: { gradeRecords: { include: { section: { include: { course: true } } }, orderBy: { updatedAt: 'desc' } } } });
+    if (!student) return void res.status(404).json({ message: 'Estudiante no encontrado.' });
+    const institution = await prisma.institutionConfig.findUnique({ where: { id: 1 } });
+    const institutionName = institution?.name || 'Universidad de San Pablo de Guatemala';
+    const approvedCredits = student.gradeRecords.filter((grade) => grade.status === 'Aprobado').reduce((sum, grade) => sum + grade.section.course.credits, 0);
+    const safeCarnet = student.carnet.replace(/[^a-z0-9_-]/gi, '_');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Certificacion_Estudios_${safeCarnet}_USPG.pdf"`);
+    const burgundy = '#800020';
+    const gray = '#64748B';
+    const doc = new PDFDocument({ size: 'LETTER', margin: 42, bufferPages: true, info: { Title: `Certificación de estudios ${student.carnet}`, Author: institutionName } });
+    doc.pipe(res);
+    const drawBanner = () => {
+      doc.rect(0, 0, 612, 78).fill(burgundy);
+      doc.fillColor('white').font('Helvetica-Bold').fontSize(15).text(institutionName, 42, 23, { width: 528, align: 'center' });
+      doc.fontSize(10).text('SECRETARÍA GENERAL - CERTIFICACIÓN OFICIAL DE ESTUDIOS', 42, 48, { width: 528, align: 'center' });
+    };
+    drawBanner();
+    doc.roundedRect(42, 100, 528, 118, 8).fillAndStroke('#F8FAFC', '#E2E8F0');
+    const infoRows = [
+      ['Nombre completo', student.name], ['Carné', student.carnet], ['Carrera', student.careerName || '-'],
+      ['Ciclo de ingreso', student.entryCycle], ['Promedio general', `${student.gpa.toFixed(2)} pts`], ['Créditos', `${approvedCredits} / ${student.totalCreditsRequired} pts`],
+    ];
+    let infoY = 116;
+    infoRows.forEach(([label, value], index) => {
+      const column = index % 2 === 0 ? 62 : 322;
+      if (index % 2 === 0 && index > 0) infoY += 36;
+      doc.fillColor(gray).font('Helvetica-Bold').fontSize(8).text(label.toUpperCase(), column, infoY, { width: 220 });
+      doc.fillColor('#222').font('Helvetica').fontSize(10).text(value, column, infoY + 13, { width: 220 });
+    });
+    let y = 244;
+    doc.fillColor('#222').font('Helvetica-Bold').fontSize(10).text('Historial de asignaturas evaluadas', 42, y);
+    y += 20;
+    const columns = [42, 96, 310, 400, 462];
+    const widths = [54, 214, 90, 62, 108];
+    const headers = ['Código', 'Asignatura', 'Ciclo', 'Nota', 'Estado'];
+    const drawHeader = () => {
+      doc.rect(42, y, 528, 22).fill('#F1E7EA');
+      doc.fillColor(burgundy).font('Helvetica-Bold').fontSize(7.5);
+      headers.forEach((header, index) => doc.text(header, columns[index] + 3, y + 7, { width: widths[index] - 6, align: index >= 3 ? 'center' : 'left' }));
+      y += 22;
+    };
+    drawHeader();
+    student.gradeRecords.forEach((grade, index) => {
+      if (y > 700) { doc.addPage(); y = 54; drawHeader(); }
+      if (index % 2) doc.rect(42, y, 528, 22).fill('#FAFAFA');
+      doc.fillColor('#222').font('Helvetica').fontSize(7.5);
+      const values = [grade.section.courseCode, grade.section.course.name, grade.section.cycleId, grade.total.toFixed(1), grade.status];
+      values.forEach((value, column) => doc.text(String(value), columns[column] + 3, y + 7, { width: widths[column] - 6, align: column >= 3 ? 'center' : 'left', ellipsis: true }));
+      y += 22;
+    });
+    if (!student.gradeRecords.length) { doc.fillColor(gray).font('Helvetica').fontSize(9).text('No existen registros de calificaciones para este estudiante.', 42, y + 8); y += 24; }
+    const range = doc.bufferedPageRange();
+    for (let page = range.start; page < range.start + range.count; page++) {
+      doc.switchToPage(page);
+      doc.font('Helvetica').fontSize(7).fillColor(gray).text(`Documento oficial generado electrónicamente el ${new Date().toLocaleString('es-GT')} - Sistema Académico USPG`, 42, 742, { width: 528, align: 'center', lineBreak: false });
+      if (page === range.start) { doc.fillColor('white').font('Helvetica-Bold').fontSize(15).text(institutionName, 42, 23, { width: 528, align: 'center', lineBreak: false }); }
+    }
+    doc.end();
+  });
+
   // ── Recoveries ────────────────────────────────────────────────────────────────
 
   const recoveryView = (record: any) => {
@@ -235,7 +301,20 @@ export function registerGradeRoutes(
     const where = user.role === 'ESTUDIANTE' ? { gradeRecord: { studentCarnet: user.carnetOrCode } } : user.role === 'DOCENTE' ? { gradeRecord: { section: { teacherId: user.carnetOrCode } } } : {};
     const recoveries = await prisma.recoveryExam.findMany({ where, include: { gradeRecord: { include: { student: true, section: { include: { course: true } } } }, financialCharge: { include: { payments: true } } }, orderBy: { requestedAt: 'desc' } });
     const eligibleWhere = user.role === 'ESTUDIANTE' ? { studentCarnet: user.carnetOrCode, isPublished: true, total: { lt: 61 }, recoveryExam: null } : user.role === 'ADMIN' ? { isPublished: true, total: { lt: 61 }, recoveryExam: null } : { id: '__none__' };
-    const eligible = await prisma.gradeRecord.findMany({ where: eligibleWhere as any, include: { student: true, section: { include: { course: true } } } });
+    const eligibleCandidates = await prisma.gradeRecord.findMany({ where: eligibleWhere as any, include: { student: true, section: { include: { course: true } } } });
+    // Un curso reprobado deja de ser elegible para recuperación si el estudiante ya lo aprobó
+    // en otro intento/sección (retake); GradeRecord es por sección, no por curso, así que ambos
+    // registros conviven en el expediente.
+    const approvedByStudent = new Map<string, Set<string>>();
+    if (eligibleCandidates.length) {
+      const studentCarnets = [...new Set(eligibleCandidates.map((grade) => grade.studentCarnet))];
+      const approvedGrades = await prisma.gradeRecord.findMany({ where: { studentCarnet: { in: studentCarnets }, status: 'Aprobado' }, select: { studentCarnet: true, section: { select: { courseCode: true } } } });
+      for (const grade of approvedGrades) {
+        if (!approvedByStudent.has(grade.studentCarnet)) approvedByStudent.set(grade.studentCarnet, new Set());
+        approvedByStudent.get(grade.studentCarnet)!.add(grade.section.courseCode);
+      }
+    }
+    const eligible = eligibleCandidates.filter((grade) => !approvedByStudent.get(grade.studentCarnet)?.has(grade.section.courseCode));
     res.json({ recoveries: recoveries.map(recoveryView), eligible: eligible.map((grade) => ({ id: grade.id, studentCarnet: grade.studentCarnet, studentName: grade.student.name, courseCode: grade.section.courseCode, courseName: grade.section.course.name, sectionCode: grade.section.code, total: grade.total })) });
   });
 
@@ -243,11 +322,13 @@ export function registerGradeRoutes(
     const user = res.locals.authUser;
     if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'La solicitud debe realizarla el estudiante o administración.' });
     const gradeRecordId = String(req.body.gradeRecordId || '');
-    const grade = await prisma.gradeRecord.findUnique({ where: { id: gradeRecordId }, include: { student: true, recoveryExam: true } });
+    const grade = await prisma.gradeRecord.findUnique({ where: { id: gradeRecordId }, include: { student: true, recoveryExam: true, section: { select: { courseCode: true } } } });
     if (!grade) return void res.status(404).json({ message: 'Registro de calificación no encontrado.' });
     if (user.role === 'ESTUDIANTE' && grade.studentCarnet !== user.carnetOrCode) return void res.status(403).json({ message: 'Solo puedes solicitar tu propia recuperación.' });
     if (!grade.isPublished || grade.total >= 61) return void res.status(409).json({ message: 'La recuperación solo aplica a una nota reprobada y publicada.' });
     if (grade.recoveryExam) return void res.status(409).json({ message: 'Ya existe una solicitud para este curso.' });
+    const alreadyApproved = await prisma.gradeRecord.findFirst({ where: { studentCarnet: grade.studentCarnet, status: 'Aprobado', section: { courseCode: grade.section.courseCode } } });
+    if (alreadyApproved) return void res.status(409).json({ message: 'Ya aprobaste este curso en otro intento; no aplica recuperación.' });
     const recovery = await prisma.$transaction(async (tx) => {
       const created = await tx.recoveryExam.create({ data: { gradeRecordId, originalTotal: grade.total, requestedBy: user.name } });
       await tx.auditLog.create({ data: { action: 'REQUEST_RECOVERY', entityType: 'RECOVERY', entityId: created.id, actorId: user.id, details: JSON.stringify({ gradeRecordId, studentCarnet: grade.studentCarnet }) } });

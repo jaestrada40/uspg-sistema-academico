@@ -7,6 +7,8 @@ interface PaginationProps {
   totalItems: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  pageSizeOptions?: number[];
+  onPageSizeChange?: (size: number) => void;
 }
 
 export const Pagination: React.FC<PaginationProps> = ({
@@ -15,19 +17,40 @@ export const Pagination: React.FC<PaginationProps> = ({
   totalItems,
   pageSize,
   onPageChange,
+  pageSizeOptions,
+  onPageSizeChange,
 }) => {
-  if (totalPages <= 1) return null;
+  if (totalPages <= 1 && !pageSizeOptions) return null;
 
-  const startItem = (currentPage - 1) * pageSize + 1;
+  const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, totalItems);
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#E2E8F0] bg-white px-4 py-3 sm:px-6">
-      <div className="text-xs text-[#64748B]">
-        Mostrando <span className="font-semibold text-[#333333]">{startItem}</span> a{' '}
-        <span className="font-semibold text-[#333333]">{endItem}</span> de{' '}
-        <span className="font-semibold text-[#333333]">{totalItems}</span> resultados
+      <div className="flex items-center gap-3 text-xs text-[#64748B]">
+        <span>
+          Mostrando <span className="font-semibold text-[#333333]">{startItem}</span> a{' '}
+          <span className="font-semibold text-[#333333]">{endItem}</span> de{' '}
+          <span className="font-semibold text-[#333333]">{totalItems}</span> resultados
+        </span>
+        {pageSizeOptions && onPageSizeChange && (
+          <label className="flex items-center gap-1.5">
+            <span>Mostrar</span>
+            <select
+              value={pageSize}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+              className="rounded-md border border-[#E2E8F0] bg-white px-2 py-1 text-xs font-semibold text-[#333333]"
+            >
+              {pageSizeOptions.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
+      {totalPages > 1 && (
       <div className="flex items-center gap-1">
         <button
           onClick={() => onPageChange(currentPage - 1)}
@@ -59,6 +82,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
+      )}
     </div>
   );
 };

@@ -169,6 +169,12 @@ export function registerNotificationRoutes(
         const lines = student.enrollments.filter((item) => { if (!requestedDay) return true; try { return JSON.parse(item.section.scheduleDays).some((day: string) => day.toLocaleLowerCase('es-GT').includes(requestedDay)); } catch { return item.section.scheduleDays.toLocaleLowerCase('es-GT').includes(requestedDay); } }).map((item) => { let days = item.section.scheduleDays; try { days = JSON.parse(days).join(', '); } catch { /* legacy plain text */ } return `• ${item.section.course.code} · ${item.section.course.name}\n  ${days} · ${item.section.scheduleTime}\n  Aula: ${item.section.classroom.code} · Docente: ${item.section.teacher.name}`; });
         return void reply(lines.length ? `${requestedDay ? `Tus clases del ${requestedDay}` : 'Estos son tus cursos inscritos'}:\n${lines.join('\n')}` : requestedDay ? `No tienes clases programadas el ${requestedDay}.` : currentCycle ? `No tienes cursos inscritos en el ciclo actual (${currentCycle.name}).` : 'No hay un ciclo académico actual configurado.');
       }
+      if (/nota m[aá]s alta|mejor nota|nota m[aá]s baja|peor nota/.test(question)) {
+        if (!visibleGrades.length) return void reply('Todavía no tienes calificaciones registradas.');
+        const wantsLowest = /m[aá]s baja|peor/.test(question);
+        const target = visibleGrades.reduce((best, item) => (wantsLowest ? Number(item.total) < Number(best.total) : Number(item.total) > Number(best.total)) ? item : best);
+        return void reply(`Tu ${wantsLowest ? 'nota más baja' : 'nota más alta'} es ${Number(target.total).toFixed(1)}, en ${target.section.course.name} (${target.status}).`);
+      }
       if (/nota|calificacion|calificación|ganad|c[oó]mo sal[ií]|c[oó]mo me fue/.test(question)) {
         const lines = visibleGrades.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).map((item) => `${item.section.course.code} ${item.section.course.name}: ${Number(item.total).toFixed(1)} · ${item.status}`);
         return void reply(lines.length ? `Tus calificaciones del expediente son:\n${lines.join('\n')}` : 'Todavía no tienes calificaciones registradas.');

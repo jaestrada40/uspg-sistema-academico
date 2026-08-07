@@ -12,6 +12,9 @@ import { useApp } from '../context/AppContext';
 import { PageHeader } from '../components/common/PageHeader';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { RoleGuard } from '../components/common/RoleGuard';
+import { Pagination } from '../components/common/Pagination';
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 export const AcademicHistoryPage: React.FC = () => {
   const { currentUser, students, grades, courses, showToast } = useApp();
@@ -19,49 +22,34 @@ export const AcademicHistoryPage: React.FC = () => {
   const [selectedCarnet, setSelectedCarnet] = useState<string>(
     currentUser.role === 'ESTUDIANTE' ? currentUser.carnetOrCode || '20230142' : students[0]?.carnet || '20230142'
   );
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
 
   const activeStudent = students.find((s) => s.carnet === selectedCarnet) || students[0];
   const studentGrades = grades.filter((g) => g.studentCarnet === activeStudent?.carnet);
   const approvedCredits = studentGrades.filter((grade) => grade.status === 'Aprobado').reduce((sum, grade) => sum + (courses.find((course) => course.code === grade.courseCode)?.credits || 0), 0);
+  const totalPages = Math.ceil(studentGrades.length / pageSize) || 1;
+  const paginatedGrades = studentGrades.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const handleSelectStudent = (carnet: string) => {
+    setSelectedCarnet(carnet);
+    setCurrentPage(1);
+  };
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
 
   const handleDownloadCertification = () => {
-    const content = `
-===================================================================
-UNIVERSIDAD DE SAN PABLO DE GUATEMALA (USPG)
-SECRETARÍA GENERAL - CERTIFICACIÓN OFICIAL DE ESTUDIOS
-===================================================================
-
-DATOS DEL ESTUDIANTE:
--------------------------------------------------------------------
-Nombre Completo: ${activeStudent?.name}
-Carné:           ${activeStudent?.carnet}
-Carrera:         ${activeStudent?.careerName}
-Ciclo de Ingreso:${activeStudent?.entryCycle}
-Promedio General:${activeStudent?.gpa.toFixed(2)} pts
-Créditos:        ${approvedCredits} / ${activeStudent?.totalCreditsRequired} pts
-
-HISTORIAL DE ASIGNATURAS EVALUADAS:
--------------------------------------------------------------------
-${studentGrades
-  .map(
-    (g) =>
-      `[${g.cycleId}] ${g.courseCode} - ${(g.courseName || '').padEnd(30)} | Nota: ${g.total.toString().padStart(3)} | Estado: ${g.status}`
-  )
-  .join('\n')}
-
-===================================================================
-Documento oficial generado electrónicamente por el Sistema USPG.
-Fecha de emisión: ${new Date().toLocaleDateString('es-GT')}
-===================================================================
-    `;
-
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Certificacion_Estudios_${activeStudent?.carnet}_USPG.txt`;
-    a.click();
-    showToast('Certificación oficial generada y descargada', 'success');
+    if (!activeStudent) return;
+    const params = currentUser.role === 'ADMIN' ? `?${new URLSearchParams({ studentCarnet: activeStudent.carnet })}` : '';
+    const link = document.createElement('a');
+    link.href = `/api/grades/certification.pdf${params}`;
+    link.download = `Certificacion_Estudios_${activeStudent.carnet}_USPG.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    showToast('Generando certificación oficial en PDF', 'success');
   };
 
   return (
@@ -93,7 +81,7 @@ Fecha de emisión: ${new Date().toLocaleDateString('es-GT')}
             </label>
             <select
               value={selectedCarnet}
-              onChange={(e) => setSelectedCarnet(e.target.value)}
+              onChange={(e) => handleSelectStudent(e.target.value)}
               className="w-full max-w-md rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-bold text-[#333333]"
             >
               {students.map((s) => (
@@ -185,7 +173,7 @@ Fecha de emisión: ${new Date().toLocaleDateString('es-GT')}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0]">
-                  {studentGrades.map((g) => (
+                  {paginatedGrades.map((g) => (
                     <tr key={g.id} className="hover:bg-slate-50">
                       <td className="px-6 py-4 font-bold text-[#800020]">{g.courseCode}</td>
                       <td className="px-6 py-4 font-bold text-[#333333]">{g.courseName}</td>
@@ -205,6 +193,17 @@ Fecha de emisión: ${new Date().toLocaleDateString('es-GT')}
                 </tbody>
               </table>
             </div>
+          )}
+          {studentGrades.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={studentGrades.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              onPageSizeChange={handlePageSizeChange}
+            />
           )}
         </div>
       </div>
