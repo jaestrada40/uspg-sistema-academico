@@ -84,4 +84,28 @@ export function registerLibraryRoutes(
   app.patch('/api/library/reservations/:id/cancel', requireUser, async (req, res) => {
     const reservation = await prisma.libraryReservation.findUnique({ where: { id: req.params.id } }); if (!reservation || !['ACTIVA','SOLICITADA','LISTA'].includes(reservation.status)) return void res.status(409).json({ message: 'La solicitud ya no puede cancelarse.' }); if (!['ADMIN','BIBLIOTECA'].includes(res.locals.authUser.role) && reservation.userId !== res.locals.authUser.id) return void res.status(403).json({ message: 'No puedes cancelar esta solicitud.' }); const saved = await prisma.$transaction(async (tx) => { if (reservation.assignedCopyId) await tx.libraryCopy.updateMany({ where: { id: reservation.assignedCopyId, status: 'RESERVADO' }, data: { status: 'DISPONIBLE' } }); return tx.libraryReservation.update({ where: { id: reservation.id }, data: { status: 'CANCELADA', cancelledAt: new Date() } }); }); res.json(saved);
   });
+
+  app.patch('/api/library/books/:id', requireUser, requireLibraryStaff, async (req, res) => {
+    const { title, author, category, isbn, publisher } = req.body;
+    const book = await prisma.libraryBook.findUnique({ where: { id: req.params.id } });
+    if (!book) return void res.status(404).json({ message: 'Libro no encontrado.' });
+    const updated = await prisma.libraryBook.update({
+      where: { id: req.params.id },
+      data: { ...(title && { title }), ...(author && { author }), ...(category && { category }), ...(isbn !== undefined && { isbn: isbn || null }), ...(publisher !== undefined && { publisher: publisher || null }) },
+    });
+    res.json(updated);
+  });
+
+  app.patch('/api/library/copies/:id/status', requireUser, requireLibraryStaff, async (req, res) => {
+    const { status, condition, location } = req.body;
+    const validStatuses = ['DISPONIBLE', 'MANTENIMIENTO', 'FUERA_CIRCULACION'];
+    if (status && !validStatuses.includes(status)) return void res.status(400).json({ message: 'Estado inválido.' });
+    const copy = await prisma.libraryCopy.findUnique({ where: { id: req.params.id } });
+    if (!copy) return void res.status(404).json({ message: 'Ejemplar no encontrado.' });
+    const updated = await prisma.libraryCopy.update({
+      where: { id: req.params.id },
+      data: { ...(status && { status }), ...(condition && { condition }), ...(location && { location }) },
+    });
+    res.json(updated);
+  });
 }
