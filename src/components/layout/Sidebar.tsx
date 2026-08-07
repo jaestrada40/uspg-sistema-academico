@@ -88,7 +88,7 @@ export const Sidebar: React.FC = () => {
           <div className="flex flex-1 items-center justify-center">
             <InstitutionLogo
               className="h-32 w-32 text-white text-sm"
-              imageClassName="h-full w-full object-contain scale-[1.35] drop-shadow-[0_3px_8px_rgba(0,0,0,0.4)]"
+              imageClassName="h-full w-full object-contain scale-[1.8] drop-shadow-[0_3px_8px_rgba(0,0,0,0.4)]"
             />
           </div>
           <button
