@@ -3,6 +3,7 @@ import {
   FileChartColumn,
   Download,
   FileSpreadsheet,
+  FileText,
   Printer,
   Users,
   GraduationCap,
@@ -82,6 +83,13 @@ export const ReportsPage: React.FC = () => {
     showToast('Reporte de secciones exportado', 'success');
   };
 
+  const downloadServerReport = (format: 'pdf' | 'xlsx') => {
+    const a = document.createElement('a');
+    a.href = `/api/reports/${format}`;
+    a.download = '';
+    a.click();
+  };
+
   const handleExportCSV = () => {
     exportToCSV('Reporte_Completo_USPG.csv', [
       ...students.map((s) => ['Estudiante', s.carnet, s.name, s.careerName, String(s.gpa), s.status, '', '']),
@@ -102,7 +110,7 @@ export const ReportsPage: React.FC = () => {
             { label: 'Reportes', active: true },
           ]}
           actions={
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => window.print()}
                 className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-semibold text-[#333333] hover:bg-slate-50 transition-colors shadow-xs"
@@ -112,10 +120,24 @@ export const ReportsPage: React.FC = () => {
               </button>
               <button
                 onClick={handleExportCSV}
+                className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-semibold text-[#333333] hover:bg-slate-50 transition-colors shadow-xs"
+              >
+                <FileSpreadsheet className="h-4 w-4 text-green-700" />
+                CSV completo
+              </button>
+              <button
+                onClick={() => downloadServerReport('xlsx')}
+                className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-semibold text-[#333333] hover:bg-slate-50 transition-colors shadow-xs"
+              >
+                <FileChartColumn className="h-4 w-4 text-green-700" />
+                Excel (.xlsx)
+              </button>
+              <button
+                onClick={() => downloadServerReport('pdf')}
                 className="flex items-center gap-2 rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white hover:bg-[#5F0018] transition-colors shadow-xs"
               >
-                <FileSpreadsheet className="h-4 w-4" />
-                Descargar Reporte Completo
+                <FileText className="h-4 w-4" />
+                Descargar PDF
               </button>
             </div>
           }

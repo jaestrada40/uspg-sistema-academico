@@ -7,6 +7,8 @@ type MfaStatus = { enabled: boolean; required: boolean; requiredRoles: string[];
 type MfaSetup = { secret: string; qrDataUrl: string };
 const roles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS'];
 
+const getTotpSecsLeft = () => 30 - (Math.floor(Date.now() / 1000) % 30);
+
 export const MfaSettingsCard: React.FC = () => {
   const { currentUser, setCurrentUser, showToast } = useApp();
   const [status, setStatus] = useState<MfaStatus | null>(null);
@@ -16,6 +18,13 @@ export const MfaSettingsCard: React.FC = () => {
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [requiredRoles, setRequiredRoles] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [secsLeft, setSecsLeft] = useState(getTotpSecsLeft);
+
+  useEffect(() => {
+    if (!setup) return;
+    const timer = window.setInterval(() => setSecsLeft(getTotpSecsLeft()), 1000);
+    return () => window.clearInterval(timer);
+  }, [setup]);
 
   const load = async () => {
     const response = await fetch('/api/auth/mfa/status');
@@ -98,7 +107,7 @@ export const MfaSettingsCard: React.FC = () => {
 
         {!status.enabled && !setup && <div className="mt-5 grid gap-3 border-t pt-5 sm:grid-cols-[1fr_auto]"><PasswordInput autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Confirma tu contraseña actual" className="w-full rounded-lg border px-3 py-2 text-xs" /><button disabled={busy || !currentPassword} onClick={startSetup} className="rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">Configurar MFA</button></div>}
 
-        {setup && <div className="mt-5 grid gap-5 border-t pt-5 md:grid-cols-[280px_1fr]"><img src={setup.qrDataUrl} alt="Código QR para configurar MFA" className="w-full max-w-[280px] rounded-xl border" /><div className="space-y-4 text-xs"><div><p className="font-bold">1. Escanea el QR</p><p className="mt-1 text-[#64748B]">Usa Google Authenticator, Microsoft Authenticator, Authy u otra aplicación TOTP.</p></div><div><p className="font-bold">2. Clave manual</p><PasswordInput readOnly value={setup.secret} aria-label="Clave manual MFA" className="mt-1 w-full rounded-lg bg-slate-100 p-3 font-mono" /></div><div><p className="mb-1 font-bold">3. Confirma el código actual</p><div className="flex gap-2"><input autoComplete="one-time-code" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-center font-mono font-bold tracking-widest" /><button disabled={busy || !/^\d{6}$/.test(code)} onClick={enable} className="rounded-lg bg-green-600 px-4 py-2 font-bold text-white disabled:opacity-50">Activar</button></div></div></div></div>}
+        {setup && <div className="mt-5 grid gap-5 border-t pt-5 md:grid-cols-[280px_1fr]"><img src={setup.qrDataUrl} alt="Código QR para configurar MFA" className="w-full max-w-[280px] rounded-xl border" /><div className="space-y-4 text-xs"><div><p className="font-bold">1. Escanea el QR</p><p className="mt-1 text-[#64748B]">Usa Google Authenticator, Microsoft Authenticator, Authy u otra aplicación TOTP.</p></div><div><p className="font-bold">2. Clave manual</p><PasswordInput readOnly value={setup.secret} aria-label="Clave manual MFA" className="mt-1 w-full rounded-lg bg-slate-100 p-3 font-mono" /></div><div><p className="mb-1 font-bold">3. Confirma el código actual</p><div className="flex gap-2"><input autoComplete="one-time-code" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-center font-mono font-bold tracking-widest" /><button disabled={busy || !/^\d{6}$/.test(code)} onClick={enable} className="rounded-lg bg-green-600 px-4 py-2 font-bold text-white disabled:opacity-50">Activar</button></div><div className="mt-2 flex items-center gap-2"><div className="relative h-3 flex-1 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${secsLeft <= 5 ? 'bg-red-500' : secsLeft <= 10 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${(secsLeft / 30) * 100}%`, transition: 'width 1s linear' }} /></div><span className={`shrink-0 text-[11px] font-bold tabular-nums ${secsLeft <= 5 ? 'text-red-600' : secsLeft <= 10 ? 'text-amber-600' : 'text-green-700'}`}>{secsLeft}s para el próximo código</span></div></div></div></div>}
 
         {status.enabled && <div className="mt-5 grid gap-3 border-t pt-5 sm:grid-cols-2"><PasswordInput autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Contraseña actual" className="w-full rounded-lg border px-3 py-2 text-xs" /><input autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Código MFA o recuperación" className="rounded-lg border px-3 py-2 text-xs" /><button disabled={busy || !currentPassword || !code} onClick={regenerate} className="flex items-center justify-center gap-2 rounded-lg border px-4 py-2 text-xs font-bold"><RefreshCw className="h-4 w-4" />Renovar códigos</button><button disabled={busy || status.required || !currentPassword || !code} onClick={disable} className="rounded-lg border border-red-200 px-4 py-2 text-xs font-bold text-red-700 disabled:opacity-40">Desactivar MFA</button></div>}
       </div>

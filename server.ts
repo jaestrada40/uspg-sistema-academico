@@ -22,6 +22,7 @@ import { registerParkingRoutes } from './src/server/routes/parking';
 import { registerAttendanceRoutes } from './src/server/routes/attendance';
 import { registerNotificationRoutes } from './src/server/routes/notifications';
 import { registerSystemsRoutes } from './src/server/routes/systems';
+import { registerReportsRoutes } from './src/server/routes/reports';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const prisma = createPrismaClient();
@@ -171,6 +172,7 @@ registerLibraryRoutes(app, prisma, middleware, helpers);
 registerParkingRoutes(app, prisma, middleware, helpers);
 registerAttendanceRoutes(app, prisma, middleware, helpers);
 registerNotificationRoutes(app, prisma, middleware, helpers);
+registerReportsRoutes(app, prisma, middleware, helpers);
 
 // ── Error handler & static serving ───────────────────────────────────────────
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
