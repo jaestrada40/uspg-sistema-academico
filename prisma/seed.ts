@@ -56,21 +56,25 @@ const demoUsers = [
   },
 ];
 
-for (const user of demoUsers) {
+const upsertUser = async (id: string, email: string, data: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
+  const existing = await prisma.user.findFirst({ where: { email } });
+  const actualId = existing?.id ?? id;
   await prisma.user.upsert({
-    where: { id: user.id },
-    update: user,
-    create: { ...user, passwordHash: hashPassword('Demo123!') },
+    where: { id: actualId },
+    update: data as Parameters<typeof prisma.user.upsert>[0]['update'],
+    create: { id, email, ...data, ...extra } as Parameters<typeof prisma.user.upsert>[0]['create'],
   });
+  return actualId;
+};
+
+for (const user of demoUsers) {
+  await upsertUser(user.id, user.email, user, { passwordHash: hashPassword('Demo123!') });
 }
 
 for (const student of INITIAL_STUDENTS) {
-  const userId = student.carnet === '20230142' ? 'USR-003' : `STU-${student.carnet}`;
-  await prisma.user.upsert({
-    where: { id: userId },
-    update: { name: student.name, email: student.email, role: 'ESTUDIANTE', carnetOrCode: student.carnet, active: student.status === 'Activo' },
-    create: { id: userId, name: student.name, email: student.email, role: roleFromInstitutionalEmail(student.email), carnetOrCode: student.carnet, active: student.status === 'Activo', passwordHash: hashPassword('Demo123!') },
-  });
+  const defaultId = student.carnet === '20230142' ? 'USR-003' : `STU-${student.carnet}`;
+  const userData = { name: student.name, email: student.email, role: 'ESTUDIANTE', carnetOrCode: student.carnet, active: student.status === 'Activo' };
+  const userId = await upsertUser(defaultId, student.email, userData, { passwordHash: hashPassword('Demo123!') });
   await prisma.student.upsert({
     where: { carnet: student.carnet },
     update: { ...student, userId },
@@ -85,13 +89,10 @@ await prisma.campus.upsert({
 });
 
 for (const teacher of INITIAL_TEACHERS) {
-  const userId = teacher.code === 'DOC-1042' ? 'USR-002' : `TCH-${teacher.code}`;
+  const defaultId = teacher.code === 'DOC-1042' ? 'USR-002' : `TCH-${teacher.code}`;
+  const teacherUserData = { name: teacher.name, email: teacher.email, role: 'DOCENTE', carnetOrCode: teacher.code, active: teacher.status === 'Activo' };
+  const userId = await upsertUser(defaultId, teacher.email, teacherUserData, { passwordHash: hashPassword('Demo123!') });
   const data = { ...teacher, assignedSectionIds: JSON.stringify(teacher.assignedSectionIds), userId, campusId: 'CAMPUS-CENTRAL' };
-  await prisma.user.upsert({
-    where: { id: userId },
-    update: { name: teacher.name, email: teacher.email, role: 'DOCENTE', carnetOrCode: teacher.code, active: teacher.status === 'Activo' },
-    create: { id: userId, name: teacher.name, email: teacher.email, role: roleFromInstitutionalEmail(teacher.email), carnetOrCode: teacher.code, active: teacher.status === 'Activo', passwordHash: hashPassword('Demo123!') },
-  });
   await prisma.teacher.upsert({
     where: { code: teacher.code },
     update: data,
