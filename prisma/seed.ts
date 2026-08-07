@@ -19,6 +19,9 @@ const roleFromInstitutionalEmail = (email: string) => {
   if (normalized.endsWith('@catedratico.uspg.edu.gt')) return 'DOCENTE';
   if (normalized.endsWith('@administrador.uspg.edu.gt')) return 'ADMIN';
   if (normalized.endsWith('@sistemas.uspg.edu.gt')) return 'SISTEMAS';
+  if (normalized.endsWith('@biblioteca.uspg.edu.gt')) return 'BIBLIOTECA';
+  if (normalized.endsWith('@parqueo.uspg.edu.gt')) return 'PARQUEO';
+  if (normalized.endsWith('@eventos.uspg.edu.gt')) return 'EVENTOS';
   throw new Error(`Dominio institucional no reconocido: ${email}`);
 };
 
@@ -38,6 +41,18 @@ const demoUsers = [
   {
     id: 'USR-SYS-001', name: 'Soporte de Sistemas USPG', email: 'sistemas@sistemas.uspg.edu.gt', role: roleFromInstitutionalEmail('sistemas@sistemas.uspg.edu.gt'),
     carnetOrCode: 'SYS-0001', phone: '+502 2326-5555', department: 'Tecnología y Sistemas',
+  },
+  {
+    id: 'USR-BIB-001', name: 'Ana López', email: 'alopez@biblioteca.uspg.edu.gt', role: 'BIBLIOTECA',
+    carnetOrCode: 'BIB-0001', phone: '+502 2326-7001', department: 'Biblioteca Central',
+  },
+  {
+    id: 'USR-PAR-001', name: 'Roberto Paz', email: 'rpaz@parqueo.uspg.edu.gt', role: 'PARQUEO',
+    carnetOrCode: 'PAR-0001', phone: '+502 2326-7002', department: 'Control de Parqueo',
+  },
+  {
+    id: 'USR-EVT-001', name: 'Sandra Ruiz', email: 'sruiz@eventos.uspg.edu.gt', role: 'EVENTOS',
+    carnetOrCode: 'EVT-0001', phone: '+502 2326-7003', department: 'Gestión de Eventos',
   },
 ];
 
@@ -176,6 +191,37 @@ await prisma.institutionConfig.upsert({
     logoDataUrl,
   },
 });
+
+// Libros de prueba para biblioteca
+const sampleBooks = [
+  { id: 'BK-001', isbn: '978-0-13-110362-7', title: 'El Lenguaje de Programación C', author: 'Brian W. Kernighan, Dennis M. Ritchie', publisher: 'Prentice Hall', publicationYear: 1988, category: 'Programación', copies: 3 },
+  { id: 'BK-002', isbn: '978-0-13-468599-1', title: 'Clean Code: A Handbook of Agile Software Craftsmanship', author: 'Robert C. Martin', publisher: 'Prentice Hall', publicationYear: 2008, category: 'Ingeniería de Software', copies: 2 },
+  { id: 'BK-003', isbn: '978-0-596-51774-8', title: 'JavaScript: The Good Parts', author: 'Douglas Crockford', publisher: "O'Reilly Media", publicationYear: 2008, category: 'Programación', copies: 4 },
+  { id: 'BK-004', isbn: '978-0-13-235088-4', title: 'Estructura de Datos y Algoritmos', author: 'Thomas H. Cormen', publisher: 'MIT Press', publicationYear: 2009, category: 'Algoritmos', copies: 5 },
+  { id: 'BK-005', isbn: '978-0-201-63361-0', title: 'Design Patterns: Elements of Reusable Object-Oriented Software', author: 'Erich Gamma, Richard Helm, Ralph Johnson, John Vlissides', publisher: 'Addison-Wesley', publicationYear: 1994, category: 'Ingeniería de Software', copies: 2 },
+  { id: 'BK-006', isbn: '978-0-07-352332-3', title: 'Sistemas Operativos Modernos', author: 'Andrew S. Tanenbaum', publisher: 'Pearson', publicationYear: 2015, category: 'Sistemas Operativos', copies: 3 },
+  { id: 'BK-007', isbn: '978-0-321-12521-7', title: 'Domain-Driven Design', author: 'Eric Evans', publisher: 'Addison-Wesley', publicationYear: 2003, category: 'Ingeniería de Software', copies: 2 },
+  { id: 'BK-008', isbn: '978-0-13-349906-6', title: 'Fundamentos de Base de Datos', author: 'Abraham Silberschatz', publisher: 'McGraw-Hill', publicationYear: 2019, category: 'Bases de Datos', copies: 4 },
+  { id: 'BK-009', isbn: '978-1-491-91205-8', title: 'Learning Python', author: 'Mark Lutz', publisher: "O'Reilly Media", publicationYear: 2013, category: 'Programación', copies: 3 },
+  { id: 'BK-010', isbn: '978-0-13-461950-9', title: 'Redes de Computadoras', author: 'Andrew S. Tanenbaum, David J. Wetherall', publisher: 'Pearson', publicationYear: 2012, category: 'Redes', copies: 3 },
+];
+
+for (const book of sampleBooks) {
+  const { copies: copyCount, ...bookData } = book;
+  await prisma.libraryBook.upsert({
+    where: { id: bookData.id },
+    update: bookData,
+    create: bookData,
+  });
+  for (let i = 1; i <= copyCount; i++) {
+    const copyId = `${book.id}-C${i}`;
+    await prisma.libraryCopy.upsert({
+      where: { id: copyId },
+      update: {},
+      create: { id: copyId, barcode: `BAR-${book.id}-${i}`, location: `Estante ${book.category.slice(0, 3).toUpperCase()}-${i}`, status: 'DISPONIBLE', condition: 'BUENO', bookId: book.id },
+    });
+  }
+}
 
 await prisma.$disconnect();
 console.log('Base inicial creada. Usuarios demo usan la contraseña Demo123!');
