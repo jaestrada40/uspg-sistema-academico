@@ -1,12 +1,7 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type express from 'express';
 import QRCode from 'qrcode';
 import type { AppPrisma, AuthMiddleware, ServerHelpers } from '../types';
-
-const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 // Local helpers not exposed as server-wide helpers but needed here
 const encodeBase32 = (input: Buffer) => {
@@ -34,21 +29,13 @@ export function registerAuthRoutes(
   const { requireUser, requireAdmin } = middleware;
 
   const recoveryCodeHash = (code: string) => {
-    const { createHmac } = require('node:crypto') as typeof import('node:crypto');
-    // We need access to mfaEncryptionKey — re-derive it via the helpers' decryptMfaSecret closure
-    // Instead, expose a recoveryCodeHash via helpers or compute inline using a known approach.
-    // Since mfaEncryptionKey is private, we pass it through helpers indirectly.
-    // The cleanest approach: just call the helper if exposed, or inline a version.
-    // Since the task says zero behavior change, we inline the same logic here using the key
-    // derived from the env (same as server.ts). This is acceptable since it's the same process.
     const configured = process.env.MFA_ENCRYPTION_KEY;
     let key: Buffer;
     if (configured) {
       const decoded = Buffer.from(configured, 'base64');
-      if (decoded.length === 32) key = decoded;
-      else key = require('node:crypto').createHash('sha256').update('uspg-mfa-development-key').digest();
+      key = decoded.length === 32 ? decoded : createHash('sha256').update('uspg-mfa-development-key').digest();
     } else {
-      key = require('node:crypto').createHash('sha256').update('uspg-mfa-development-key').digest();
+      key = createHash('sha256').update('uspg-mfa-development-key').digest();
     }
     return createHmac('sha256', key).update(code.toUpperCase().replace(/[^A-Z2-7]/g, '')).digest('hex');
   };
