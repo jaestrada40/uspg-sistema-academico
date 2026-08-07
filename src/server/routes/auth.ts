@@ -202,6 +202,23 @@ export function registerAuthRoutes(
     res.json({ ok: true });
   });
 
+  app.patch('/api/auth/profile', requireUser, async (req, res) => {
+    const user = res.locals.authUser;
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : undefined;
+    const phone = typeof req.body?.phone === 'string' ? req.body.phone.trim() : undefined;
+    if (!name && phone === undefined) return void res.status(400).json({ message: 'No hay campos para actualizar.' });
+    const data: Record<string, string | null> = {};
+    if (name) data.name = name;
+    if (phone !== undefined) data.phone = phone || null;
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data,
+      include: { student: { select: { campusId: true } }, teacher: { select: { campusId: true } } },
+    });
+    const requiredRoles = await getMfaRequiredRoles();
+    res.json({ user: publicUser(updated, requiredRoles) });
+  });
+
   app.get('/api/auth/mfa/status', requireUser, async (_req, res) => {
     const user = await prisma.user.findUnique({ where: { id: res.locals.authUser.id } });
     if (!user) return void res.status(404).json({ message: 'Usuario no encontrado.' });

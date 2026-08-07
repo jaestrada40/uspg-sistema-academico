@@ -18,7 +18,7 @@ import { MfaSettingsCard } from '../components/security/MfaSettingsCard';
 import { PasswordInput } from '../components/common/PasswordInput';
 
 export const ProfileSettingsPage: React.FC = () => {
-  const { currentUser, parameters, updateParameters, showToast, institution, saveInstitution, changePassword } = useApp();
+  const { currentUser, parameters, updateParameters, showToast, institution, saveInstitution, changePassword, updateProfile } = useApp();
 
   const [activeTab, setActiveTab] = useState('profile');
 
@@ -26,7 +26,7 @@ export const ProfileSettingsPage: React.FC = () => {
   const [profileData, setProfileData] = useState({
     name: currentUser.name,
     email: currentUser.email,
-    phone: '+502 5555-1234',
+    phone: currentUser.phone ?? '',
     currentPassword: '',
     newPassword: '',
   });
@@ -50,15 +50,24 @@ export const ProfileSettingsPage: React.FC = () => {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (profileData.currentPassword || profileData.newPassword) {
+    const profileChanged = profileData.name !== currentUser.name || profileData.phone !== (currentUser.phone ?? '');
+    const passwordChanged = profileData.currentPassword || profileData.newPassword;
+
+    if (profileChanged) {
+      if (!(await updateProfile({ name: profileData.name, phone: profileData.phone }))) return;
+    }
+
+    if (passwordChanged) {
       if (!profileData.currentPassword || !profileData.newPassword) {
         showToast('Completa la contraseña actual y la nueva', 'error');
         return;
       }
       if (!(await changePassword(profileData.currentPassword, profileData.newPassword))) return;
       setProfileData((current) => ({ ...current, currentPassword: '', newPassword: '' }));
-    } else {
-      showToast('No hay cambios de contraseña pendientes', 'info');
+    }
+
+    if (!profileChanged && !passwordChanged) {
+      showToast('No hay cambios para guardar', 'info');
     }
   };
 

@@ -46,6 +46,7 @@ interface AppContextType {
   verifyMfa: (challengeToken: string, code: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
+  updateProfile: (data: { name?: string; phone?: string }) => Promise<boolean>;
 
   // Cycles
   cycles: AcademicCycle[];
@@ -298,6 +299,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!response.ok) { showToast(result.message || 'No se pudo cambiar la contraseña', 'error'); return false; }
     setCurrentUser((user) => ({ ...user, mustChangePassword: false }));
     showToast('Contraseña actualizada correctamente', 'success');
+    return true;
+  };
+
+  const updateProfile = async (data: { name?: string; phone?: string }) => {
+    const response = await fetch('/api/auth/profile', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const result = await response.json();
+    if (!response.ok) { showToast(result.message || 'No se pudo actualizar el perfil', 'error'); return false; }
+    setCurrentUser((user) => ({ ...user, ...result.user }));
+    showToast('Perfil actualizado correctamente', 'success');
     return true;
   };
 
@@ -660,6 +670,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         verifyMfa,
         logout,
         changePassword,
+        updateProfile,
         cycles,
         currentCycle,
         setCurrentCycleId,
