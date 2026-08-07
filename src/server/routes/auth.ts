@@ -59,6 +59,7 @@ export function registerAuthRoutes(
         active: true,
         OR: [{ email: username.toLowerCase() }, { carnetOrCode: username }],
       },
+      include: { student: { select: { campusId: true } }, teacher: { select: { campusId: true } } },
     });
 
     if (!user || !verifyPassword(password, user.passwordHash)) {
@@ -83,7 +84,7 @@ export function registerAuthRoutes(
   app.post('/api/auth/mfa/verify', async (req, res) => {
     const challengeToken = String(req.body?.challengeToken || '');
     const code = String(req.body?.code || '');
-    const challenge = challengeToken ? await prisma.mfaChallenge.findUnique({ where: { tokenHash: hashToken(challengeToken) }, include: { user: true } }) : null;
+    const challenge = challengeToken ? await prisma.mfaChallenge.findUnique({ where: { tokenHash: hashToken(challengeToken) }, include: { user: { include: { student: { select: { campusId: true } }, teacher: { select: { campusId: true } } } } } }) : null;
     if (!challenge || challenge.expiresAt <= new Date() || !challenge.user.active || !challenge.user.mfaEnabled || !challenge.user.mfaSecretEncrypted) {
       if (challenge) await prisma.mfaChallenge.delete({ where: { id: challenge.id } });
       return void res.status(401).json({ message: 'El desafío MFA expiró. Inicia sesión nuevamente.' });
@@ -119,7 +120,7 @@ export function registerAuthRoutes(
     }
     const session = await prisma.session.findUnique({
       where: { tokenHash: hashToken(token) },
-      include: { user: true },
+      include: { user: { include: { student: { select: { campusId: true } }, teacher: { select: { campusId: true } } } } },
     });
     if (!session || session.expiresAt <= new Date() || !session.user.active) {
       if (session) await prisma.session.delete({ where: { id: session.id } });

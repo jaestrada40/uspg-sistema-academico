@@ -229,7 +229,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   // Current Cycle
-  const currentCycle = cycles.find((c) => c.isCurrent) || cycles[0];
+  const hasFixedCampus = currentUser.role === 'ESTUDIANTE' || currentUser.role === 'DOCENTE';
+  const currentCycle = hasFixedCampus
+    ? cycles.find((c) => c.isCurrent && c.campusId === currentUser.campusId) || cycles.find((c) => c.campusId === currentUser.campusId) || cycles[0]
+    : cycles.find((c) => c.isCurrent) || cycles[0];
 
   const setCurrentCycleId = async (id: string) => {
     if (!(await updateCycle(id, { isCurrent: true }))) return;
@@ -302,13 +305,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addCycle = async (newCycleData: Omit<AcademicCycle, 'id'>) => {
     const response = await fetch('/api/cycles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCycleData) }); const result = await response.json();
     if (!response.ok) { showToast(result.message, 'error'); return false; }
-    setCycles((prev) => result.isCurrent ? [...prev.map((cycle) => ({ ...cycle, isCurrent: false })), result] : [...prev, result]); showToast(`Ciclo ${result.name} creado correctamente`, 'success'); return true;
+    setCycles((prev) => result.isCurrent ? [...prev.map((cycle) => cycle.campusId === result.campusId ? { ...cycle, isCurrent: false } : cycle), result] : [...prev, result]); showToast(`Ciclo ${result.name} creado correctamente`, 'success'); return true;
   };
 
   const updateCycle = async (id: string, cycleData: Partial<AcademicCycle>) => {
     const response = await fetch(`/api/cycles/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cycleData) }); const result = await response.json();
     if (!response.ok) { showToast(result.message, 'error'); return false; }
-    setCycles((prev) => prev.map((cycle) => result.isCurrent ? { ...cycle, isCurrent: cycle.id === id } : cycle.id === id ? result : cycle)); showToast('Ciclo académico actualizado', 'success'); return true;
+    setCycles((prev) => prev.map((cycle) => result.isCurrent && cycle.campusId === result.campusId ? { ...cycle, isCurrent: cycle.id === id } : cycle.id === id ? result : cycle)); showToast('Ciclo académico actualizado', 'success'); return true;
   };
 
   // Students CRUD

@@ -12,6 +12,7 @@ export interface User {
   mustChangePassword?: boolean;
   mfaEnabled?: boolean;
   mfaEnrollmentRequired?: boolean;
+  campusId?: string | null;
 }
 
 export type StatusType = 'Activo' | 'Inactivo' | 'Egresado' | 'Suspendido' | 'Aprobado' | 'Reprobado' | 'En curso' | 'Retirado' | 'Planificado' | 'Inscripciones abiertas' | 'Finalizado' | 'Disponible' | 'Cerrado' | 'En espera';
