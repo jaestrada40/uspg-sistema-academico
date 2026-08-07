@@ -470,18 +470,142 @@ export function registerNotificationRoutes(
       return void reply(`Tienes ${teacher.sections.length} secciones asignadas. Puedes preguntar por tus secciones, horarios, aulas o cantidad de inscritos.`);
     }
     if (user.role === 'ADMIN') {
-      const [students, teachers, courses, sections, careers, pendingDocuments, pendingCharges, parkingConfig, vehiclesInside, activeEvents, pendingRequests, unreadNotifications, activeLoans, attendanceSessions, recoveryExams, zoneActivities, virtualClassrooms, mfaUsers] = await Promise.all([prisma.student.count(), prisma.teacher.count(), prisma.course.count(), prisma.section.count(), prisma.career.count(), prisma.enrollmentDocument.count({ where: { status: 'PENDIENTE' } }), prisma.financialCharge.count({ where: { status: { in: ['PENDIENTE', 'VENCIDO'] } } }), prisma.parkingConfig.findUnique({ where: { id: 1 } }), prisma.parkingVisit.count({ where: { status: 'DENTRO' } }), prisma.parkingEvent.count({ where: { status: { in: ['PLANIFICADO', 'EN_CURSO'] } } }), prisma.studentServiceRequest.count({ where: { status: { in: ['SOLICITADA', 'EN_REVISION'] } } }), prisma.appNotification.count({ where: { isRead: false } }), prisma.libraryLoan.count({ where: { status: 'PRESTADO' } }), prisma.attendanceSession.count(), prisma.recoveryExam.count({ where: { status: { not: 'CERRADA' } } }), prisma.zoneActivity.count(), prisma.virtualClassroom.count(), prisma.user.count({ where: { mfaEnabled: true } })]);
-      groundedContext = JSON.stringify({ estudiantes: students, docentes: teachers, carreras: careers, cursos: courses, secciones: sections, expedientesPendientes: pendingDocuments, cargosPendientesOVencidos: pendingCharges, parqueo: { dentro: vehiclesInside, capacidad: parkingConfig?.totalCapacity || 0, eventosActivos: activeEvents }, solicitudesPendientes: pendingRequests, notificacionesNoLeidas: unreadNotifications, prestamosActivos: activeLoans, sesionesAsistencia: attendanceSessions, recuperacionesAbiertas: recoveryExams, actividadesZona: zoneActivities, aulasVirtuales: virtualClassrooms, usuariosConMFA: mfaUsers });
-      if (/parqueo|estacionamiento|vehículo|vehiculo/.test(question)) return void reply(`Parqueo: ${vehiclesInside} vehículo(s) dentro de ${parkingConfig?.totalCapacity || 0} espacios. Eventos activos o planificados: ${activeEvents}.`);
-      if (/biblioteca|préstamo|prestamo|libro/.test(question)) return void reply(`Biblioteca: ${activeLoans} préstamo(s) activo(s).`);
-      if (/solicitud|trámite|tramite/.test(question)) return void reply(`Solicitudes pendientes: ${pendingRequests}.`);
+      const [
+        students, teachers, courses, sections, careers,
+        pendingDocuments, pendingCharges, parkingConfig, vehiclesInside, activeEvents,
+        pendingRequests, unreadNotifications, activeLoans, attendanceSessions,
+        recoveryExams, zoneActivities, virtualClassrooms, mfaUsers,
+        campuses, currentCycle, enrolledCount, fullSections, noTeacherSections,
+        inDebtStudents, solventStudents, totalDebtAmount, deliveredActs, pendingActs,
+        failedGrades, atRiskStudents, inactiveUsers, usersByRole, overdueLoans,
+        libraryBooks, loansThisMonth, activeEventsList, parkingTodayVisits,
+      ] = await Promise.all([
+        prisma.student.count(),
+        prisma.teacher.count(),
+        prisma.course.count(),
+        prisma.section.count(),
+        prisma.career.count(),
+        prisma.enrollmentDocument.count({ where: { status: 'PENDIENTE' } }),
+        prisma.financialCharge.count({ where: { status: { in: ['PENDIENTE', 'VENCIDO'] } } }),
+        prisma.parkingConfig.findUnique({ where: { id: 1 } }),
+        prisma.parkingVisit.count({ where: { status: 'DENTRO' } }),
+        prisma.parkingEvent.count({ where: { status: { in: ['PLANIFICADO', 'EN_CURSO'] } } }),
+        prisma.studentServiceRequest.count({ where: { status: { in: ['SOLICITADA', 'EN_REVISION'] } } }),
+        prisma.appNotification.count({ where: { isRead: false } }),
+        prisma.libraryLoan.count({ where: { status: 'PRESTADO' } }),
+        prisma.attendanceSession.count(),
+        prisma.recoveryExam.count({ where: { status: { not: 'CERRADA' } } }),
+        prisma.zoneActivity.count(),
+        prisma.virtualClassroom.count(),
+        prisma.user.count({ where: { mfaEnabled: true } }),
+        // new queries
+        prisma.campus.count({ where: { status: 'Activo' } }),
+        prisma.academicCycle.findFirst({ where: { isCurrent: true }, select: { name: true, enrollmentStartDate: true, enrollmentEndDate: true, gradeSubmissionDeadline: true, examStartDate: true, examEndDate: true, startDate: true, endDate: true } }),
+        prisma.gradeRecord.count({ where: { section: { cycle: { isCurrent: true } } } }),
+        prisma.section.findMany({ where: { cycle: { isCurrent: true } }, select: { enrolledCount: true, capacity: true } }).then((ss) => ss.filter((s) => s.enrolledCount >= s.capacity).length).catch(() => 0),
+        Promise.resolve(0),
+        prisma.student.count({ where: { financialCharges: { some: { status: { in: ['PENDIENTE', 'VENCIDO'] } } } } }),
+        prisma.student.count({ where: { financialCharges: { none: { status: { in: ['PENDIENTE', 'VENCIDO'] } } } } }),
+        prisma.financialCharge.aggregate({ where: { status: { in: ['PENDIENTE', 'VENCIDO'] } }, _sum: { amount: true } }),
+        prisma.section.count({ where: { cycle: { isCurrent: true }, gradeActStatus: 'ENTREGADA' } }),
+        prisma.section.count({ where: { cycle: { isCurrent: true }, gradeActStatus: { not: 'ENTREGADA' } } }),
+        prisma.gradeRecord.count({ where: { total: { lt: 61 }, section: { cycle: { isCurrent: true } } } }),
+        prisma.gradeRecord.count({ where: { total: { gte: 40, lt: 61 }, section: { cycle: { isCurrent: true } } } }),
+        prisma.user.count({ where: { active: false } }),
+        prisma.user.groupBy({ by: ['role'], _count: { _all: true }, where: { active: true } }),
+        prisma.libraryLoan.count({ where: { status: 'PRESTADO', dueAt: { lt: new Date() } } }),
+        prisma.libraryBook.count(),
+        prisma.libraryLoan.count({ where: { createdAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) } } }),
+        prisma.parkingEvent.findMany({ where: { status: { in: ['PLANIFICADO', 'EN_CURSO'] } }, select: { name: true, status: true, startsAt: true }, take: 5 }),
+        prisma.parkingVisit.count({ where: { enteredAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } } }),
+      ]);
+
+      groundedContext = JSON.stringify({ estudiantes: students, docentes: teachers, carreras: careers, cursos: courses, secciones: sections, expedientesPendientes: pendingDocuments, cargosPendientesOVencidos: pendingCharges, parqueo: { dentro: vehiclesInside, capacidad: parkingConfig?.totalCapacity || 0, eventosActivos: activeEvents }, solicitudesPendientes: pendingRequests, notificacionesNoLeidas: unreadNotifications, prestamosActivos: activeLoans, sesionesAsistencia: attendanceSessions, recuperacionesAbiertas: recoveryExams, actividadesZona: zoneActivities, aulasVirtuales: virtualClassrooms, usuariosConMFA: mfaUsers, campus: campuses, cicloActual: currentCycle?.name });
+
+      // Ciclo actual
+      if (/ciclo|período|periodo|semestre.*activ|activ.*semestre/.test(question)) {
+        if (!currentCycle) return void reply('No hay un ciclo académico activo actualmente.');
+        const fmt = (d: Date | null | undefined) => d ? d.toISOString().slice(0, 10) : '—';
+        return void reply(`Ciclo activo: **${currentCycle.name}**\n• Clases: ${fmt(currentCycle.startDate)} al ${fmt(currentCycle.endDate)}\n• Inscripciones: ${fmt(currentCycle.enrollmentStartDate)} al ${fmt(currentCycle.enrollmentEndDate)}\n• Límite de notas: ${fmt(currentCycle.gradeSubmissionDeadline)}${currentCycle.examStartDate ? `\n• Exámenes finales: ${fmt(currentCycle.examStartDate)} al ${fmt(currentCycle.examEndDate)}` : ''}`);
+      }
+      if (/inscripci/.test(question) && /fecha|cuánd|cuando|inicio|fin/.test(question)) {
+        if (!currentCycle) return void reply('No hay ciclo activo.');
+        return void reply(`Inscripciones del ciclo ${currentCycle.name}: del ${currentCycle.enrollmentStartDate.toISOString().slice(0,10)} al ${currentCycle.enrollmentEndDate.toISOString().slice(0,10)}.`);
+      }
+      if (/límite.*nota|nota.*límite|entrega.*nota|acta.*límite/.test(question)) {
+        if (!currentCycle) return void reply('No hay ciclo activo.');
+        return void reply(`Límite de entrega de notas del ciclo ${currentCycle.name}: ${currentCycle.gradeSubmissionDeadline.toISOString().slice(0,10)}.`);
+      }
+      if (/examen.*final|final.*examen/.test(question)) {
+        if (!currentCycle) return void reply('No hay ciclo activo.');
+        if (!currentCycle.examStartDate) return void reply(`El ciclo ${currentCycle.name} no tiene fechas de exámenes finales registradas.`);
+        return void reply(`Exámenes finales del ciclo ${currentCycle.name}: del ${currentCycle.examStartDate.toISOString().slice(0,10)} al ${(currentCycle.examEndDate ?? currentCycle.examStartDate).toISOString().slice(0,10)}.`);
+      }
+
+      // Campus
+      if (/campus|sede/.test(question)) return void reply(`Campus activos registrados: ${campuses}.`);
+
+      // Inscripciones del ciclo
+      if (/inscrit|matrículad|matriculad/.test(question)) return void reply(`Estudiantes inscritos en el ciclo actual: ${enrolledCount}.`);
+
+      // Secciones llenas / sin docente
+      if (/sección.*llena|secciones.*llena|cupo.*agotado/.test(question)) return void reply(`Secciones llenas en el ciclo actual: ${fullSections}.`);
+
+      // Finanzas detallado
+      if (/mora|estudiante.*deb|deb.*estudiante/.test(question)) return void reply(`Estudiantes con cargos pendientes o vencidos (en mora): ${inDebtStudents}. Estudiantes solventes: ${solventStudents}.`);
+      if (/solvente/.test(question)) return void reply(`Estudiantes con solvencia financiera: ${solventStudents} de ${students} total.`);
+      if (/monto.*total|total.*deuda|suma.*cargo/.test(question)) {
+        const total = totalDebtAmount._sum.amount ?? 0;
+        return void reply(`Monto total de cargos pendientes o vencidos: Q${Number(total).toFixed(2)}.`);
+      }
+
+      // Actas de notas
+      if (/acta|actas/.test(question)) return void reply(`Actas de notas del ciclo actual — Entregadas: ${deliveredActs} · Pendientes: ${pendingActs}.`);
+
+      // Reprobados / riesgo
+      if (/reprob/.test(question)) return void reply(`Estudiantes con nota reprobatoria en el ciclo actual: ${failedGrades}.`);
+      if (/riesgo académico|riesgo.*académico/.test(question)) return void reply(`Estudiantes en riesgo académico (nota entre 40 y 60) en el ciclo actual: ${atRiskStudents}.`);
+
+      // Usuarios por rol / inactivos
+      if (/usuario.*rol|rol.*usuario|desglose.*rol|distribución.*rol/.test(question)) {
+        const lines = (usersByRole as { role: string; _count: { _all: number } }[]).map((r) => `• ${r.role}: ${r._count._all}`).join('\n');
+        return void reply(`Usuarios activos por rol:\n${lines}`);
+      }
+      if (/inactiv/.test(question) && /usuario/.test(question)) return void reply(`Usuarios inactivos en el sistema: ${inactiveUsers}.`);
+      if (/mfa|doble factor|seguridad/.test(question)) {
+        const noMfa = (usersByRole as { role: string; _count: { _all: number } }[]).reduce((s, r) => s + r._count._all, 0) - mfaUsers;
+        return void reply(`Usuarios con MFA habilitado: ${mfaUsers}. Sin MFA: ${noMfa}.`);
+      }
+
+      // Biblioteca detallado
+      if (/préstamo.*vencid|vencid.*préstamo|préstamo.*atrasad/.test(question)) return void reply(`Préstamos vencidos (no devueltos a tiempo): ${overdueLoans}.`);
+      if (/cuántos.*libro|libro.*catálogo|catálogo.*libro/.test(question)) return void reply(`Libros registrados en el catálogo de biblioteca: ${libraryBooks}.`);
+      if (/préstamo.*mes|mes.*préstamo/.test(question)) return void reply(`Préstamos de biblioteca realizados este mes: ${loansThisMonth}.`);
+      if (/biblioteca|préstamo|prestamo|libro/.test(question)) return void reply(`Biblioteca — Préstamos activos: ${activeLoans} · Vencidos: ${overdueLoans} · Libros en catálogo: ${libraryBooks} · Préstamos este mes: ${loansThisMonth}.`);
+
+      // Parqueo detallado
+      if (/ingresaron.*hoy|hoy.*parqueo|visita.*hoy|hoy.*ingres/.test(question)) return void reply(`Vehículos que ingresaron al parqueo hoy: ${parkingTodayVisits}.`);
+      if (/evento.*parqueo|parqueo.*evento|evento.*planificado/.test(question)) {
+        if (!activeEventsList.length) return void reply('No hay eventos de parqueo planificados o en curso.');
+        return void reply(`Eventos de parqueo activos o planificados:\n${(activeEventsList as { name: string; status: string; startsAt: Date }[]).map((e) => `• ${e.name} · ${e.status} · ${e.startsAt.toISOString().slice(0,10)}`).join('\n')}`);
+      }
+      if (/capacidad.*parqueo|parqueo.*capacidad/.test(question)) return void reply(`Capacidad total del parqueo: ${parkingConfig?.totalCapacity || 0} espacios. Ocupados ahora: ${vehiclesInside}.`);
+      if (/parqueo|estacionamiento|vehículo|vehiculo/.test(question)) return void reply(`Parqueo — Dentro ahora: ${vehiclesInside}/${parkingConfig?.totalCapacity || 0} · Ingresos hoy: ${parkingTodayVisits} · Eventos activos: ${activeEvents}.`);
+
+      // Solicitudes / notificaciones
+      if (/solicitud|trámite|tramite/.test(question)) return void reply(`Solicitudes estudiantiles pendientes o en revisión: ${pendingRequests}.`);
       if (/notificaci|aviso/.test(question)) return void reply(`Notificaciones no leídas: ${unreadNotifications}.`);
+
+      // Asistencia / recuperaciones / zona / aulas
       if (/asistencia/.test(question)) return void reply(`Sesiones de asistencia registradas: ${attendanceSessions}.`);
       if (/recuperaci/.test(question)) return void reply(`Recuperaciones abiertas: ${recoveryExams}.`);
-      if (/actividad|zona media|tarea/.test(question)) return void reply(`Actividades de zona registradas: ${zoneActivities}.`);
+      if (/actividad|zona media/.test(question)) return void reply(`Actividades de zona registradas: ${zoneActivities}.`);
       if (/aula virtual|classroom|clase virtual/.test(question)) return void reply(`Aulas virtuales configuradas: ${virtualClassrooms}.`);
-      if (/mfa|doble factor|seguridad/.test(question)) return void reply(`Usuarios con MFA habilitado: ${mfaUsers}.`);
+
+      // Reportes
       if (/reporte|informe/.test(question)) return void reply('Los reportes se generan desde el módulo Reportes con datos del ciclo seleccionado. Puedo resumir estudiantes, inscripciones, secciones, notas y finanzas; indica cuál reporte necesitas.');
+
+      // Listado de estudiantes
       if (/cuánt|cuant|total|cantidad/.test(question) && /estudiante|alumno/.test(question) && !/expediente|document/.test(question)) return void reply(`Hay ${students} estudiantes registrados en el sistema.`);
       if (/listado|lista|alumno|estudiante|usuario/.test(question)) {
         const searchMatch = question.match(/(?:buscar|busca|nombre|carné|carne|de la carrera|de sistemas|de informática)\s+(.+)/i);
@@ -489,13 +613,24 @@ export function registerNotificationRoutes(
         const records = await prisma.student.findMany({ where: search && search.length > 2 ? { OR: [{ name: { contains: search } }, { carnet: { contains: search } }] } : undefined, orderBy: { name: 'asc' }, take: 50, select: { carnet: true, name: true, careerName: true, status: true } });
         return void reply(records.length ? `Listado de estudiantes${search ? ` para "${search}"` : ''}:\n${records.map((item) => `• ${item.carnet} · ${item.name}\n  ${item.careerName || 'Sin carrera'} · ${item.status}`).join('\n')}` : 'No encontré estudiantes con ese criterio.');
       }
+
+      // Docentes sin sección
+      if (/docente.*sin seccion|docente.*sin sección|sin.*asignaci/.test(question)) {
+        const unassigned = await prisma.teacher.findMany({ where: { status: 'Activo', sections: { none: { cycle: { isCurrent: true } } } }, select: { code: true, name: true }, take: 20 });
+        if (!unassigned.length) return void reply('Todos los docentes activos tienen al menos una sección asignada en el ciclo actual.');
+        return void reply(`Docentes sin sección en el ciclo actual:\n${unassigned.map((t) => `• ${t.code} · ${t.name}`).join('\n')}`);
+      }
       if (/docente|catedr/.test(question)) return void reply(`Docentes registrados: ${teachers}. Puedes revisar sus asignaciones desde el módulo Docentes.`);
-      if (/curso/.test(question)) return void reply(`Cursos activos en el catálogo: ${courses}. Puedes administrar cursos y prerrequisitos desde Cursos y Prerrequisitos.`);
-      if (/seccion|sección|horario/.test(question)) return void reply(`Secciones registradas: ${sections}. Puedes revisar cupos, docentes, aulas y horarios desde Secciones.`);
-      if (/carrera/.test(question)) return void reply(`Carreras registradas: ${careers}. Puedes consultar pensums y cursos desde Carreras.`);
+
+      // Cursos / secciones / carreras / expedientes / pagos
+      if (/curso/.test(question)) return void reply(`Cursos en el catálogo: ${courses}. Administra cursos y prerrequisitos desde Cursos y Prerrequisitos.`);
+      if (/seccion|sección|horario/.test(question)) return void reply(`Secciones registradas: ${sections} · Llenas en ciclo actual: ${fullSections}.`);
+      if (/carrera/.test(question)) return void reply(`Carreras registradas: ${careers}. Consulta pensums y cursos desde Carreras.`);
       if (/expediente|document/.test(question)) return void reply(`Expedientes pendientes de revisión: ${pendingDocuments}. Puedes validarlos desde Expediente.`);
-      if (/pago|saldo|mora|finanz/.test(question)) return void reply(`Cargos pendientes o vencidos: ${pendingCharges}. Puedes revisarlos desde Pagos y Solvencias.`);
-      return void reply(`Resumen administrativo:\n• Estudiantes: ${students}\n• Docentes: ${teachers}\n• Carreras: ${careers}\n• Cursos: ${courses}\n• Secciones: ${sections}\n• Expedientes pendientes: ${pendingDocuments}\n• Cargos pendientes o vencidos: ${pendingCharges}`);
+      if (/pago|saldo|mora|finanz/.test(question)) return void reply(`Cargos pendientes o vencidos: ${pendingCharges} · Monto total: Q${Number(totalDebtAmount._sum.amount ?? 0).toFixed(2)} · Estudiantes en mora: ${inDebtStudents}.`);
+
+      // Resumen general
+      return void reply(`Resumen administrativo:\n• Ciclo activo: ${currentCycle?.name || 'Ninguno'}\n• Estudiantes: ${students} (en mora: ${inDebtStudents})\n• Docentes: ${teachers}\n• Carreras: ${careers} · Cursos: ${courses}\n• Secciones: ${sections} (llenas: ${fullSections})\n• Expedientes pendientes: ${pendingDocuments}\n• Cargos pendientes/vencidos: ${pendingCharges}\n• Parqueo: ${vehiclesInside}/${parkingConfig?.totalCapacity || 0} dentro\n• Biblioteca: ${activeLoans} préstamos activos\n• Solicitudes pendientes: ${pendingRequests}`);
     }
     return void reply(`Hola ${user.name}. Puedo orientarte sobre los módulos disponibles para tu rol.`);
   });
