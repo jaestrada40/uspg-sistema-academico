@@ -63,9 +63,15 @@ for (const student of INITIAL_STUDENTS) {
   });
 }
 
+await prisma.campus.upsert({
+  where: { id: 'CAMPUS-CENTRAL' },
+  update: { name: 'Campus Central', status: 'Activo' },
+  create: { id: 'CAMPUS-CENTRAL', code: 'CC', name: 'Campus Central', status: 'Activo' },
+});
+
 for (const teacher of INITIAL_TEACHERS) {
   const userId = teacher.code === 'DOC-1042' ? 'USR-002' : `TCH-${teacher.code}`;
-  const data = { ...teacher, assignedSectionIds: JSON.stringify(teacher.assignedSectionIds), userId };
+  const data = { ...teacher, assignedSectionIds: JSON.stringify(teacher.assignedSectionIds), userId, campusId: 'CAMPUS-CENTRAL' };
   await prisma.user.upsert({
     where: { id: userId },
     update: { name: teacher.name, email: teacher.email, role: 'DOCENTE', carnetOrCode: teacher.code, active: teacher.status === 'Activo' },
@@ -91,11 +97,11 @@ for (const course of INITIAL_COURSES) {
 for (const cycle of INITIAL_CYCLES) {
   await prisma.academicCycle.upsert({
     where: { id: cycle.id },
-    update: { ...cycle, startDate: new Date(cycle.startDate), endDate: new Date(cycle.endDate), enrollmentStartDate: new Date(cycle.enrollmentStartDate), enrollmentEndDate: new Date(cycle.enrollmentEndDate), gradeSubmissionDeadline: new Date(cycle.gradeSubmissionDeadline) },
-    create: { ...cycle, startDate: new Date(cycle.startDate), endDate: new Date(cycle.endDate), enrollmentStartDate: new Date(cycle.enrollmentStartDate), enrollmentEndDate: new Date(cycle.enrollmentEndDate), gradeSubmissionDeadline: new Date(cycle.gradeSubmissionDeadline) },
+    update: { ...cycle, startDate: new Date(cycle.startDate), endDate: new Date(cycle.endDate), enrollmentStartDate: new Date(cycle.enrollmentStartDate), enrollmentEndDate: new Date(cycle.enrollmentEndDate), gradeSubmissionDeadline: new Date(cycle.gradeSubmissionDeadline), campusId: 'CAMPUS-CENTRAL' },
+    create: { ...cycle, startDate: new Date(cycle.startDate), endDate: new Date(cycle.endDate), enrollmentStartDate: new Date(cycle.enrollmentStartDate), enrollmentEndDate: new Date(cycle.enrollmentEndDate), gradeSubmissionDeadline: new Date(cycle.gradeSubmissionDeadline), campusId: 'CAMPUS-CENTRAL' },
   });
 }
-for (const classroom of INITIAL_CLASSROOMS) await prisma.classroom.upsert({ where: { id: classroom.id }, update: classroom, create: classroom });
+for (const classroom of INITIAL_CLASSROOMS) await prisma.classroom.upsert({ where: { id: classroom.id }, update: { ...classroom, campusId: 'CAMPUS-CENTRAL' }, create: { ...classroom, campusId: 'CAMPUS-CENTRAL' } });
 for (const section of INITIAL_SECTIONS) {
   const { courseName: _courseName, teacherName: _teacherName, classroomName: _classroomName, ...data } = section;
   await prisma.section.upsert({ where: { id: section.id }, update: { ...data, scheduleDays: JSON.stringify(section.scheduleDays) }, create: { ...data, scheduleDays: JSON.stringify(section.scheduleDays) } });

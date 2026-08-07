@@ -137,11 +137,14 @@ model Teacher {
   status             String    @default("Activo")
   maxHoursPerWeek    Int       @map("max_hours_per_week")
   userId             String    @unique @map("user_id")
+  campusId           String    @map("campus_id")
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus             Campus    @relation(fields: [campusId], references: [id], onDelete: Restrict)
   sections           Section[]
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
+  @@index([campusId])
   @@map("teachers")
 }
 
@@ -209,6 +212,9 @@ model Campus {
   students      Student[]
   financialFees CareerFee[]
   curriculumPlans CurriculumPlan[]
+  cycles        AcademicCycle[]
+  classrooms    Classroom[]
+  teachers      Teacher[]
   createdAt     DateTime    @default(now()) @map("created_at")
   updatedAt     DateTime    @updatedAt @map("updated_at")
 
@@ -274,10 +280,13 @@ model AcademicCycle {
   gradeSubmissionDeadline DateTime  @map("grade_submission_deadline")
   status                  String
   isCurrent               Boolean   @default(false) @map("is_current")
+  campusId                String    @map("campus_id")
+  campus                  Campus    @relation(fields: [campusId], references: [id], onDelete: Restrict)
   sections                Section[]
   createdAt               DateTime  @default(now()) @map("created_at")
   updatedAt               DateTime  @updatedAt @map("updated_at")
 
+  @@index([campusId])
   @@map("academic_cycles")
 }
 
@@ -290,10 +299,13 @@ model Classroom {
   status             String
   hasProjector       Boolean   @default(false) @map("has_projector")
   hasAirConditioning Boolean   @default(false) @map("has_air_conditioning")
+  campusId           String    @map("campus_id")
+  campus             Campus    @relation(fields: [campusId], references: [id], onDelete: Restrict)
   sections           Section[]
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
+  @@index([campusId])
   @@map("classrooms")
 }
 

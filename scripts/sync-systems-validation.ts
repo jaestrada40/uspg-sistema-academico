@@ -48,7 +48,7 @@ await prisma.$transaction(async (tx) => {
   await tx.user.updateMany({ where: { email: { in: ['cmendoza@administrador.uspg.edu.gt', 'luismena@catedratico.uspg.edu.gt', 'jaestradag@alumno.uspg.edu.gt', 'sistemas@sistemas.uspg.edu.gt'] } }, data: { passwordHash: hashPassword(validationPassword), mustChangePassword: false, active: true } });
 
   await tx.academicCycle.updateMany({ where: { id: 'CYC-2026-1' }, data: { status: 'Finalizado', isCurrent: false } });
-  await tx.academicCycle.update({ where: { id: 'CYC-2026-2' }, data: { name: 'Segundo Semestre 2026 · Campus Central', startDate: new Date('2026-07-13'), endDate: new Date('2026-11-28'), enrollmentStartDate: new Date('2026-06-15'), enrollmentEndDate: new Date('2026-07-08'), gradeSubmissionDeadline: new Date('2026-12-08'), status: 'En curso', isCurrent: true } });
+  await tx.academicCycle.update({ where: { id: 'CYC-2026-2' }, data: { name: 'Segundo Semestre 2026', campusId: 'CAMPUS-CENTRAL', startDate: new Date('2026-07-13'), endDate: new Date('2026-11-28'), enrollmentStartDate: new Date('2026-06-15'), enrollmentEndDate: new Date('2026-07-08'), gradeSubmissionDeadline: new Date('2026-12-08'), status: 'En curso', isCurrent: true } });
 
   await tx.enrollment.deleteMany({ where: { studentCarnet: '2200138', section: { courseCode: { notIn: [...officialCodes] } } } });
   await tx.gradeRecord.deleteMany({ where: { studentCarnet: '2200138', section: { courseCode: { notIn: [...officialCodes] } } } });

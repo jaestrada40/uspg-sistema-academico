@@ -165,12 +165,13 @@ export function registerAcademicRoutes(
   app.post('/api/teachers', requireAdmin, async (req, res) => {
     const data = req.body;
     if (roleFromEmail(String(data.email || '')) !== 'DOCENTE') return void res.status(400).json({ message: 'El catedrático debe usar un correo @catedratico.uspg.edu.gt.' });
+    if (!data.campusId) return void res.status(400).json({ message: 'Selecciona el campus del docente.' });
     const password = temporaryPassword();
     const userId = randomUUID();
     try {
       const teacher = await prisma.$transaction(async (tx) => {
         await tx.user.create({ data: { id: userId, name: data.name, email: data.email.toLowerCase(), passwordHash: hashPassword(password), role: 'DOCENTE', carnetOrCode: data.code, phone: data.phone, department: data.specialty, mustChangePassword: true } });
-        const created = await tx.teacher.create({ data: { code: data.code, name: data.name, email: data.email.toLowerCase(), phone: data.phone, specialty: data.specialty, academicDegree: data.academicDegree, assignedSectionIds: JSON.stringify(data.assignedSectionIds || []), status: data.status || 'Activo', maxHoursPerWeek: data.maxHoursPerWeek, userId } });
+        const created = await tx.teacher.create({ data: { code: data.code, name: data.name, email: data.email.toLowerCase(), phone: data.phone, specialty: data.specialty, academicDegree: data.academicDegree, assignedSectionIds: JSON.stringify(data.assignedSectionIds || []), status: data.status || 'Activo', maxHoursPerWeek: data.maxHoursPerWeek, userId, campusId: data.campusId } });
         await tx.auditLog.create({ data: { action: 'CREATE', entityType: 'TEACHER', entityId: data.code, actorId: res.locals.authUser.id } });
         return created;
       });
@@ -186,7 +187,7 @@ export function registerAcademicRoutes(
     try {
       const teacher = await prisma.$transaction(async (tx) => {
         await tx.user.update({ where: { id: current.userId }, data: { name: next.name, email: next.email.toLowerCase(), phone: next.phone, active: next.status === 'Activo' } });
-        const updated = await tx.teacher.update({ where: { code: req.params.code }, data: { name: next.name, email: next.email.toLowerCase(), phone: next.phone, specialty: next.specialty, academicDegree: next.academicDegree, assignedSectionIds: Array.isArray(next.assignedSectionIds) ? JSON.stringify(next.assignedSectionIds) : next.assignedSectionIds, status: next.status, maxHoursPerWeek: next.maxHoursPerWeek } });
+        const updated = await tx.teacher.update({ where: { code: req.params.code }, data: { name: next.name, email: next.email.toLowerCase(), phone: next.phone, specialty: next.specialty, academicDegree: next.academicDegree, assignedSectionIds: Array.isArray(next.assignedSectionIds) ? JSON.stringify(next.assignedSectionIds) : next.assignedSectionIds, status: next.status, maxHoursPerWeek: next.maxHoursPerWeek, campusId: next.campusId } });
         await tx.auditLog.create({ data: { action: 'UPDATE', entityType: 'TEACHER', entityId: req.params.code, actorId: res.locals.authUser.id } });
         return updated;
       });
