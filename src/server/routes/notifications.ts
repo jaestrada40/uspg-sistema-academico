@@ -8,7 +8,7 @@ export function registerNotificationRoutes(
   middleware: AuthMiddleware,
   helpers: ServerHelpers,
 ) {
-  const { requireAdmin, requireUser } = middleware;
+  const { requireRegistro, requireUser } = middleware;
   const { notifyUser, mailTransport, deliverOutboxEmail, answerWithGemini, assistantHistory } = helpers;
 
   // ── Notifications ──────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ export function registerNotificationRoutes(
     res.json({ ok: true });
   });
 
-  app.post('/api/notifications/broadcast', requireAdmin, async (req, res) => {
+  app.post('/api/notifications/broadcast', requireRegistro, async (req, res) => {
     const title = String(req.body.title || '').trim();
     const message = String(req.body.message || '').trim();
     const role = req.body.role ? String(req.body.role).toUpperCase() : undefined;
@@ -36,12 +36,12 @@ export function registerNotificationRoutes(
     res.json({ ok: true, recipients: users.length, smtpConfigured: Boolean(mailTransport) });
   });
 
-  app.get('/api/notifications/outbox', requireAdmin, async (_req, res) => {
+  app.get('/api/notifications/outbox', requireRegistro, async (_req, res) => {
     const records = await prisma.emailOutbox.findMany({ include: { notification: { include: { user: { select: { name: true } } } } }, orderBy: { createdAt: 'desc' }, take: 100 });
     res.json({ smtpConfigured: Boolean(mailTransport), records: records.map((record) => ({ id: record.id, recipientEmail: record.recipientEmail, recipientName: record.notification.user.name, subject: record.subject, status: record.status, attempts: record.attempts, lastError: record.lastError, sentAt: record.sentAt, createdAt: record.createdAt })) });
   });
 
-  app.post('/api/notifications/outbox/:id/retry', requireAdmin, async (req, res) => {
+  app.post('/api/notifications/outbox/:id/retry', requireRegistro, async (req, res) => {
     const record = await prisma.emailOutbox.findUnique({ where: { id: req.params.id } });
     if (!record) return void res.status(404).json({ message: 'Correo no encontrado.' });
     await deliverOutboxEmail(record.id);

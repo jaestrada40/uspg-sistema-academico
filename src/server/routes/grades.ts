@@ -11,7 +11,7 @@ export function registerGradeRoutes(
   const { sendOk, notifyByCarnet } = helpers;
   const gradeView = (record: any) => ({ id: record.id, studentCarnet: record.studentCarnet, studentName: record.student.name, sectionId: record.sectionId, courseCode: record.section.courseCode, courseName: record.section.course.name, cycleId: record.section.cycleId, zona: record.zona, parcial: record.parcial, segundoParcial: record.segundoParcial, final: record.final, recuperacion: record.recuperacion, total: record.total, status: record.status, isPublished: record.isPublished, actaStatus: record.section.gradeActStatus, gradesPublishedAt: record.section.gradesPublishedAt, gradesClosedAt: record.section.gradesClosedAt, gradesClosedBy: record.section.gradesClosedBy });
   const recalculateStudentZones = async (tx: any, sectionId: string, studentCarnets: string[]) => { for (const studentCarnet of studentCarnets) { const activityGrades = await tx.zoneActivityGrade.findMany({ where: { studentCarnet, activity: { sectionId }, score: { not: null } } }); const zona = Math.min(30, activityGrades.reduce((sum: number, item: any) => sum + Number(item.score || 0), 0)); const current = await tx.gradeRecord.findUnique({ where: { studentCarnet_sectionId: { studentCarnet, sectionId } } }); if (!current) continue; const total = current.recuperacion > 0 ? current.recuperacion : zona + current.parcial + current.segundoParcial + current.final; await tx.gradeRecord.update({ where: { id: current.id }, data: { zona, total, status: total >= 61 ? 'Aprobado' : total > 0 ? 'Reprobado' : 'En curso' } }); } };
-  const { requireUser, requireAdmin } = middleware;
+  const { requireUser, requireRegistro } = middleware;
 
   // ── Zone Activities ──────────────────────────────────────────────────────────
 
@@ -337,7 +337,7 @@ export function registerGradeRoutes(
     res.status(201).json(recovery);
   });
 
-  app.post('/api/recoveries/:id/authorize', requireAdmin, async (req, res) => {
+  app.post('/api/recoveries/:id/authorize', requireRegistro, async (req, res) => {
     const scheduledAt = new Date(req.body.scheduledAt);
     const feeAmount = Number(req.body.feeAmount || 0);
     if (Number.isNaN(scheduledAt.getTime()) || !Number.isFinite(feeAmount) || feeAmount < 0) return void res.status(400).json({ message: 'Fecha o costo de recuperación inválido.' });
@@ -356,7 +356,7 @@ export function registerGradeRoutes(
     res.json({ ok: true });
   });
 
-  app.post('/api/recoveries/:id/reject', requireAdmin, async (req, res) => {
+  app.post('/api/recoveries/:id/reject', requireRegistro, async (req, res) => {
     const recovery = await prisma.recoveryExam.findUnique({ where: { id: req.params.id }, include: { gradeRecord: true } });
     if (!recovery || recovery.status !== 'SOLICITADA') return void res.status(409).json({ message: 'La solicitud no está disponible.' });
     await prisma.$transaction([

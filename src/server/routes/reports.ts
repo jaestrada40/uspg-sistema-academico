@@ -48,10 +48,10 @@ export function registerReportsRoutes(
   helpers: ServerHelpers,
 ) {
   const { PDFDocument, XLSX } = helpers;
-  const { requireAdmin } = middleware;
+  const { requireRegistro } = middleware;
 
   // ── PDF ───────────────────────────────────────────────────────────────────
-  app.get('/api/reports/pdf', requireAdmin, async (_req, res) => {
+  app.get('/api/reports/pdf', requireRegistro, async (_req, res) => {
     const [students, careers, gradeRecords, sections, institution] = await Promise.all([
       prisma.student.findMany({ orderBy: { name: 'asc' } }),
       prisma.career.findMany({ orderBy: { name: 'asc' } }),
@@ -142,7 +142,7 @@ export function registerReportsRoutes(
   });
 
   // ── Excel ─────────────────────────────────────────────────────────────────
-  app.get('/api/reports/xlsx', requireAdmin, async (_req, res) => {
+  app.get('/api/reports/xlsx', requireRegistro, async (_req, res) => {
     const [students, careers, gradeRecords, sections, institution] = await Promise.all([
       prisma.student.findMany({ orderBy: { name: 'asc' } }),
       prisma.career.findMany({ orderBy: { name: 'asc' } }),
