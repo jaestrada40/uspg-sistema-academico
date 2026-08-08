@@ -65,10 +65,10 @@ export function createAuthMiddleware(
   };
 
   const requireLibraryStaff: express.RequestHandler = (_req, res, next) =>
-    ['ADMIN', 'BIBLIOTECA'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Biblioteca.' });
+    ['BIBLIOTECA'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Biblioteca.' });
 
   const requireParkingStaff: express.RequestHandler = (_req, res, next) =>
-    ['ADMIN', 'PARQUEO', 'EVENTOS'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Parqueo.' });
+    ['PARQUEO', 'EVENTOS'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Parqueo.' });
 
   const requireSystems: express.RequestHandler = (_req, res, next) =>
     res.locals.authUser?.role === 'SISTEMAS' ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Sistemas.' });

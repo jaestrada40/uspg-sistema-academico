@@ -4,10 +4,15 @@ const accounts = {
   DOCENTE: { username: process.env.TEST_TEACHER_EMAIL || 'luismena@catedratico.uspg.edu.gt', password: process.env.TEST_TEACHER_PASSWORD || 'Demo123!' },
   ESTUDIANTE: { username: process.env.TEST_STUDENT_EMAIL || 'jaestradag@alumno.uspg.edu.gt', password: process.env.TEST_STUDENT_PASSWORD || 'Demo123!' },
   SISTEMAS: { username: process.env.TEST_SYSTEMS_EMAIL || 'sistemas@sistemas.uspg.edu.gt', password: process.env.TEST_SYSTEMS_PASSWORD || 'Demo123!' },
+  BIBLIOTECA: { username: process.env.TEST_LIBRARY_STAFF_EMAIL || 'alopez@biblioteca.uspg.edu.gt', password: process.env.TEST_LIBRARY_STAFF_PASSWORD || 'Demo123!' },
+  PARQUEO: { username: process.env.TEST_PARKING_STAFF_EMAIL || 'rpaz@parqueo.uspg.edu.gt', password: process.env.TEST_PARKING_STAFF_PASSWORD || 'Demo123!' },
+  EVENTOS: { username: process.env.TEST_EVENTS_STAFF_EMAIL || 'sruiz@eventos.uspg.edu.gt', password: process.env.TEST_EVENTS_STAFF_PASSWORD || 'Demo123!' },
 };
 const cases = {
   ADMIN: [
     ['/api/students', 200], ['/api/finances', 200], ['/api/student-requests', 200],
+    ['/api/library/books/no-existe/copies', 403, 'POST'],
+    ['/api/parking/offline-manifest', 403],
   ],
   DOCENTE: [
     ['/api/finances', 403], ['/api/student-requests', 403], ['/api/enrollment-documents', 403],
@@ -17,6 +22,15 @@ const cases = {
   ],
   SISTEMAS: [
     ['/api/systems/overview', 200], ['/api/finances', 403], ['/api/students', 403],
+  ],
+  BIBLIOTECA: [
+    ['/api/library', 200], ['/api/finances', 403],
+  ],
+  PARQUEO: [
+    ['/api/parking', 200], ['/api/parking/offline-manifest', 200], ['/api/finances', 403],
+  ],
+  EVENTOS: [
+    ['/api/parking', 200], ['/api/parking/offline-manifest', 200], ['/api/finances', 403],
   ],
 };
 let failures = 0;
@@ -36,10 +50,10 @@ for (const [role, account] of Object.entries(accounts)) {
     await fetch(`${baseUrl}/api/auth/logout`, { method: 'POST', headers: { Cookie: cookie } });
     continue;
   }
-  for (const [path, expected] of cases[role]) {
-    const response = await fetch(`${baseUrl}${path}`, { headers: { Cookie: cookie } });
+  for (const [path, expected, method = 'GET'] of cases[role]) {
+    const response = await fetch(`${baseUrl}${path}`, { method, headers: { Cookie: cookie } });
     const ok = response.status === expected;
-    console.log(`${ok ? 'PASS' : 'FAIL'} ${role} ${path}: ${response.status} (esperado ${expected})`);
+    console.log(`${ok ? 'PASS' : 'FAIL'} ${role} ${method} ${path}: ${response.status} (esperado ${expected})`);
     if (!ok) failures++;
   }
   await fetch(`${baseUrl}/api/auth/logout`, { method: 'POST', headers: { Cookie: cookie } });
