@@ -146,7 +146,7 @@ export const TeachersPage: React.FC = () => {
   };
 
   return (
-    <RoleGuard allowedRoles={['ADMIN']}>
+    <RoleGuard allowedRoles={['ADMIN', 'REGISTRO']}>
       <div className="space-y-6">
         <PageHeader
           title="Gestión de Docentes"

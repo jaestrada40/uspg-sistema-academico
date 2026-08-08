@@ -127,7 +127,7 @@ export const GradesControlPage: React.FC = () => {
   const isClosed = actaStatus === 'CERRADA';
 
   return (
-    <RoleGuard allowedRoles={['ADMIN', 'DOCENTE']}>
+    <RoleGuard allowedRoles={['ADMIN', 'REGISTRO', 'DOCENTE']}>
       <div className="space-y-6">
         <PageHeader
           title="Control de Calificaciones y Actas"
