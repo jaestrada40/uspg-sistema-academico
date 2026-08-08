@@ -27,6 +27,7 @@ import {
   FolderCheck,
   Network,
   Wrench,
+  ParkingCircle,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { InstitutionLogo } from '../common/InstitutionLogo';
@@ -53,6 +54,7 @@ export const Sidebar: React.FC = () => {
     { path: '/malla', label: 'Mi Avance Académico', icon: Network, roles: ['ADMIN', 'REGISTRO', 'ESTUDIANTE'] },
     { path: '/biblioteca', label: 'Biblioteca', icon: BookMarked, roles: ['BIBLIOTECA', 'DOCENTE', 'ESTUDIANTE'] },
     { path: '/parqueo', label: 'Parqueo Inteligente', icon: Building2, roles: ['PARQUEO', 'EVENTOS', 'DOCENTE', 'ESTUDIANTE'] },
+    { path: '/parqueo-kiosco', label: 'Kiosco de Parqueo', icon: ParkingCircle, roles: ['ESTUDIANTE'] },
     { path: '/eventos', label: 'Gestión de Eventos', icon: CalendarDays, roles: ['EVENTOS'] },
     { path: '/notas', label: 'Control de Notas', icon: FileCheck, roles: ['ADMIN', 'REGISTRO', 'DOCENTE'] },
     { path: '/actividades-zona', label: 'Actividades de Zona', icon: ListChecks, roles: ['ADMIN', 'REGISTRO', 'DOCENTE', 'ESTUDIANTE'] },
