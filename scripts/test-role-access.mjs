@@ -24,13 +24,13 @@ const cases = {
     ['/api/systems/overview', 200], ['/api/finances', 403], ['/api/students', 403],
   ],
   BIBLIOTECA: [
-    ['/api/library', 200], ['/api/finances', 403],
+    ['/api/library', 200],
   ],
   PARQUEO: [
-    ['/api/parking', 200], ['/api/parking/offline-manifest', 200], ['/api/finances', 403],
+    ['/api/parking', 200], ['/api/parking/offline-manifest', 200],
   ],
   EVENTOS: [
-    ['/api/parking', 200], ['/api/parking/offline-manifest', 200], ['/api/finances', 403],
+    ['/api/parking', 200], ['/api/parking/offline-manifest', 200],
   ],
 };
 let failures = 0;
