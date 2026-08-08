@@ -7,6 +7,8 @@ const accounts = {
   BIBLIOTECA: { username: process.env.TEST_LIBRARY_STAFF_EMAIL || 'alopez@biblioteca.uspg.edu.gt', password: process.env.TEST_LIBRARY_STAFF_PASSWORD || 'Demo123!' },
   PARQUEO: { username: process.env.TEST_PARKING_STAFF_EMAIL || 'rpaz@parqueo.uspg.edu.gt', password: process.env.TEST_PARKING_STAFF_PASSWORD || 'Demo123!' },
   EVENTOS: { username: process.env.TEST_EVENTS_STAFF_EMAIL || 'sruiz@eventos.uspg.edu.gt', password: process.env.TEST_EVENTS_STAFF_PASSWORD || 'Demo123!' },
+  REGISTRO: { username: process.env.TEST_REGISTRO_EMAIL || 'msolis@registro.uspg.edu.gt', password: process.env.TEST_REGISTRO_PASSWORD || 'Demo123!' },
+  FINANZAS: { username: process.env.TEST_FINANZAS_EMAIL || 'jaguilar@finanzas.uspg.edu.gt', password: process.env.TEST_FINANZAS_PASSWORD || 'Demo123!' },
 };
 const cases = {
   ADMIN: [
@@ -31,6 +33,12 @@ const cases = {
   ],
   EVENTOS: [
     ['/api/parking', 200], ['/api/parking/offline-manifest', 200],
+  ],
+  REGISTRO: [
+    ['/api/students', 200], ['/api/finances/career-fees', 403],
+  ],
+  FINANZAS: [
+    ['/api/finances/career-fees', 200], ['/api/students', 403],
   ],
 };
 let failures = 0;
