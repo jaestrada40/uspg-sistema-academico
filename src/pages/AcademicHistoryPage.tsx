@@ -43,7 +43,7 @@ export const AcademicHistoryPage: React.FC = () => {
 
   const handleDownloadCertification = () => {
     if (!activeStudent) return;
-    const params = currentUser.role === 'ADMIN' ? `?${new URLSearchParams({ studentCarnet: activeStudent.carnet })}` : '';
+    const params = ['ADMIN', 'REGISTRO'].includes(currentUser.role) ? `?${new URLSearchParams({ studentCarnet: activeStudent.carnet })}` : '';
     const link = document.createElement('a');
     link.href = `/api/grades/certification.pdf${params}`;
     link.download = `Certificacion_Estudios_${activeStudent.carnet}_USPG.pdf`;
@@ -54,7 +54,7 @@ export const AcademicHistoryPage: React.FC = () => {
   };
 
   return (
-    <RoleGuard allowedRoles={['ADMIN', 'ESTUDIANTE', 'DOCENTE']}>
+    <RoleGuard allowedRoles={['ADMIN', 'REGISTRO', 'ESTUDIANTE', 'DOCENTE']}>
       <div className="space-y-6">
         <PageHeader
           title="Historial Académico y Certificación"
@@ -75,12 +75,12 @@ export const AcademicHistoryPage: React.FC = () => {
         />
 
         {/* Student Selector for Admins and Docentes */}
-        {(currentUser.role === 'ADMIN' || currentUser.role === 'DOCENTE') && (
+        {(['ADMIN', 'REGISTRO'].includes(currentUser.role) || currentUser.role === 'DOCENTE') && (
           <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-xs">
             <label className="block text-xs font-bold text-[#64748B] uppercase mb-1">
               Consultar Expediente de Estudiante
             </label>
-            {currentUser.role === 'ADMIN' ? (
+            {['ADMIN', 'REGISTRO'].includes(currentUser.role) ? (
               <select
                 value={selectedCarnet}
                 onChange={(e) => handleSelectStudent(e.target.value)}

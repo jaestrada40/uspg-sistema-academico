@@ -106,7 +106,7 @@ export const SchedulesPage: React.FC = () => {
   };
 
   return (
-    <RoleGuard allowedRoles={['ADMIN', 'DOCENTE', 'ESTUDIANTE']}>
+    <RoleGuard allowedRoles={['ADMIN', 'REGISTRO', 'DOCENTE', 'ESTUDIANTE']}>
       <div className="schedule-page space-y-6">
         <PageHeader
           title="Horarios y Aulas Universitarias"
@@ -117,7 +117,7 @@ export const SchedulesPage: React.FC = () => {
           ]}
           actions={
             <div className="flex items-center gap-2">
-              {currentUser.role === 'ADMIN' && <button
+              {['ADMIN', 'REGISTRO'].includes(currentUser.role) && <button
                 onClick={handlePrintSchedule}
                 className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-semibold text-[#333333] hover:bg-slate-50 transition-colors shadow-xs"
               >
@@ -125,7 +125,7 @@ export const SchedulesPage: React.FC = () => {
                 Imprimir Horario
               </button>}
 
-              {currentUser.role === 'ADMIN' && <button
+              {['ADMIN', 'REGISTRO'].includes(currentUser.role) && <button
                 onClick={() => setShowAddClassroomModal(true)}
                 className="flex items-center gap-2 rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white hover:bg-[#5F0018] transition-colors shadow-xs"
               >
@@ -265,7 +265,7 @@ export const SchedulesPage: React.FC = () => {
                     <span className="font-bold text-[#333333]">{clr.capacity} Alumnos</span>
                   </div>
                 </div>
-                {currentUser.role === 'ADMIN' && <button onClick={() => { setEditClassroomId(clr.id); setEditClassroomForm({ code: clr.code, building: clr.building, capacity: clr.capacity, type: clr.type }); }} className="mt-3 w-full rounded-lg border border-[#E2E8F0] py-1.5 text-[11px] font-bold text-[#64748B] hover:bg-slate-50">Editar aula</button>}
+                {['ADMIN', 'REGISTRO'].includes(currentUser.role) && <button onClick={() => { setEditClassroomId(clr.id); setEditClassroomForm({ code: clr.code, building: clr.building, capacity: clr.capacity, type: clr.type }); }} className="mt-3 w-full rounded-lg border border-[#E2E8F0] py-1.5 text-[11px] font-bold text-[#64748B] hover:bg-slate-50">Editar aula</button>}
               </div>
             ))}
           </div>

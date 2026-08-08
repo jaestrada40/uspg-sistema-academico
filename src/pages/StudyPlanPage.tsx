@@ -33,7 +33,7 @@ export const StudyPlanPage: React.FC = () => {
     if (!studentCarnet) return;
     setLoading(true);
     try {
-      const query = currentUser.role === 'ADMIN' ? `?studentCarnet=${encodeURIComponent(studentCarnet)}` : '';
+      const query = ['ADMIN', 'REGISTRO'].includes(currentUser.role) ? `?studentCarnet=${encodeURIComponent(studentCarnet)}` : '';
       const response = await fetch(`/api/curriculum-map${query}`);
       const result = await response.json();
       if (!response.ok) throw new Error(result.message);
@@ -46,9 +46,9 @@ export const StudyPlanPage: React.FC = () => {
   }, [currentUser.role, showToast, studentCarnet]);
   useEffect(() => { load(); }, [load]);
 
-  return <RoleGuard allowedRoles={['ADMIN', 'ESTUDIANTE']}><div className="space-y-6">
+  return <RoleGuard allowedRoles={['ADMIN', 'REGISTRO', 'ESTUDIANTE']}><div className="space-y-6">
     <PageHeader title="Plan de Estudios" description="Guía completa de los cursos que debes llevar en cada semestre" breadcrumbs={[{ label: 'Inicio', href: '/dashboard' }, { label: 'Plan de Estudios', active: true }]} />
-    {currentUser.role === 'ADMIN' && <div className="rounded-xl border bg-white p-5"><StudentPicker students={students} value={studentCarnet} onChange={setStudentCarnet} label="Consultar plan del estudiante" /></div>}
+    {['ADMIN', 'REGISTRO'].includes(currentUser.role) && <div className="rounded-xl border bg-white p-5"><StudentPicker students={students} value={studentCarnet} onChange={setStudentCarnet} label="Consultar plan del estudiante" /></div>}
     {loading ? <div className="rounded-xl border bg-white p-12 text-center text-sm text-[#64748B]">Cargando plan de estudios...</div> : data && <>
       <section className="overflow-hidden rounded-xl border border-[#800020]/20 bg-white shadow-xs"><div className="bg-gradient-to-r from-[#800020] to-[#A61B3D] p-6 text-white"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">{data.student.careerName}</p><h2 className="mt-1 text-xl font-extrabold">{data.student.planName}</h2><p className="mt-1 text-xs text-white/80">Pensum {data.student.planVersion} · {data.student.planCode}</p></div><div className="flex gap-6 text-center"><div><p className="text-2xl font-black">{data.curriculum.semesters}</p><p className="text-[9px] uppercase text-white/70">Semestres</p></div><div><p className="text-2xl font-black">{data.curriculum.totalCourses}</p><p className="text-[9px] uppercase text-white/70">Cursos</p></div><div><p className="text-2xl font-black">{data.curriculum.totalCredits}</p><p className="text-[9px] uppercase text-white/70">Créditos</p></div></div></div></div><div className="grid gap-3 p-5 text-xs md:grid-cols-3"><div className="flex gap-2"><BookOpen className="h-5 w-5 shrink-0 text-[#800020]" /><p><strong>Orden sugerido:</strong> revisa cada columna de semestre de izquierda a derecha.</p></div><div className="flex gap-2"><LockKeyhole className="h-5 w-5 shrink-0 text-[#800020]" /><p><strong>Debe aprobar antes:</strong> muestra los prerrequisitos de cada curso.</p></div><div className="flex gap-2"><ArrowRight className="h-5 w-5 shrink-0 text-[#800020]" /><p><strong>Después habilita:</strong> indica qué cursos podrás tomar a continuación.</p></div></div></section>
       <div className="rounded-xl border bg-[#F8FAFC] p-4 shadow-inner"><div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">

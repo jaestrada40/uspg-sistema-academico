@@ -75,7 +75,7 @@ export const EnrollmentPage: React.FC = () => {
   });
 
   return (
-    <RoleGuard allowedRoles={['ADMIN', 'ESTUDIANTE']}>
+    <RoleGuard allowedRoles={['ADMIN', 'REGISTRO', 'ESTUDIANTE']}>
       <div className="space-y-6">
         <PageHeader
           title="Inscripción y Asignación de Cursos"
@@ -86,7 +86,7 @@ export const EnrollmentPage: React.FC = () => {
           ]}
         />
 
-        {currentUser.role === 'ADMIN' && <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs"><StudentPicker students={students} value={selectedStudent} onChange={setSelectedStudent} label="Asignar cursos a estudiante" /><p className="mt-3 flex items-start gap-2 text-xs text-[#64748B]"><Info className="mt-0.5 h-4 w-4 shrink-0 text-[#800020]" />Esta pantalla permite inscribir o retirar cursos en el ciclo activo. El sistema valida automáticamente cupo, prerrequisitos, límite de créditos y saldos vencidos.</p></div>}
+        {['ADMIN', 'REGISTRO'].includes(currentUser.role) && <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs"><StudentPicker students={students} value={selectedStudent} onChange={setSelectedStudent} label="Asignar cursos a estudiante" /><p className="mt-3 flex items-start gap-2 text-xs text-[#64748B]"><Info className="mt-0.5 h-4 w-4 shrink-0 text-[#800020]" />Esta pantalla permite inscribir o retirar cursos en el ciclo activo. El sistema valida automáticamente cupo, prerrequisitos, límite de créditos y saldos vencidos.</p></div>}
 
         {/* Credit Limit Summary Banner */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs">
