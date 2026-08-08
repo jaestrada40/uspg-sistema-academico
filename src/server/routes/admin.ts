@@ -15,10 +15,10 @@ export function registerAdminRoutes(
 
   app.get('/api/admin/users', requireAdmin, async (_req, res) => {
     const users = await prisma.user.findMany({
-      select: { id: true, name: true, email: true, role: true, carnetOrCode: true, active: true, mustChangePassword: true, mfaEnabled: true, updatedAt: true },
+      select: { id: true, name: true, email: true, role: true, carnetOrCode: true, active: true, mustChangePassword: true, mfaEnabled: true, updatedAt: true, student: { select: { careerName: true, campus: { select: { name: true } } } }, teacher: { select: { campus: { select: { name: true } } } } },
       orderBy: [{ role: 'asc' }, { name: 'asc' }],
     });
-    res.json(users);
+    res.json(users.map((user) => { const { student, teacher, ...rest } = user; return { ...rest, careerName: student?.careerName || null, campusName: student?.campus?.name || teacher?.campus?.name || null }; }));
   });
 
   app.post('/api/admin/users', requireAdmin, async (req, res) => {

@@ -5,7 +5,7 @@ import { PasswordInput } from '../components/common/PasswordInput';
 import { useApp } from '../context/AppContext';
 import { translateAction, translateEntity } from '../utils/auditLabels';
 
-type ManagedUser = { id: string; name: string; email: string; role: string; carnetOrCode?: string; active: boolean; mustChangePassword: boolean; mfaEnabled: boolean };
+type ManagedUser = { id: string; name: string; email: string; role: string; carnetOrCode?: string; active: boolean; mustChangePassword: boolean; mfaEnabled: boolean; careerName?: string | null; campusName?: string | null };
 type AuditRecord = { id: string; action: string; entityType: string; entityId?: string; details?: string; actorName: string; actorRole?: string; createdAt: string };
 
 export const UsersPage: React.FC = () => {
@@ -13,6 +13,9 @@ export const UsersPage: React.FC = () => {
   const [tab, setTab] = useState<'users' | 'audit'>('users');
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [campusFilter, setCampusFilter] = useState('');
+  const [careerFilter, setCareerFilter] = useState('');
   const [busyId, setBusyId] = useState('');
   const [credential, setCredential] = useState<{ name: string; password: string } | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -34,10 +37,18 @@ export const UsersPage: React.FC = () => {
   useEffect(() => { void load(); void loadParkingConfig(); }, []);
   useEffect(() => { if (tab === 'audit' && auditRecords.length === 0) void loadAudit(); }, [tab]);
 
+  const roleOptions = useMemo(() => [...new Set(users.map((user) => user.role))].sort(), [users]);
+  const campusOptions = useMemo(() => [...new Set(users.map((user) => user.campusName).filter((value): value is string => Boolean(value)))].sort(), [users]);
+  const careerOptions = useMemo(() => [...new Set(users.map((user) => user.careerName).filter((value): value is string => Boolean(value)))].sort(), [users]);
+
   const filtered = useMemo(() => {
     const value = search.toLowerCase();
-    return users.filter((user) => [user.name, user.email, user.role, user.carnetOrCode || ''].some((field) => field.toLowerCase().includes(value)));
-  }, [users, search]);
+    return users
+      .filter((user) => [user.name, user.email, user.role, user.carnetOrCode || ''].some((field) => field.toLowerCase().includes(value)))
+      .filter((user) => !roleFilter || user.role === roleFilter)
+      .filter((user) => !campusFilter || user.campusName === campusFilter)
+      .filter((user) => !careerFilter || user.careerName === careerFilter);
+  }, [users, search, roleFilter, campusFilter, careerFilter]);
 
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
@@ -153,18 +164,24 @@ export const UsersPage: React.FC = () => {
       {tab === 'users' && <div className="rounded-xl border bg-white shadow-xs">
         <div className="flex flex-col gap-3 border-b p-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2"><Users className="h-5 w-5 text-[#800020]" /><h2 className="text-sm font-bold">Directorio de usuarios</h2></div>
-          <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-[#64748B]" /><input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar usuario..." className="rounded-lg border py-2 pl-9 pr-3 text-xs" /></div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }} className="rounded-lg border px-2 py-2 text-xs"><option value="">Todos los roles</option>{roleOptions.map((role) => <option key={role} value={role}>{role}</option>)}</select>
+            <select value={campusFilter} onChange={(e) => { setCampusFilter(e.target.value); setPage(1); }} className="rounded-lg border px-2 py-2 text-xs"><option value="">Todos los campus</option>{campusOptions.map((campus) => <option key={campus} value={campus}>{campus}</option>)}</select>
+            <select value={careerFilter} onChange={(e) => { setCareerFilter(e.target.value); setPage(1); }} className="rounded-lg border px-2 py-2 text-xs"><option value="">Todas las carreras</option>{careerOptions.map((career) => <option key={career} value={career}>{career}</option>)}</select>
+            <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-[#64748B]" /><input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar usuario..." className="rounded-lg border py-2 pl-9 pr-3 text-xs" /></div>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-[#F8FAFC] text-[10px] uppercase text-[#64748B]">
-              <tr><th className="p-3">Usuario</th><th className="p-3">Rol</th><th className="p-3">Estado</th><th className="p-3">Seguridad</th><th className="p-3 text-right">Acciones</th></tr>
+              <tr><th className="p-3">Usuario</th><th className="p-3">Rol</th><th className="p-3">Campus / Carrera</th><th className="p-3">Estado</th><th className="p-3">Seguridad</th><th className="p-3 text-right">Acciones</th></tr>
             </thead>
             <tbody className="divide-y">
               {paginated.map((user) => (
                 <tr key={user.id} className={!user.active ? 'bg-slate-50 opacity-60' : ''}>
                   <td className="p-3"><p className="font-bold">{user.name}</p><p className="text-[10px] text-[#64748B]">{user.email}{user.carnetOrCode ? ` · ${user.carnetOrCode}` : ''}</p></td>
                   <td className="p-3"><select value={user.role} disabled={busyId === user.id || user.id === currentUser.id} onChange={(e) => changeRole(user, e.target.value)} className="rounded-lg border px-2 py-1 text-xs font-bold disabled:opacity-40"><option>ADMIN</option><option>DOCENTE</option><option>ESTUDIANTE</option><option>BIBLIOTECA</option><option>PARQUEO</option><option>EVENTOS</option><option>SISTEMAS</option><option>REGISTRO</option><option>FINANZAS</option></select></td>
+                  <td className="p-3 text-[10px] text-[#64748B]">{user.campusName || '—'}{user.careerName ? ` · ${user.careerName}` : ''}</td>
                   <td className="p-3"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${user.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>{user.active ? 'Activo' : 'Inactivo'}</span></td>
                   <td className="p-3"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${user.mfaEnabled ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-700'}`}>MFA {user.mfaEnabled ? 'activo' : 'inactivo'}</span>{user.mustChangePassword && <span className="ml-2 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">Cambio pendiente</span>}</td>
                   <td className="p-3"><div className="flex flex-wrap justify-end gap-2">
