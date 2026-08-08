@@ -54,6 +54,14 @@ const demoUsers = [
     id: 'USR-EVT-001', name: 'Sandra Ruiz', email: 'sruiz@eventos.uspg.edu.gt', role: 'EVENTOS',
     carnetOrCode: 'EVT-0001', phone: '+502 2326-7003', department: 'Gestión de Eventos',
   },
+  {
+    id: 'USR-REG-001', name: 'Marta Solís', email: 'msolis@registro.uspg.edu.gt', role: 'REGISTRO',
+    carnetOrCode: 'REG-0001', phone: '+502 2326-7004', department: 'Registro Académico',
+  },
+  {
+    id: 'USR-FIN-001', name: 'Jorge Aguilar', email: 'jaguilar@finanzas.uspg.edu.gt', role: 'FINANZAS',
+    carnetOrCode: 'FIN-0001', phone: '+502 2326-7005', department: 'Finanzas',
+  },
 ];
 
 const upsertUser = async (id: string, email: string, data: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
