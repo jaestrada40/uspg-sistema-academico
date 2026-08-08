@@ -129,7 +129,7 @@ export const EventsPage: React.FC = () => {
   ];
 
   return (
-    <RoleGuard allowedRoles={['ADMIN', 'EVENTOS']}>
+    <RoleGuard allowedRoles={['EVENTOS']}>
       <div className="space-y-6">
         <PageHeader
           title="Gestión de Eventos"
