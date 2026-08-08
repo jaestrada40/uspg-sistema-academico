@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type express from 'express';
 import type { AppPrisma, ServerHelpers, AuthMiddleware } from '../types';
+import { notificationView, outboxView, assistantConversationForUser as assistantConversationForUserOf } from '../services/notificationsService';
 
 export function registerNotificationRoutes(
   app: express.Application,
@@ -10,12 +11,13 @@ export function registerNotificationRoutes(
 ) {
   const { requireRegistro, requireUser } = middleware;
   const { notifyUser, mailTransport, deliverOutboxEmail, answerWithGemini, assistantHistory } = helpers;
+  const assistantConversationForUser = (userId: string, conversationId?: string) => assistantConversationForUserOf(prisma, userId, conversationId);
 
   // ── Notifications ──────────────────────────────────────────────────────────
 
   app.get('/api/notifications', requireUser, async (_req, res) => {
     const records = await prisma.appNotification.findMany({ where: { userId: res.locals.authUser.id }, orderBy: { createdAt: 'desc' }, take: 50 });
-    res.json(records.map((record) => ({ id: record.id, title: record.title, message: record.message, date: record.createdAt.toISOString(), read: record.isRead, type: record.type.toLowerCase(), link: record.link })));
+    res.json(records.map(notificationView));
   });
 
   app.patch('/api/notifications/:id/read', requireUser, async (req, res) => {
@@ -38,7 +40,7 @@ export function registerNotificationRoutes(
 
   app.get('/api/notifications/outbox', requireRegistro, async (_req, res) => {
     const records = await prisma.emailOutbox.findMany({ include: { notification: { include: { user: { select: { name: true } } } } }, orderBy: { createdAt: 'desc' }, take: 100 });
-    res.json({ smtpConfigured: Boolean(mailTransport), records: records.map((record) => ({ id: record.id, recipientEmail: record.recipientEmail, recipientName: record.notification.user.name, subject: record.subject, status: record.status, attempts: record.attempts, lastError: record.lastError, sentAt: record.sentAt, createdAt: record.createdAt })) });
+    res.json({ smtpConfigured: Boolean(mailTransport), records: records.map(outboxView) });
   });
 
   app.post('/api/notifications/outbox/:id/retry', requireRegistro, async (req, res) => {
@@ -49,14 +51,6 @@ export function registerNotificationRoutes(
   });
 
   // ── Assistant ──────────────────────────────────────────────────────────────
-
-  const assistantConversationForUser = async (userId: string, conversationId?: string) => {
-    if (conversationId) {
-      const existing = await prisma.assistantConversation.findFirst({ where: { id: conversationId, userId } });
-      if (existing) return existing;
-    }
-    return prisma.assistantConversation.create({ data: { userId } });
-  };
 
   app.get('/api/assistant/conversations', requireUser, async (_req, res) => {
     const userId = res.locals.authUser.id as string;

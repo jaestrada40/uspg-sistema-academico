@@ -102,13 +102,15 @@ export function registerAdminRoutes(
   });
 
   app.get('/api/institution', async (_req, res) => {
-    const institution = await prisma.institutionConfig.findUnique({ where: { id: 1 } });
+    const institution = await prisma.institutionConfig.findUnique({
+      where: { id: 1 },
+      select: { id: true, name: true, shortName: true, logoDataUrl: true },
+    });
     res.json(institution || {
       id: 1,
       name: 'Universidad de San Pablo de Guatemala',
       shortName: 'USPG',
       logoDataUrl: null,
-      mfaRequiredRoles: null,
     });
   });
 
