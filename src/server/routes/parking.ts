@@ -10,7 +10,7 @@ export function registerParkingRoutes(
   helpers: ServerHelpers,
 ) {
   const { handleUniqueError, notifyUser, hashPassword, temporaryPassword, roleFromEmail } = helpers;
-  const { requireUser, requireAdmin, requireParkingStaff } = middleware;
+  const { requireUser, requireAdmin, requireParkingStaff, requireFinance } = middleware;
 
   const parkingCode = (prefix: string) => `${prefix}-${randomBytes(5).toString('hex').toUpperCase()}`;
   const normalizePlate = (value: unknown) => String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -73,6 +73,35 @@ export function registerParkingRoutes(
 
   app.patch('/api/parking/config', requireUser, requireAdmin, async (req, res) => {
     const totalCapacity = Number(req.body.totalCapacity), regularReserve = Number(req.body.regularReserve || 0); if (!Number.isInteger(totalCapacity) || totalCapacity < 1 || !Number.isInteger(regularReserve) || regularReserve < 0 || regularReserve >= totalCapacity) return void res.status(400).json({ message: 'Capacidad o reserva no válida.' }); res.json(await prisma.parkingConfig.upsert({ where: { id: 1 }, update: { totalCapacity, regularReserve }, create: { id: 1, totalCapacity, regularReserve } }));
+  });
+
+  app.get('/api/parking/fee-schedules', requireUser, requireFinance, async (_req, res) => {
+    res.json(await prisma.parkingFeeSchedule.findMany({ orderBy: [{ dueDate: 'desc' }, { createdAt: 'desc' }] }));
+  });
+
+  app.post('/api/parking/fee-schedules', requireUser, requireFinance, async (req, res) => {
+    const periodType = String(req.body.periodType || '').trim().toUpperCase();
+    const amount = Number(req.body.amount);
+    const cycleId = String(req.body.cycleId || '').trim();
+    const dueDate = new Date(`${req.body.dueDate}T12:00:00Z`);
+    if (!['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL'].includes(periodType) || !Number.isFinite(amount) || amount <= 0 || !cycleId || Number.isNaN(dueDate.getTime())) return void res.status(400).json({ message: 'Completa correctamente periodicidad, monto, ciclo y vencimiento.' });
+    const cycle = await prisma.academicCycle.findUnique({ where: { id: cycleId } });
+    if (!cycle) return void res.status(404).json({ message: 'Ciclo académico no encontrado.' });
+    const duplicate = await prisma.parkingFeeSchedule.findFirst({ where: { cycleId, periodType } });
+    if (duplicate) return void res.status(409).json({ message: 'Ya existe una tarifa de parqueo con esa periodicidad para este ciclo.' });
+    const activeVehicles = await prisma.parkingVehicle.findMany({
+      where: { status: 'ACTIVO', owner: { role: 'ESTUDIANTE', active: true, student: { isNot: null } } },
+      select: { id: true, owner: { select: { student: { select: { carnet: true } } } } },
+    });
+    const eligible = activeVehicles.filter((v) => v.owner.student?.carnet);
+    const concept = `Parqueo ${periodType.charAt(0) + periodType.slice(1).toLowerCase()} - ${cycle.name}`;
+    const created = await prisma.$transaction(async (tx) => {
+      const schedule = await tx.parkingFeeSchedule.create({ data: { periodType, amount, cycleId, dueDate, createdBy: res.locals.authUser.name, assignedCount: eligible.length } });
+      if (eligible.length) await tx.financialCharge.createMany({ data: eligible.map((v) => ({ studentCarnet: v.owner.student!.carnet, vehicleId: v.id, parkingFeeScheduleId: schedule.id, concept, amount, dueDate, cycleId })) });
+      await tx.auditLog.create({ data: { action: 'CREATE_PARKING_FEE_SCHEDULE', entityType: 'PARKING', entityId: schedule.id, actorId: res.locals.authUser.id, details: JSON.stringify({ periodType, amount, cycleId, vehicles: eligible.length }) } });
+      return schedule;
+    });
+    res.status(201).json({ schedule: created, assignedCount: eligible.length });
   });
 
   app.post('/api/parking/events', requireUser, requireParkingStaff, async (req, res) => {
