@@ -3,6 +3,8 @@ import { randomBytes, scryptSync } from 'node:crypto';
 import { createPrismaClient } from '../src/server/prismaClient';
 import { SYSTEMS_CURRICULUM } from '../src/data/systemsCurriculum';
 
+if (process.env.NODE_ENV === 'production') throw new Error('El restablecimiento de datos de prueba no puede ejecutarse en producción.');
+
 const prisma = createPrismaClient();
 const password = 'Demo123!';
 const hashPassword = () => { const salt = randomBytes(16).toString('hex'); return `${salt}:${scryptSync(password, salt, 64).toString('hex')}`; };

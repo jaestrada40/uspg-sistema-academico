@@ -14,7 +14,8 @@ export function registerParkingRoutes(
 
   const parkingCode = (prefix: string) => `${prefix}-${randomBytes(5).toString('hex').toUpperCase()}`;
   const normalizePlate = (value: unknown) => String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const parkingQrSecret = process.env.PARKING_QR_SECRET || 'uspg-parking-development-secret';
+  const parkingQrSecret = process.env.PARKING_QR_SECRET;
+  if (!parkingQrSecret || Buffer.byteLength(parkingQrSecret) < 32 || /cambiar|configurar|example|development/i.test(parkingQrSecret)) throw new Error('PARKING_QR_SECRET debe configurarse con un secreto aleatorio de al menos 32 bytes.');
   const dynamicParkingPass = (vehicleId: string) => { const expiresAt = Date.now() + 5 * 60 * 1000, payload = `PV1.${vehicleId}.${expiresAt}.${randomBytes(4).toString('hex')}`, signature = createHmac('sha256', parkingQrSecret).update(payload).digest('base64url'); return { code: `${payload}.${signature}`, expiresAt: new Date(expiresAt) }; };
   const verifyDynamicParkingPass = (code: string) => { const parts = code.split('.'); if (parts.length !== 5 || parts[0] !== 'PV1') return null; const payload = parts.slice(0, 4).join('.'), expected = createHmac('sha256', parkingQrSecret).update(payload).digest('base64url'), supplied = parts[4]; if (expected.length !== supplied.length || !timingSafeEqual(Buffer.from(expected), Buffer.from(supplied))) return null; const expiresAt = Number(parts[2]); return Number.isFinite(expiresAt) && expiresAt > Date.now() ? { vehicleId: parts[1], expiresAt } : null; };
   const maskedParkingCode = (code: string) => code ? `${code.slice(0, 7)}…${code.slice(-4)}` : null;

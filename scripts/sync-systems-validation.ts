@@ -3,6 +3,8 @@ import { randomBytes, scryptSync } from 'node:crypto';
 import { createPrismaClient } from '../src/server/prismaClient';
 import { SYSTEMS_CURRICULUM } from '../src/data/systemsCurriculum';
 
+if (process.env.NODE_ENV === 'production') throw new Error('La sincronización de datos de validación no puede ejecutarse en producción.');
+
 const prisma = createPrismaClient();
 const officialCodes = new Set(SYSTEMS_CURRICULUM.map((course) => course.code));
 const hashPassword = (password: string) => {

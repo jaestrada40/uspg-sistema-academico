@@ -5,6 +5,10 @@ import path from 'node:path';
 import { createPrismaClient } from '../src/server/prismaClient';
 import { INITIAL_CAREERS, INITIAL_CLASSROOMS, INITIAL_COURSES, INITIAL_CYCLES, INITIAL_ENROLLMENTS, INITIAL_GRADES, INITIAL_SECTIONS, INITIAL_STUDENTS, INITIAL_TEACHERS } from '../src/data/mockData';
 
+if (process.env.NODE_ENV === 'production') {
+  throw new Error('La semilla de demostración no puede ejecutarse en producción. Provisiona cuentas iniciales con credenciales únicas.');
+}
+
 const prisma = createPrismaClient();
 
 const hashPassword = (password: string) => {

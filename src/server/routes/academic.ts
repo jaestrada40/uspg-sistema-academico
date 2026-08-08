@@ -460,6 +460,7 @@ export function registerAcademicRoutes(
 
   app.get('/api/enrollments', requireUser, async (_req, res) => {
     const user = res.locals.authUser;
+    if (!['ESTUDIANTE', 'ADMIN', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción disponible únicamente para Registro Académico o el estudiante.' });
     const where = user.role === 'ESTUDIANTE' ? { studentCarnet: user.carnetOrCode } : {};
     const records = await prisma.enrollment.findMany({ where, include: { student: true, section: { include: { course: true } } }, orderBy: { enrollmentDate: 'desc' } });
     res.json(records.map(enrollmentView));
@@ -468,6 +469,7 @@ export function registerAcademicRoutes(
     const user = res.locals.authUser;
     const studentCarnet = String(req.body?.studentCarnet || '');
     const sectionId = String(req.body?.sectionId || '');
+    if (!['ESTUDIANTE', 'ADMIN', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción disponible únicamente para Registro Académico o el estudiante.' });
     if (user.role === 'ESTUDIANTE' && user.carnetOrCode !== studentCarnet) return void res.status(403).json({ message: 'Solo puedes inscribirte a ti mismo.' });
     const student = await prisma.student.findUnique({ where: { carnet: studentCarnet }, include: { plan: { include: { courses: { select: { courseCode: true } } } } } });
     if (!student) return void res.status(404).json({ message: 'Estudiante no encontrado.' });
@@ -506,6 +508,7 @@ export function registerAcademicRoutes(
     const user = res.locals.authUser;
     const record = await prisma.enrollment.findUnique({ where: { id: req.params.id } });
     if (!record) return void res.status(404).json({ message: 'Inscripción no encontrada.' });
+    if (!['ESTUDIANTE', 'ADMIN', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción disponible únicamente para Registro Académico o el estudiante.' });
     if (user.role === 'ESTUDIANTE' && user.carnetOrCode !== record.studentCarnet) return void res.status(403).json({ message: 'No puedes retirar esta inscripción.' });
     if (record.status === 'Inscrito') await prisma.$transaction([prisma.enrollment.update({ where: { id: record.id }, data: { status: 'Retirado' } }), prisma.section.update({ where: { id: record.sectionId }, data: { enrolledCount: { decrement: 1 } } })]);
     res.json({ ok: true });
@@ -515,6 +518,7 @@ export function registerAcademicRoutes(
 
   app.get('/api/virtual-classrooms', requireUser, async (_req, res) => {
     const user = res.locals.authUser;
+    if (!['DOCENTE', 'ESTUDIANTE', 'ADMIN', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción disponible únicamente para Registro Académico, docentes o estudiantes inscritos.' });
     const where = user.role === 'DOCENTE'
       ? { section: { teacherId: user.carnetOrCode } }
       : user.role === 'ESTUDIANTE'
@@ -524,16 +528,26 @@ export function registerAcademicRoutes(
     res.json(records.map((record) => ({ id: record.id, provider: record.provider, syncStatus: record.syncStatus, enrollmentCode: record.enrollmentCode, alternateLink: record.alternateLink, lastSyncedAt: record.lastSyncedAt, syncError: record.syncError, sectionId: record.sectionId, sectionCode: record.section.code, courseCode: record.section.courseCode, courseName: record.section.course.name, teacherName: record.section.teacher.name, cycleName: record.section.cycle.name })));
   });
 
-  app.post('/api/virtual-classrooms/:id/sync', requireRegistro, async (_req, res) => {
-    if (!process.env.GOOGLE_CLASSROOM_CLIENT_ID) return void res.status(503).json({ message: 'Google Workspace todavía no está configurado. TI debe proporcionar las credenciales OAuth institucionales.' });
-    res.status(501).json({ message: 'Las credenciales fueron detectadas, pero la autorización administrativa todavía debe completarse.' });
+  app.post('/api/virtual-classrooms/:id/sync', requireRegistro, async (req, res) => {
+    const mode = (process.env.CLASSROOM_PROVIDER || (process.env.NODE_ENV === 'production' ? 'disabled' : 'demo')).toLowerCase();
+    const classroom = await prisma.virtualClassroom.findUnique({ where: { id: req.params.id }, include: { section: { include: { course: true } } } });
+    if (!classroom) return void res.status(404).json({ message: 'Aula virtual no encontrada.' });
+    if (mode === 'demo') {
+      const enrollmentCode = `DEMO-${classroom.section.code.replace(/[^A-Z0-9]/gi, '').slice(-8).toUpperCase()}-${classroom.id.slice(-4).toUpperCase()}`;
+      const updated = await prisma.virtualClassroom.update({ where: { id: classroom.id }, data: { provider: 'DEMO_CLASSROOM', syncStatus: 'DEMO_ACTIVE', externalCourseId: `demo:${classroom.id}`, enrollmentCode, alternateLink: null, lastSyncedAt: new Date(), syncError: null } });
+      await prisma.auditLog.create({ data: { action: 'SYNC_VIRTUAL_CLASSROOM_DEMO', entityType: 'VIRTUAL_CLASSROOM', entityId: classroom.id, actorId: res.locals.authUser.id, details: JSON.stringify({ sectionId: classroom.sectionId }) } });
+      return void res.json({ classroom: updated, mode: 'demo', message: `Aula demostrativa preparada para ${classroom.section.course.name}. No se creó ningún curso en Google Classroom.` });
+    }
+    if (mode !== 'google') return void res.status(503).json({ message: 'La integración de aulas virtuales está desactivada en este entorno.' });
+    if (!process.env.GOOGLE_CLASSROOM_CLIENT_ID || !process.env.GOOGLE_CLASSROOM_CLIENT_SECRET || !process.env.GOOGLE_CLASSROOM_REDIRECT_URI) return void res.status(503).json({ message: 'Google Classroom requiere las credenciales OAuth institucionales antes de habilitarse.' });
+    res.status(501).json({ message: 'Las credenciales están configuradas. Falta completar la autorización OAuth del administrador antes de crear cursos reales.' });
   });
 
   // ── Student Requests & Enrollment Documents ──────────────────────────────────
 
   app.get('/api/student-requests', requireUser, async (_req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'Este módulo no está disponible para catedráticos.' });
+    if (!['ESTUDIANTE', 'ADMIN', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Este módulo está disponible únicamente para Registro Académico o el estudiante.' });
     const records = await prisma.studentServiceRequest.findMany({ where: user.role === 'ESTUDIANTE' ? { studentCarnet: user.carnetOrCode || '' } : {}, include: { student: true }, orderBy: { createdAt: 'desc' } });
     res.json(records.map((record) => ({ id: record.id, type: record.type, status: record.status, purpose: record.purpose, deliveryType: record.deliveryType, adminNote: record.adminNote, handledBy: record.handledBy, reviewedAt: record.reviewedAt, completedAt: record.completedAt, createdAt: record.createdAt, studentCarnet: record.studentCarnet, studentName: record.student.name, careerName: record.student.careerName || record.student.careerId, creditsEarned: record.student.creditsEarned, totalCreditsRequired: record.student.totalCreditsRequired })));
   });
@@ -586,7 +600,7 @@ export function registerAcademicRoutes(
 
   app.get('/api/enrollment-documents', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (!['ESTUDIANTE', 'ADMIN', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción no permitida.' });
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode || '' : String(req.query.studentCarnet || '');
     if (!studentCarnet) return void res.status(400).json({ message: 'Selecciona un estudiante.' });
     const student = await prisma.student.findUnique({ where: { carnet: studentCarnet } });
@@ -598,7 +612,7 @@ export function registerAcademicRoutes(
 
   app.post('/api/enrollment-documents', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (!['ESTUDIANTE', 'ADMIN'].includes(user.role)) return void res.status(403).json({ message: 'El archivo debe cargarse desde la cuenta del estudiante o administración.' });
+    if (!['ESTUDIANTE', 'ADMIN', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'El archivo debe cargarse desde la cuenta del estudiante o Registro Académico.' });
     const targetCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode || '' : String(req.body.studentCarnet || '').trim();
     const type = String(req.body.type || '').trim().toUpperCase();
     const fileName = String(req.body.fileName || '').trim().slice(0, 180);
@@ -619,7 +633,7 @@ export function registerAcademicRoutes(
   app.get('/api/enrollment-documents/:id/file', requireUser, async (req, res) => {
     const user = res.locals.authUser;
     const document = await prisma.enrollmentDocument.findUnique({ where: { id: req.params.id } });
-    if (!document || user.role === 'DOCENTE' || (user.role === 'ESTUDIANTE' && document.studentCarnet !== user.carnetOrCode)) return void res.status(404).json({ message: 'Documento no encontrado.' });
+    if (!document || !['ESTUDIANTE', 'ADMIN', 'REGISTRO'].includes(user.role) || (user.role === 'ESTUDIANTE' && document.studentCarnet !== user.carnetOrCode)) return void res.status(404).json({ message: 'Documento no encontrado.' });
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     res.setHeader('Content-Type', document.mimeType);
     res.setHeader('Content-Disposition', `inline; filename="${document.fileName.replace(/["\r\n]/g, '')}"`);

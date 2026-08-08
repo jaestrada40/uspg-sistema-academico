@@ -41,7 +41,7 @@ export type ServerHelpers = {
   // Auth / rate limiting
   loginAttempts: Map<string, { count: number; blockedUntil: number }>;
   passwordRecoveryRequests: Map<string, number>;
-  loginAttemptKey: (username: string) => string;
+  loginAttemptKey: (username: string, ip?: string) => string;
   registerFailedLogin: (key: string) => void;
 
   // Finance helpers

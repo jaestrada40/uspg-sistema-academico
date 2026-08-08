@@ -24,6 +24,7 @@ export function registerAttendanceRoutes(
       res.json(Array.from(grouped.values()).map((item) => { const attended = item.records.filter((record: any) => ['PRESENTE', 'JUSTIFICADO'].includes(record.status)).length + item.records.filter((record: any) => record.status === 'TARDE').length * 0.5; return { ...item, percentage: item.records.length ? Math.round((attended / item.records.length) * 100) : 100 }; }));
       return;
     }
+    if (!['ADMIN', 'REGISTRO', 'DOCENTE'].includes(user.role)) return void res.status(403).json({ message: 'Acción disponible únicamente para Docencia o Registro Académico.' });
     const sectionId = String(req.query.sectionId || '');
     const date = String(req.query.date || '');
     if (!sectionId) return void res.status(400).json({ message: 'Selecciona una sección.' });

@@ -289,6 +289,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+    // Do not retain academic or financial records after the session ends,
+    // especially on shared computers.
+    localStorage.clear();
     setIsAuthenticated(false);
     setCurrentUser(INITIAL_USERS[0]);
     showToast('Sesión cerrada exitosamente', 'info');

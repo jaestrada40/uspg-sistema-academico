@@ -15,6 +15,17 @@ export function createAuthMiddleware(
     return true;
   };
 
+  // This must be enforced by the API, not only by the SPA redirect.  A user
+  // receiving a temporary password must not be able to call protected routes
+  // directly before replacing it.
+  const blockUntilPasswordChange = (req: express.Request, res: express.Response, user: { mustChangePassword: boolean }) => {
+    if (!user.mustChangePassword) return false;
+    const allowedPaths = ['/api/auth/me', '/api/auth/change-password', '/api/auth/logout'];
+    if (allowedPaths.includes(req.path) || req.path.startsWith('/api/auth/mfa/')) return false;
+    res.status(428).json({ message: 'Debes cambiar tu contraseña temporal antes de continuar.', code: 'PASSWORD_CHANGE_REQUIRED' });
+    return true;
+  };
+
   const requireAdmin: express.RequestHandler = async (req, res, next) => {
     try {
       const token = readSessionToken(req);
@@ -35,6 +46,7 @@ export function createAuthMiddleware(
         return;
       }
       if (await blockUntilMfaEnrollment(req, res, session.user)) return;
+      if (blockUntilPasswordChange(req, res, session.user)) return;
       res.locals.authUser = session.user;
       next();
     } catch (error) {
@@ -54,6 +66,7 @@ export function createAuthMiddleware(
         return void res.status(401).json({ message: 'La sesión no es válida.' });
       }
       if (await blockUntilMfaEnrollment(req, res, session.user)) return;
+      if (blockUntilPasswordChange(req, res, session.user)) return;
       if (session.user.role === 'SISTEMAS' && !['/api/systems', '/api/auth/', '/api/notifications'].some((prefix) => req.path.startsWith(prefix))) {
         return void res.status(403).json({ message: 'El rol Sistemas no tiene acceso a módulos académicos, financieros ni administrativos.' });
       }
@@ -93,6 +106,7 @@ export function createAuthMiddleware(
         return;
       }
       if (await blockUntilMfaEnrollment(req, res, session.user)) return;
+      if (blockUntilPasswordChange(req, res, session.user)) return;
       res.locals.authUser = session.user;
       next();
     } catch (error) {
@@ -120,6 +134,7 @@ export function createAuthMiddleware(
         return;
       }
       if (await blockUntilMfaEnrollment(req, res, session.user)) return;
+      if (blockUntilPasswordChange(req, res, session.user)) return;
       res.locals.authUser = session.user;
       next();
     } catch (error) {

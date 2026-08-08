@@ -8,9 +8,10 @@ import { InstitutionLogo } from '../components/common/InstitutionLogo';
 export const LoginPage: React.FC = () => {
   const { login, verifyMfa, institution } = useApp();
   const navigate = useNavigate();
+  const demoMode = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
-  const [username, setUsername] = useState('admin@administrador.uspg.edu.gt');
-  const [password, setPassword] = useState('Demo123!');
+  const [username, setUsername] = useState(demoMode ? 'admin@administrador.uspg.edu.gt' : '');
+  const [password, setPassword] = useState(demoMode ? 'Demo123!' : '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);

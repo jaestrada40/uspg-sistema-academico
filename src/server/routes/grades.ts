@@ -18,6 +18,13 @@ export function registerGradeRoutes(
 ) {
   const { sendOk, notifyByCarnet } = helpers;
   const { requireUser, requireRegistro } = middleware;
+  const academicStaffRoles = ['ADMIN', 'REGISTRO', 'DOCENTE'];
+  const canManageGrades = (role: string) => academicStaffRoles.includes(role);
+  const rejectNonAcademicStaff = (res: express.Response, role: string) => {
+    if (canManageGrades(role)) return false;
+    res.status(403).json({ message: 'Acción disponible únicamente para Docencia o Registro Académico.' });
+    return true;
+  };
 
   // ── Zone Activities ──────────────────────────────────────────────────────────
 
@@ -29,6 +36,7 @@ export function registerGradeRoutes(
       res.json(activities.map((activity) => ({ id: activity.id, name: activity.name, type: activity.type, maxScore: activity.maxScore, dueDate: activity.dueDate, isPublished: activity.isPublished, sectionId: activity.sectionId, sectionCode: activity.section.code, courseName: activity.section.course.name, grades: activity.grades.map((grade) => ({ id: grade.id, studentCarnet: grade.studentCarnet, studentName: grade.student.name, score: grade.score, feedback: grade.feedback })) })));
       return;
     }
+    if (rejectNonAcademicStaff(res, user.role)) return;
     if (!requestedSectionId) return void res.status(400).json({ message: 'Selecciona una sección.' });
     const section = await prisma.section.findUnique({ where: { id: requestedSectionId } });
     if (!section || (user.role === 'DOCENTE' && section.teacherId !== user.carnetOrCode)) return void res.status(403).json({ message: 'No puedes consultar esta sección.' });
@@ -38,7 +46,7 @@ export function registerGradeRoutes(
 
   app.post('/api/zone-activities', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'ESTUDIANTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (rejectNonAcademicStaff(res, user.role)) return;
     const sectionId = String(req.body.sectionId || '');
     const name = String(req.body.name || '').trim();
     const type = String(req.body.type || '').trim().toUpperCase();
@@ -61,7 +69,7 @@ export function registerGradeRoutes(
 
   app.put('/api/zone-activities/:id/grades', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'ESTUDIANTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (rejectNonAcademicStaff(res, user.role)) return;
     const activity = await prisma.zoneActivity.findUnique({ where: { id: req.params.id }, include: { section: true, grades: true } });
     if (!activity || (user.role === 'DOCENTE' && activity.section.teacherId !== user.carnetOrCode)) return void res.status(403).json({ message: 'No puedes calificar esta actividad.' });
     if (activity.section.gradeActStatus === 'CERRADA') return void res.status(409).json({ message: 'El acta está cerrada.' });
@@ -78,7 +86,7 @@ export function registerGradeRoutes(
 
   app.post('/api/zone-activities/:id/publish', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'ESTUDIANTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (rejectNonAcademicStaff(res, user.role)) return;
     const activity = await prisma.zoneActivity.findUnique({ where: { id: req.params.id }, include: { section: true, grades: true } });
     if (!activity || (user.role === 'DOCENTE' && activity.section.teacherId !== user.carnetOrCode)) return void res.status(403).json({ message: 'No puedes publicar esta actividad.' });
     if (activity.grades.some((grade) => grade.score === null)) return void res.status(409).json({ message: 'Debes calificar a todos los estudiantes antes de publicar.' });
@@ -94,6 +102,7 @@ export function registerGradeRoutes(
 
   app.get('/api/grades', requireUser, async (_req, res) => {
     const user = res.locals.authUser;
+    if (!canManageGrades(user.role) && user.role !== 'ESTUDIANTE') return void res.status(403).json({ message: 'Acción disponible únicamente para Docencia o Registro Académico.' });
     const where = user.role === 'ESTUDIANTE' ? { studentCarnet: user.carnetOrCode, isPublished: true } : user.role === 'DOCENTE' ? { section: { teacherId: user.carnetOrCode } } : {};
     const records = await prisma.gradeRecord.findMany({ where, include: { student: true, section: { include: { course: true } } } });
     res.json(records.map(gradeView));
@@ -101,7 +110,7 @@ export function registerGradeRoutes(
 
   app.patch('/api/grades/:id', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'ESTUDIANTE') return void res.status(403).json({ message: 'Los estudiantes no pueden editar notas.' });
+    if (rejectNonAcademicStaff(res, user.role)) return;
     const current = await prisma.gradeRecord.findUnique({ where: { id: req.params.id }, include: { section: true } });
     if (!current) return void res.status(404).json({ message: 'Registro de nota no encontrado.' });
     if (user.role === 'DOCENTE' && current.section.teacherId !== user.carnetOrCode) return void res.status(403).json({ message: 'Esta sección no está asignada al catedrático.' });
@@ -120,7 +129,7 @@ export function registerGradeRoutes(
 
   app.post('/api/grades/sections/:sectionId/publish', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'ESTUDIANTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (rejectNonAcademicStaff(res, user.role)) return;
     const section = await prisma.section.findUnique({ where: { id: req.params.sectionId }, include: { gradeRecords: { select: { status: true } } } });
     if (!section || (user.role === 'DOCENTE' && section.teacherId !== user.carnetOrCode)) return void res.status(403).json({ message: 'No puedes publicar esta sección.' });
     if (section.gradeActStatus === 'CERRADA') return void res.status(409).json({ message: 'El acta ya está cerrada.' });
@@ -139,7 +148,7 @@ export function registerGradeRoutes(
 
   app.post('/api/grades/sections/:sectionId/close', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'ESTUDIANTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (rejectNonAcademicStaff(res, user.role)) return;
     const section = await prisma.section.findUnique({ where: { id: req.params.sectionId }, include: { gradeRecords: { include: { student: true } }, course: { select: { credits: true } } } });
     if (!section || (user.role === 'DOCENTE' && section.teacherId !== user.carnetOrCode)) return void res.status(403).json({ message: 'No puedes cerrar esta sección.' });
     if (section.gradeActStatus !== 'PUBLICADA') return void res.status(409).json({ message: 'Primero debes publicar el acta antes de cerrarla.' });
@@ -151,7 +160,7 @@ export function registerGradeRoutes(
 
   app.get('/api/grades/sections/:sectionId/history', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'ESTUDIANTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (rejectNonAcademicStaff(res, user.role)) return;
     const section = await prisma.section.findUnique({ where: { id: req.params.sectionId } });
     if (!section || (user.role === 'DOCENTE' && section.teacherId !== user.carnetOrCode)) return void res.status(403).json({ message: 'No puedes consultar esta sección.' });
     const history = await prisma.auditLog.findMany({ where: { entityType: 'GRADES', entityId: section.id }, include: { actor: { select: { name: true, role: true } } }, orderBy: { createdAt: 'desc' }, take: 100 });
@@ -160,7 +169,7 @@ export function registerGradeRoutes(
 
   app.get('/api/grades/sections/:sectionId/acta.pdf', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'ESTUDIANTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (rejectNonAcademicStaff(res, user.role)) return;
     const section = await prisma.section.findUnique({ where: { id: req.params.sectionId }, include: { course: true, teacher: true, cycle: true, gradeRecords: { include: { student: true }, orderBy: { studentCarnet: 'asc' } } } });
     if (!section || (user.role === 'DOCENTE' && section.teacherId !== user.carnetOrCode)) return void res.status(403).json({ message: 'No puedes descargar esta acta.' });
     const institution = await prisma.institutionConfig.findUnique({ where: { id: 1 } });
@@ -169,7 +178,7 @@ export function registerGradeRoutes(
 
   app.get('/api/grades/certification.pdf', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (!['ESTUDIANTE', 'ADMIN', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción disponible únicamente para el estudiante o Registro Académico.' });
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode || '' : String(req.query.studentCarnet || '');
     if (!studentCarnet) return void res.status(400).json({ message: 'Selecciona un estudiante.' });
     const student = await prisma.student.findUnique({ where: { carnet: studentCarnet }, include: { gradeRecords: { include: { section: { include: { course: true } } }, orderBy: { updatedAt: 'desc' } } } });
@@ -184,6 +193,7 @@ export function registerGradeRoutes(
 
   app.get('/api/recoveries', requireUser, async (_req, res) => {
     const user = res.locals.authUser;
+    if (!['ESTUDIANTE', 'ADMIN', 'REGISTRO', 'DOCENTE'].includes(user.role)) return void res.status(403).json({ message: 'Acción disponible únicamente para Docencia o Registro Académico.' });
     const where = user.role === 'ESTUDIANTE' ? { gradeRecord: { studentCarnet: user.carnetOrCode } } : user.role === 'DOCENTE' ? { gradeRecord: { section: { teacherId: user.carnetOrCode } } } : {};
     const recoveries = await prisma.recoveryExam.findMany({ where, include: { gradeRecord: { include: { student: true, section: { include: { course: true } } } }, financialCharge: { include: { payments: true } } }, orderBy: { requestedAt: 'desc' } });
     const eligibleWhere = user.role === 'ESTUDIANTE' ? { studentCarnet: user.carnetOrCode, isPublished: true, total: { lt: 61 }, recoveryExam: null } : ['ADMIN', 'REGISTRO'].includes(user.role) ? { isPublished: true, total: { lt: 61 }, recoveryExam: null } : { id: '__none__' };
@@ -194,7 +204,7 @@ export function registerGradeRoutes(
 
   app.post('/api/recoveries', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'La solicitud debe realizarla el estudiante o administración.' });
+    if (!['ESTUDIANTE', 'ADMIN', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'La solicitud debe realizarla el estudiante o Registro Académico.' });
     const gradeRecordId = String(req.body.gradeRecordId || '');
     const grade = await prisma.gradeRecord.findUnique({ where: { id: gradeRecordId }, include: { student: true, recoveryExam: true, section: { select: { courseCode: true } } } });
     if (!grade) return void res.status(404).json({ message: 'Registro de calificación no encontrado.' });
@@ -243,7 +253,7 @@ export function registerGradeRoutes(
 
   app.post('/api/recoveries/:id/grade', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'ESTUDIANTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (rejectNonAcademicStaff(res, user.role)) return;
     const score = Number(req.body.score);
     const recovery = await prisma.recoveryExam.findUnique({ where: { id: req.params.id }, include: { gradeRecord: { include: { section: true } }, financialCharge: { include: { payments: true } } } });
     if (!recovery || recovery.status !== 'AUTORIZADA') return void res.status(409).json({ message: 'La recuperación no está autorizada para calificación.' });

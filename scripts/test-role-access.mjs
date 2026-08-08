@@ -26,13 +26,13 @@ const cases = {
     ['/api/systems/overview', 200], ['/api/finances', 403], ['/api/students', 403],
   ],
   BIBLIOTECA: [
-    ['/api/library', 200],
+    ['/api/library', 200], ['/api/finances', 403], ['/api/grades', 403], ['/api/attendance?sectionId=no-existe', 403], ['/api/enrollments', 403], ['/api/student-requests', 403], ['/api/virtual-classrooms', 403], ['/api/enrollment-documents?studentCarnet=2200138', 403],
   ],
   PARQUEO: [
-    ['/api/parking', 200], ['/api/parking/offline-manifest', 200],
+    ['/api/parking', 200], ['/api/parking/offline-manifest', 200], ['/api/finances', 403], ['/api/grades', 403], ['/api/enrollments', 403], ['/api/student-requests', 403], ['/api/virtual-classrooms', 403], ['/api/enrollment-documents?studentCarnet=2200138', 403],
   ],
   EVENTOS: [
-    ['/api/parking', 200], ['/api/parking/offline-manifest', 200],
+    ['/api/parking', 200], ['/api/parking/offline-manifest', 200], ['/api/finances', 403], ['/api/grades', 403], ['/api/enrollments', 403], ['/api/student-requests', 403], ['/api/virtual-classrooms', 403], ['/api/enrollment-documents?studentCarnet=2200138', 403],
   ],
   REGISTRO: [
     ['/api/students', 200], ['/api/finances/career-fees', 403], ['/api/finances', 403],
@@ -54,6 +54,15 @@ for (const [role, account] of Object.entries(accounts)) {
     const protectedResponse = await fetch(`${baseUrl}${cases[role][0][0]}`, { headers: { Cookie: cookie } });
     const ok = statusResponse.status === 200 && protectedResponse.status === 428;
     console.log(`${ok ? 'PASS' : 'FAIL'} ${role} inscripción MFA obligatoria: estado ${statusResponse.status}, módulo protegido ${protectedResponse.status}`);
+    if (!ok) failures++;
+    await fetch(`${baseUrl}/api/auth/logout`, { method: 'POST', headers: { Cookie: cookie } });
+    continue;
+  }
+  if (profile.user.mustChangePassword) {
+    const profileResponse = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: cookie } });
+    const protectedResponse = await fetch(`${baseUrl}${cases[role][0][0]}`, { headers: { Cookie: cookie } });
+    const ok = profileResponse.status === 200 && protectedResponse.status === 428;
+    console.log(`${ok ? 'PASS' : 'FAIL'} ${role} cambio de contraseña obligatorio: perfil ${profileResponse.status}, módulo protegido ${protectedResponse.status}`);
     if (!ok) failures++;
     await fetch(`${baseUrl}/api/auth/logout`, { method: 'POST', headers: { Cookie: cookie } });
     continue;

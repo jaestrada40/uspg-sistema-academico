@@ -10,6 +10,7 @@ export const ParkingKioskPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [payingId, setPayingId] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
+  const [cardDemoAvailable, setCardDemoAvailable] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -20,6 +21,7 @@ export const ParkingKioskPage: React.FC = () => {
     setCharges((data.charges || []).filter((c: any) => c.vehiclePlate && c.balance > 0));
   }, [showToast]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { fetch('/api/finances/card-payment-status').then((response) => response.ok ? response.json() : { demoAvailable: false }).then((data) => setCardDemoAvailable(Boolean(data.demoAvailable))).catch(() => setCardDemoAvailable(false)); }, []);
 
   const pay = async (chargeId: string) => {
     setPayingId(chargeId);
@@ -44,6 +46,8 @@ export const ParkingKioskPage: React.FC = () => {
           <p className="mt-1 text-xs text-green-800">{result.concept} · {money(result.amount)}</p>
           <button onClick={() => setResult(null)} className="mt-4 rounded-lg border border-green-300 bg-white px-4 py-2 text-xs font-bold text-green-800">Listo</button>
         </div>
+      ) : !cardDemoAvailable ? (
+        <div className="rounded-xl border bg-white p-6 text-center text-sm text-[#64748B]">El pago con tarjeta no está habilitado en este entorno.</div>
       ) : charges.length === 0 ? (
         <div className="rounded-xl border bg-white p-6 text-center text-sm text-[#64748B]">No tienes saldo de parqueo pendiente.</div>
       ) : (

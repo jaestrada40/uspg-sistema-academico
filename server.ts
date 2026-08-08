@@ -104,7 +104,7 @@ app.use((_req, res, next) => {
   }
   next();
 });
-app.use(express.json({ limit: '5mb', strict: true }));
+app.use(express.json({ limit: '5mb', strict: true, verify: (req, _res, buffer) => { if ((req as any).originalUrl === '/api/finances/stripe/webhook') (req as any).rawBody = Buffer.from(buffer); } }));
 
 const sessionCookie = 'uspg_session';
 const sessionCookieOptions = { httpOnly: true, sameSite: 'lax' as const, secure: isProduction, path: '/' };
@@ -135,7 +135,7 @@ const handleUniqueError = (error: unknown, res: express.Response) => { if (typeo
 // ── Rate limiting / sessions ──────────────────────────────────────────────────
 const loginAttempts = new Map<string, { count: number; blockedUntil: number }>();
 const passwordRecoveryRequests = new Map<string, number>();
-const loginAttemptKey = (username: string) => username.toLowerCase();
+const loginAttemptKey = (username: string, ip = '') => `${ip}:${username.toLowerCase()}`;
 const registerFailedLogin = (key: string) => { const current = loginAttempts.get(key); const count = (current?.blockedUntil && current.blockedUntil > Date.now() ? current.count : 0) + 1; loginAttempts.set(key, { count, blockedUntil: count >= 5 ? Date.now() + 15 * 60 * 1000 : 0 }); };
 const createAuthenticatedSession = async (res: express.Response, userId: string, rememberMe: boolean) => { await prisma.session.deleteMany({ where: { expiresAt: { lte: new Date() } } }); const token = randomBytes(32).toString('base64url'); const durationMs = (rememberMe ? 30 : 1) * 24 * 60 * 60 * 1000; await prisma.session.create({ data: { tokenHash: hashToken(token), userId, expiresAt: new Date(Date.now() + durationMs) } }); res.cookie(sessionCookie, token, { ...sessionCookieOptions, maxAge: rememberMe ? durationMs : undefined }); };
 

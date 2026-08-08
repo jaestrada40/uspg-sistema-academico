@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type express from 'express';
 import type { AppPrisma, AuthMiddleware, ServerHelpers } from '../types';
 
@@ -13,10 +13,65 @@ export function registerFinanceRoutes(
   const statementDates = (req: express.Request) => { const from = req.query.from ? new Date(`${String(req.query.from)}T00:00:00.000Z`) : new Date('2000-01-01T00:00:00.000Z'); const to = req.query.to ? new Date(`${String(req.query.to)}T23:59:59.999Z`) : new Date(); return { from, to, valid: !Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime()) && from <= to }; };
   const buildFinancialStatement = async (studentCarnet: string, from: Date, to: Date) => { const student = await prisma.student.findUnique({ where: { carnet: studentCarnet } }); if (!student) return null; const [charges, payments, adjustments] = await Promise.all([prisma.financialCharge.findMany({ where: { studentCarnet, createdAt: { lte: to } }, orderBy: { createdAt: 'asc' } }), prisma.payment.findMany({ where: { studentCarnet, paidAt: { lte: to } }, include: { charge: { select: { concept: true } } }, orderBy: { paidAt: 'asc' } }), prisma.financialAdjustment.findMany({ where: { studentCarnet, createdAt: { lte: to } }, include: { charge: { select: { concept: true } } }, orderBy: { createdAt: 'asc' } })]); const openingCharges = charges.filter((item) => item.createdAt < from).reduce((sum, item) => sum + item.amount, 0); const openingPayments = payments.filter((item) => item.paidAt < from).reduce((sum, item) => sum + item.amount, 0); const openingAdjustments = adjustments.filter((item) => item.createdAt < from).reduce((sum, item) => sum + item.amount, 0); const openingBalance = openingCharges - openingPayments - openingAdjustments; const movements = [...charges.filter((item) => item.createdAt >= from).map((item) => ({ id: `charge:${item.id}`, date: item.createdAt, type: 'CARGO', document: item.id.slice(-8).toUpperCase(), description: item.concept, debit: item.amount, credit: 0 })), ...payments.filter((item) => item.paidAt >= from).map((item) => ({ id: `payment:${item.id}`, date: item.paidAt, type: 'PAGO', document: item.receiptNumber, description: `Pago · ${item.charge.concept}`, debit: 0, credit: item.amount })), ...adjustments.filter((item) => item.createdAt >= from).map((item) => ({ id: `adjustment:${item.id}`, date: item.createdAt, type: item.type, document: item.id.slice(-8).toUpperCase(), description: `${item.type === 'BECA' ? 'Beca' : 'Descuento'} · ${item.charge.concept}`, debit: 0, credit: item.amount }))].sort((a, b) => a.date.getTime() - b.date.getTime()); let runningBalance = openingBalance; const ledger = movements.map((item) => { runningBalance += item.debit - item.credit; return { ...item, balance: runningBalance }; }); const periodDebits = movements.reduce((sum, item) => sum + item.debit, 0), periodCredits = movements.reduce((sum, item) => sum + item.credit, 0); return { student: { carnet: student.carnet, name: student.name, careerName: student.careerName || student.careerId }, period: { from, to }, openingBalance, periodDebits, periodCredits, closingBalance: runningBalance, movements: ledger }; };
   const { requireUser, requireFinance } = middleware;
+  const canReadFinances = (role: string) => ['ESTUDIANTE', 'ADMIN', 'FINANZAS'].includes(role);
+  const rejectNonFinanceUser = (res: express.Response, role: string) => {
+    if (canReadFinances(role)) return false;
+    res.status(403).json({ message: 'Acción disponible únicamente para el estudiante o Administración Financiera.' });
+    return true;
+  };
+  const isCardDemoEnabled = () => process.env.NODE_ENV !== 'production' && (process.env.PAYMENT_PROVIDER || 'demo').toLowerCase() === 'demo';
+  const isStripeEnabled = () => (process.env.PAYMENT_PROVIDER || '').toLowerCase() === 'stripe' && Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET && process.env.APP_URL);
+  const stripeSignatureValid = (rawBody: Buffer, signature = '') => {
+    const timestamp = signature.match(/(?:^|,)t=(\d+)/)?.[1]; const received = signature.match(/(?:^|,)v1=([a-f0-9]+)/i)?.[1];
+    if (!timestamp || !received || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300 || !process.env.STRIPE_WEBHOOK_SECRET) return false;
+    const expected = createHmac('sha256', process.env.STRIPE_WEBHOOK_SECRET).update(`${timestamp}.${rawBody.toString('utf8')}`).digest('hex');
+    const left = Buffer.from(expected, 'hex'), right = Buffer.from(received, 'hex'); return left.length === right.length && timingSafeEqual(left, right);
+  };
+
+  app.get('/api/finances/card-payment-status', requireUser, async (_req, res) => {
+    res.json({ provider: isStripeEnabled() ? 'stripe' : isCardDemoEnabled() ? 'demo' : 'disabled', demoAvailable: isCardDemoEnabled(), stripeAvailable: isStripeEnabled() });
+  });
+
+  app.post('/api/finances/stripe/checkout', requireUser, async (req, res) => {
+    const user = res.locals.authUser;
+    if (!isStripeEnabled()) return void res.status(503).json({ message: 'Stripe no está configurado completamente en este entorno.' });
+    if (user.role !== 'ESTUDIANTE' || !user.carnetOrCode) return void res.status(403).json({ message: 'El pago con tarjeta debe iniciarse desde la cuenta del estudiante.' });
+    const chargeId = String(req.body.chargeId || '');
+    const charge = await prisma.financialCharge.findFirst({ where: { id: chargeId, studentCarnet: user.carnetOrCode }, include: { payments: true, adjustments: true } });
+    if (!charge) return void res.status(404).json({ message: 'Cargo no encontrado.' });
+    const balance = Math.max(0, charge.amount - charge.adjustments.reduce((sum, item) => sum + item.amount, 0) - charge.payments.reduce((sum, item) => sum + item.amount, 0));
+    if (balance <= 0) return void res.status(409).json({ message: 'Este cargo ya no tiene saldo pendiente.' });
+    const appUrl = process.env.APP_URL!.replace(/\/$/, '');
+    const payload = new URLSearchParams({ mode: 'payment', success_url: process.env.STRIPE_SUCCESS_URL || `${appUrl}/pagos?stripe=success`, cancel_url: process.env.STRIPE_CANCEL_URL || `${appUrl}/pagos?stripe=cancel`, customer_email: user.email, 'payment_method_types[0]': 'card', 'line_items[0][price_data][currency]': 'gtq', 'line_items[0][price_data][product_data][name]': charge.concept.slice(0, 120), 'line_items[0][price_data][unit_amount]': String(Math.round(balance * 100)), 'line_items[0][quantity]': '1', 'metadata[chargeId]': charge.id, 'metadata[studentCarnet]': charge.studentCarnet });
+    const stripeResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', { method: 'POST', headers: { Authorization: `Basic ${Buffer.from(`${process.env.STRIPE_SECRET_KEY}:`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: payload });
+    const session = await stripeResponse.json() as { id?: string; url?: string; error?: { message?: string } };
+    if (!stripeResponse.ok || !session.id || !session.url) return void res.status(502).json({ message: session.error?.message || 'Stripe no pudo iniciar la sesión de pago.' });
+    await prisma.auditLog.create({ data: { action: 'STRIPE_CHECKOUT_CREATED', entityType: 'FINANCE', entityId: charge.id, actorId: user.id, details: JSON.stringify({ sessionId: session.id, amount: balance }) } });
+    res.json({ checkoutUrl: session.url });
+  });
+
+  app.post('/api/finances/stripe/webhook', async (req, res) => {
+    const rawBody = (req as any).rawBody as Buffer | undefined;
+    if (!rawBody || !stripeSignatureValid(rawBody, req.get('stripe-signature'))) return void res.status(400).json({ message: 'Firma de Stripe inválida.' });
+    const event = req.body as { type?: string; data?: { object?: { id?: string; payment_status?: string; amount_total?: number; metadata?: { chargeId?: string; studentCarnet?: string } } } };
+    if (event.type !== 'checkout.session.completed' || event.data?.object?.payment_status !== 'paid') return void res.json({ received: true });
+    const session = event.data.object, chargeId = session.metadata?.chargeId || '', carnet = session.metadata?.studentCarnet || '';
+    const charge = await prisma.financialCharge.findFirst({ where: { id: chargeId, studentCarnet: carnet }, include: { payments: true, adjustments: true } });
+    if (!charge) return void res.status(404).json({ message: 'Cargo de Stripe no encontrado.' });
+    const reference = `STRIPE-${session.id}`;
+    if (await prisma.payment.findFirst({ where: { reference } })) return void res.json({ received: true });
+    const balance = Math.max(0, charge.amount - charge.adjustments.reduce((sum, item) => sum + item.amount, 0) - charge.payments.reduce((sum, item) => sum + item.amount, 0));
+    const amount = Number(session.amount_total || 0) / 100;
+    if (balance <= 0 || Math.abs(amount - balance) > 0.001) return void res.status(400).json({ message: 'Monto de Stripe no coincide con el saldo.' });
+    const receiptNumber = `REC-${new Date().getFullYear()}-${randomBytes(4).toString('hex').toUpperCase()}`;
+    await prisma.$transaction(async (tx) => { await tx.payment.create({ data: { receiptNumber, amount, method: 'TARJETA', reference, chargeId, studentCarnet: carnet, registeredBy: 'Stripe Checkout' } }); await tx.financialCharge.update({ where: { id: chargeId }, data: { status: 'PAGADO' } }); });
+    await notifyByCarnet(carnet, 'Pago confirmado', `Stripe confirmó tu pago ${receiptNumber} por Q${amount.toFixed(2)}.`, 'SUCCESS', '/pagos');
+    res.json({ received: true });
+  });
 
   app.get('/api/finances', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (['DOCENTE', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'El módulo financiero no está disponible para catedráticos.' });
+    if (rejectNonFinanceUser(res, user.role)) return;
     const requestedCarnet = String(req.query.studentCarnet || '');
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode : requestedCarnet || undefined;
     const charges = await prisma.financialCharge.findMany({ where: studentCarnet ? { studentCarnet } : {}, include: { student: true, vehicle: { select: { plate: true } }, adjustments: { orderBy: { createdAt: 'desc' } }, payments: { orderBy: { paidAt: 'desc' } } }, orderBy: [{ dueDate: 'desc' }, { createdAt: 'desc' }] });
@@ -29,7 +84,7 @@ export function registerFinanceRoutes(
 
   app.get('/api/finances/statement', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (['DOCENTE', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (rejectNonFinanceUser(res, user.role)) return;
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode || '' : String(req.query.studentCarnet || '');
     const dates = statementDates(req);
     if (!studentCarnet) return void res.status(400).json({ message: 'Selecciona un estudiante.' });
@@ -200,6 +255,7 @@ export function registerFinanceRoutes(
 
   app.post('/api/finances/card-payment-demo', requireUser, async (req, res) => {
     const user = res.locals.authUser;
+    if (!isCardDemoEnabled()) return void res.status(503).json({ message: 'El pago de demostración está desactivado. Configure Stripe y su webhook antes de habilitar pagos con tarjeta en producción.' });
     if (user.role !== 'ESTUDIANTE' || !user.carnetOrCode) return void res.status(403).json({ message: 'La demostración debe realizarse desde la cuenta del estudiante.' });
     const chargeId = String(req.body.chargeId || ''), cardholder = String(req.body.cardholder || '').trim(), last4 = String(req.body.last4 || '').replace(/\D/g, '');
     if (cardholder.length < 3 || last4.length !== 4) return void res.status(400).json({ message: 'Completa los datos de la tarjeta de demostración.' });
@@ -220,7 +276,7 @@ export function registerFinanceRoutes(
 
   app.get('/api/finances/transfer-proofs', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (['DOCENTE', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (rejectNonFinanceUser(res, user.role)) return;
     const requestedCarnet = String(req.query.studentCarnet || '');
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode || '' : requestedCarnet;
     const records = await prisma.transferProof.findMany({ where: studentCarnet ? { studentCarnet } : {}, include: { student: true, charge: { select: { concept: true } } }, omit: { fileData: true }, orderBy: { createdAt: 'desc' }, take: 100 });
@@ -258,7 +314,7 @@ export function registerFinanceRoutes(
   app.get('/api/finances/transfer-proofs/:id/file', requireUser, async (req, res) => {
     const user = res.locals.authUser;
     const proof = await prisma.transferProof.findUnique({ where: { id: req.params.id } });
-    if (!proof || ['DOCENTE', 'REGISTRO'].includes(user.role) || (user.role === 'ESTUDIANTE' && proof.studentCarnet !== user.carnetOrCode)) return void res.status(404).json({ message: 'Comprobante no encontrado.' });
+    if (!proof || !canReadFinances(user.role) || (user.role === 'ESTUDIANTE' && proof.studentCarnet !== user.carnetOrCode)) return void res.status(404).json({ message: 'Comprobante no encontrado.' });
     res.setHeader('Content-Type', proof.mimeType);
     res.setHeader('Content-Disposition', `inline; filename="${proof.fileName.replace(/["\r\n]/g, '')}"`);
     res.send(Buffer.from(proof.fileData, 'base64'));
@@ -287,7 +343,7 @@ export function registerFinanceRoutes(
 
   app.get('/api/finances/payments/:id/receipt.pdf', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (['DOCENTE', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (rejectNonFinanceUser(res, user.role)) return;
     const payment = await prisma.payment.findUnique({ where: { id: req.params.id }, include: { student: true, charge: true } });
     if (!payment || (user.role === 'ESTUDIANTE' && payment.studentCarnet !== user.carnetOrCode)) return void res.status(404).json({ message: 'Recibo no encontrado.' });
     const institution = await prisma.institutionConfig.findUnique({ where: { id: 1 } });
@@ -299,7 +355,7 @@ export function registerFinanceRoutes(
 
   app.get('/api/finances/statement.pdf', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (['DOCENTE', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (rejectNonFinanceUser(res, user.role)) return;
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode : String(req.query.studentCarnet || '');
     if (!studentCarnet) return void res.status(400).json({ message: 'Selecciona un estudiante.' });
     const dates = statementDates(req);

@@ -51,7 +51,7 @@ export function registerAuthRoutes(
     const username = String(req.body?.username || '').trim();
     const password = String(req.body?.password || '');
     const rememberMe = Boolean(req.body?.rememberMe);
-    const attemptKey = loginAttemptKey(username);
+    const attemptKey = loginAttemptKey(username, req.ip);
     const attempt = loginAttempts.get(attemptKey);
     if (attempt?.blockedUntil && attempt.blockedUntil > Date.now()) return void res.status(429).json({ message: 'Demasiados intentos fallidos. Intenta nuevamente en 15 minutos.' });
     const user = await prisma.user.findFirst({
@@ -142,7 +142,7 @@ export function registerAuthRoutes(
   app.post('/api/auth/forgot-password', async (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const genericResponse = { message: 'Si el correo está registrado, recibirás un enlace de recuperación.' };
-    const recoveryKey = hashToken(email);
+    const recoveryKey = hashToken(`${req.ip}:${email}`);
     const lastRequest = passwordRecoveryRequests.get(recoveryKey) || 0;
     if (Date.now() - lastRequest < 5 * 60 * 1000) return void res.json(genericResponse);
     passwordRecoveryRequests.set(recoveryKey, Date.now());
