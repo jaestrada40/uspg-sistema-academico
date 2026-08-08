@@ -208,6 +208,13 @@ export function registerFinanceRoutes(
     const balance = Math.max(0, charge.amount - charge.adjustments.reduce((sum, item) => sum + item.amount, 0) - charge.payments.reduce((sum, item) => sum + item.amount, 0));
     if (balance <= 0) return void res.status(409).json({ message: 'Este cargo ya no tiene saldo pendiente.' });
     await new Promise((resolve) => setTimeout(resolve, 700));
+    const receiptNumber = `REC-${new Date().getFullYear()}-${randomBytes(4).toString('hex').toUpperCase()}`;
+    await prisma.$transaction(async (tx) => {
+      await tx.payment.create({ data: { receiptNumber, amount: balance, method: 'TARJETA', reference: `DEMO-${last4}`, chargeId, studentCarnet: charge.studentCarnet, registeredBy: user.name } });
+      await tx.financialCharge.update({ where: { id: chargeId }, data: { status: 'PAGADO' } });
+      await tx.auditLog.create({ data: { action: 'REGISTER_PAYMENT', entityType: 'FINANCE', entityId: chargeId, actorId: user.id, details: JSON.stringify({ receiptNumber, amount: balance, method: 'TARJETA', demo: true }) } });
+    });
+    await notifyByCarnet(charge.studentCarnet, 'Pago registrado', `Se registró el pago ${receiptNumber} por Q${balance.toFixed(2)} mediante TARJETA.`, 'SUCCESS', '/pagos');
     res.json({ demo: true, authorizationCode: `DEMO-${randomBytes(3).toString('hex').toUpperCase()}`, last4, amount: balance, concept: charge.concept, processedAt: new Date() });
   });
 

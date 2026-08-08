@@ -64,7 +64,7 @@ export function registerParkingRoutes(
     if (vehicle.owner.role !== 'ESTUDIANTE' || !vehicle.owner.student) return void res.status(400).json({ message: 'El pase diario solo aplica a vehículos de estudiantes.' });
     const config = await prisma.parkingConfig.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
     if (config.dailyRate <= 0) return void res.status(409).json({ message: 'La tarifa diaria de parqueo todavía no está configurada.' });
-    const date = new Date(`${req.body.date}T12:00:00Z`);
+    const date = new Date(`${req.body.date}T23:59:59Z`);
     const today = new Date(); today.setUTCHours(0, 0, 0, 0);
     if (Number.isNaN(date.getTime()) || date < today) return void res.status(400).json({ message: 'Selecciona una fecha válida, hoy o en el futuro.' });
     const concept = `Pase de parqueo - ${date.toISOString().slice(0, 10)}`;
@@ -106,8 +106,8 @@ export function registerParkingRoutes(
     if (!['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL'].includes(periodType) || !Number.isFinite(amount) || amount <= 0 || !cycleId || Number.isNaN(dueDate.getTime())) return void res.status(400).json({ message: 'Completa correctamente periodicidad, monto, ciclo y vencimiento.' });
     const cycle = await prisma.academicCycle.findUnique({ where: { id: cycleId } });
     if (!cycle) return void res.status(404).json({ message: 'Ciclo académico no encontrado.' });
-    const duplicate = await prisma.parkingFeeSchedule.findFirst({ where: { cycleId, periodType } });
-    if (duplicate) return void res.status(409).json({ message: 'Ya existe una tarifa de parqueo con esa periodicidad para este ciclo.' });
+    const duplicate = await prisma.parkingFeeSchedule.findFirst({ where: { cycleId } });
+    if (duplicate) return void res.status(409).json({ message: 'Ya existe una tarifa de parqueo para este ciclo.' });
     const activeVehicles = await prisma.parkingVehicle.findMany({
       where: { status: 'ACTIVO', owner: { role: 'ESTUDIANTE', active: true, student: { isNot: null } } },
       select: { id: true, owner: { select: { student: { select: { carnet: true } } } } },
