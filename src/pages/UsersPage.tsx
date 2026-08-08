@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, KeyRound, Plus, RefreshCw, Search, ShieldOff, ToggleLeft, ToggleRight, Users } from 'lucide-react';
+import { ClipboardList, Gauge, KeyRound, Plus, RefreshCw, Search, ShieldOff, ToggleLeft, ToggleRight, Users } from 'lucide-react';
 import { PageHeader } from '../components/common/PageHeader';
 import { PasswordInput } from '../components/common/PasswordInput';
 import { useApp } from '../context/AppContext';
@@ -19,6 +19,8 @@ export const UsersPage: React.FC = () => {
   const [newUser, setNewUser] = useState({ name: '', email: '', role: 'ADMIN', carnetOrCode: '' });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [parkingConfig, setParkingConfig] = useState({ totalCapacity: '', regularReserve: '' });
+  const [showParkingConfig, setShowParkingConfig] = useState(false);
 
   const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
   const [auditSearch, setAuditSearch] = useState('');
@@ -27,8 +29,9 @@ export const UsersPage: React.FC = () => {
 
   const load = async () => { const response = await fetch('/api/admin/users'); if (response.ok) setUsers(await response.json()); };
   const loadAudit = async () => { const response = await fetch('/api/audit-logs?limit=500'); if (response.ok) setAuditRecords(await response.json()); };
+  const loadParkingConfig = async () => { const response = await fetch('/api/parking'); if (response.ok) { const result = await response.json(); setParkingConfig({ totalCapacity: String(result.config.totalCapacity), regularReserve: String(result.config.regularReserve) }); } };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); void loadParkingConfig(); }, []);
   useEffect(() => { if (tab === 'audit' && auditRecords.length === 0) void loadAudit(); }, [tab]);
 
   const filtered = useMemo(() => {
@@ -55,6 +58,15 @@ export const UsersPage: React.FC = () => {
     setShowCreate(false);
     showToast('Usuario creado correctamente', 'success');
     await load();
+  };
+
+  const saveParkingConfig = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const response = await fetch('/api/parking/config', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ totalCapacity: Number(parkingConfig.totalCapacity), regularReserve: Number(parkingConfig.regularReserve) }) });
+    const result = await response.json();
+    if (!response.ok) return showToast(result.message || 'No se pudo actualizar el aforo', 'error');
+    showToast('Aforo actualizado', 'success');
+    setShowParkingConfig(false);
   };
 
   const resetPassword = async (user: ManagedUser) => {
@@ -104,7 +116,7 @@ export const UsersPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <PageHeader title="Usuarios y Seguridad" description="Creación de usuarios, contraseñas, sesiones y MFA" breadcrumbs={[{ label: 'Inicio', href: '/dashboard' }, { label: 'Usuarios y Seguridad', active: true }]}
-        actions={<button onClick={() => setShowCreate((v) => !v)} className="flex items-center gap-2 rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white"><Plus className="h-4 w-4" />Nuevo usuario</button>} />
+        actions={<div className="flex gap-2"><button onClick={() => setShowParkingConfig((v) => !v)} className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-xs font-bold"><Gauge className="h-4 w-4" />Aforo de parqueo</button><button onClick={() => setShowCreate((v) => !v)} className="flex items-center gap-2 rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white"><Plus className="h-4 w-4" />Nuevo usuario</button></div>} />
 
       {showCreate && <form onSubmit={createUser} className="grid gap-3 rounded-xl border border-[#800020]/20 bg-white p-5 md:grid-cols-4">
         <input required minLength={3} value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Nombre completo" className="rounded-lg border px-3 py-2 text-xs" />
@@ -112,6 +124,13 @@ export const UsersPage: React.FC = () => {
         <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })} className="rounded-lg border px-3 py-2 text-xs"><option>ADMIN</option><option>DOCENTE</option><option>ESTUDIANTE</option><option>BIBLIOTECA</option><option>PARQUEO</option><option>EVENTOS</option><option>SISTEMAS</option></select>
         <input value={newUser.carnetOrCode} onChange={(e) => setNewUser({ ...newUser, carnetOrCode: e.target.value })} placeholder="Carné o código (opcional)" className="rounded-lg border px-3 py-2 text-xs" />
         <div className="flex justify-end gap-2 md:col-span-4"><button type="button" onClick={() => setShowCreate(false)} className="rounded-lg border px-4 py-2 text-xs font-bold">Cancelar</button><button className="rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white">Crear usuario</button></div>
+      </form>}
+
+      {showParkingConfig && <form onSubmit={saveParkingConfig} className="grid gap-3 rounded-xl border border-[#800020]/20 bg-white p-5 md:grid-cols-3">
+        <h3 className="font-bold md:col-span-3">Configuración del aforo de parqueo</h3>
+        <label className="text-xs font-bold">Capacidad total<input required min="1" type="number" value={parkingConfig.totalCapacity} onChange={(e) => setParkingConfig({ ...parkingConfig, totalCapacity: e.target.value })} className="mt-1 block w-full rounded-lg border px-3 py-2 text-sm font-normal" /></label>
+        <label className="text-xs font-bold">Reserva mínima para uso regular<input required min="0" type="number" value={parkingConfig.regularReserve} onChange={(e) => setParkingConfig({ ...parkingConfig, regularReserve: e.target.value })} className="mt-1 block w-full rounded-lg border px-3 py-2 text-sm font-normal" /></label>
+        <div className="flex items-end justify-end gap-2"><button type="button" onClick={() => setShowParkingConfig(false)} className="rounded-lg border px-4 py-2 text-xs font-bold">Cancelar</button><button className="rounded-lg bg-[#800020] px-4 py-2 text-xs font-bold text-white">Guardar</button></div>
       </form>}
 
       {credential && <div className="rounded-xl border border-amber-300 bg-amber-50 p-5"><p className="text-sm font-bold text-amber-950">Contraseña temporal para {credential.name}</p><p className="mt-1 text-xs text-amber-800">Cópiala ahora; el usuario deberá cambiarla al ingresar.</p><PasswordInput readOnly value={credential.password} aria-label="Contraseña temporal" className="mt-3 w-full max-w-md rounded-lg border border-amber-300 bg-white px-3 py-2 font-mono font-bold" /></div>}
