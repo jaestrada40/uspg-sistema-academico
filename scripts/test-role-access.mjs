@@ -12,7 +12,7 @@ const cases = {
   ADMIN: [
     ['/api/students', 200], ['/api/finances', 200], ['/api/student-requests', 200],
     ['/api/library/books/no-existe/copies', 403, 'POST'],
-    ['/api/parking/offline-manifest', 403],
+    ['/api/parking/offline-manifest', 403], ['/api/parking', 200],
   ],
   DOCENTE: [
     ['/api/finances', 403], ['/api/student-requests', 403], ['/api/enrollment-documents', 403],

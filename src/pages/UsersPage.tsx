@@ -29,7 +29,7 @@ export const UsersPage: React.FC = () => {
 
   const load = async () => { const response = await fetch('/api/admin/users'); if (response.ok) setUsers(await response.json()); };
   const loadAudit = async () => { const response = await fetch('/api/audit-logs?limit=500'); if (response.ok) setAuditRecords(await response.json()); };
-  const loadParkingConfig = async () => { const response = await fetch('/api/parking'); if (response.ok) { const result = await response.json(); setParkingConfig({ totalCapacity: String(result.config.totalCapacity), regularReserve: String(result.config.regularReserve) }); } };
+  const loadParkingConfig = async () => { const response = await fetch('/api/parking'); if (response.ok) { const result = await response.json(); setParkingConfig({ totalCapacity: String(result.config.totalCapacity), regularReserve: String(result.config.regularReserve) }); } else { showToast('No se pudo cargar la configuración de aforo', 'error'); } };
 
   useEffect(() => { void load(); void loadParkingConfig(); }, []);
   useEffect(() => { if (tab === 'audit' && auditRecords.length === 0) void loadAudit(); }, [tab]);

@@ -21,7 +21,7 @@ export function registerLibraryRoutes(
 
   app.get('/api/library', requireUser, async (_req, res) => {
     const user = res.locals.authUser;
-    const staff = ['ADMIN', 'BIBLIOTECA'].includes(user.role);
+    const staff = user.role === 'BIBLIOTECA';
     await evaluateLibraryAlerts();
     await prisma.user.updateMany({ where: { librarySuspendedUntil: { lt: new Date(), not: null } }, data: { librarySuspendedUntil: null, librarySuspensionReason: null } });
     const expired = await prisma.libraryReservation.findMany({ where: { status: { in: ['ACTIVA', 'SOLICITADA', 'LISTA'] }, expiresAt: { lt: new Date() } } }); for (const item of expired) await prisma.$transaction(async (tx) => { await tx.libraryReservation.update({ where: { id: item.id }, data: { status: 'EXPIRADA' } }); if (item.assignedCopyId) await tx.libraryCopy.updateMany({ where: { id: item.assignedCopyId, status: 'RESERVADO' }, data: { status: 'DISPONIBLE' } }); });
@@ -68,7 +68,7 @@ export function registerLibraryRoutes(
 
   app.post('/api/library/loans/:id/renew', requireUser, async (req, res) => {
     const loan = await prisma.libraryLoan.findUnique({ where: { id: req.params.id }, include: { copy: true } }); if (!loan || loan.status !== 'PRESTADO') return void res.status(409).json({ message: 'El préstamo no está activo.' });
-    if (!['ADMIN', 'BIBLIOTECA'].includes(res.locals.authUser.role) && loan.borrowerId !== res.locals.authUser.id) return void res.status(403).json({ message: 'No puedes renovar este préstamo.' }); if (loan.renewalCount >= 1) return void res.status(409).json({ message: 'Solo se permite una renovación.' });
+    if (!['BIBLIOTECA'].includes(res.locals.authUser.role) && loan.borrowerId !== res.locals.authUser.id) return void res.status(403).json({ message: 'No puedes renovar este préstamo.' }); if (loan.renewalCount >= 1) return void res.status(409).json({ message: 'Solo se permite una renovación.' });
     if (await prisma.libraryReservation.findFirst({ where: { bookId: loan.copy.bookId, status: { in: ['ACTIVA', 'SOLICITADA', 'LISTA'] } } })) return void res.status(409).json({ message: 'El libro tiene solicitudes pendientes.' }); const dueAt = new Date(loan.dueAt); dueAt.setDate(dueAt.getDate() + 7); res.json(await prisma.libraryLoan.update({ where: { id: loan.id }, data: { dueAt, renewalCount: { increment: 1 } } }));
   });
 
@@ -82,7 +82,7 @@ export function registerLibraryRoutes(
   });
 
   app.patch('/api/library/reservations/:id/cancel', requireUser, async (req, res) => {
-    const reservation = await prisma.libraryReservation.findUnique({ where: { id: req.params.id } }); if (!reservation || !['ACTIVA','SOLICITADA','LISTA'].includes(reservation.status)) return void res.status(409).json({ message: 'La solicitud ya no puede cancelarse.' }); if (!['ADMIN','BIBLIOTECA'].includes(res.locals.authUser.role) && reservation.userId !== res.locals.authUser.id) return void res.status(403).json({ message: 'No puedes cancelar esta solicitud.' }); const saved = await prisma.$transaction(async (tx) => { if (reservation.assignedCopyId) await tx.libraryCopy.updateMany({ where: { id: reservation.assignedCopyId, status: 'RESERVADO' }, data: { status: 'DISPONIBLE' } }); return tx.libraryReservation.update({ where: { id: reservation.id }, data: { status: 'CANCELADA', cancelledAt: new Date() } }); }); res.json(saved);
+    const reservation = await prisma.libraryReservation.findUnique({ where: { id: req.params.id } }); if (!reservation || !['ACTIVA','SOLICITADA','LISTA'].includes(reservation.status)) return void res.status(409).json({ message: 'La solicitud ya no puede cancelarse.' }); if (!['BIBLIOTECA'].includes(res.locals.authUser.role) && reservation.userId !== res.locals.authUser.id) return void res.status(403).json({ message: 'No puedes cancelar esta solicitud.' }); const saved = await prisma.$transaction(async (tx) => { if (reservation.assignedCopyId) await tx.libraryCopy.updateMany({ where: { id: reservation.assignedCopyId, status: 'RESERVADO' }, data: { status: 'DISPONIBLE' } }); return tx.libraryReservation.update({ where: { id: reservation.id }, data: { status: 'CANCELADA', cancelledAt: new Date() } }); }); res.json(saved);
   });
 
   app.patch('/api/library/books/:id', requireUser, requireLibraryStaff, async (req, res) => {
