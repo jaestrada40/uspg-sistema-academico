@@ -204,19 +204,19 @@ model Course {
 }
 
 model Campus {
-  id            String      @id
-  code          String      @unique
-  name          String
-  address       String?
-  status        String      @default("Activo")
-  students      Student[]
-  financialFees CareerFee[]
+  id              String           @id
+  code            String           @unique
+  name            String
+  address         String?
+  status          String           @default("Activo")
+  students        Student[]
+  financialFees   CareerFee[]
   curriculumPlans CurriculumPlan[]
-  cycles        AcademicCycle[]
-  classrooms    Classroom[]
-  teachers      Teacher[]
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
+  cycles          AcademicCycle[]
+  classrooms      Classroom[]
+  teachers        Teacher[]
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
 
   @@map("campuses")
 }
@@ -270,24 +270,24 @@ model CoursePrerequisite {
 }
 
 model AcademicCycle {
-  id                      String    @id
+  id                      String               @id
   year                    Int
   name                    String
-  startDate               DateTime  @map("start_date")
-  endDate                 DateTime  @map("end_date")
-  enrollmentStartDate     DateTime  @map("enrollment_start_date")
-  enrollmentEndDate       DateTime  @map("enrollment_end_date")
-  gradeSubmissionDeadline DateTime  @map("grade_submission_deadline")
-  examStartDate           DateTime? @map("exam_start_date")
-  examEndDate             DateTime? @map("exam_end_date")
+  startDate               DateTime             @map("start_date")
+  endDate                 DateTime             @map("end_date")
+  enrollmentStartDate     DateTime             @map("enrollment_start_date")
+  enrollmentEndDate       DateTime             @map("enrollment_end_date")
+  gradeSubmissionDeadline DateTime             @map("grade_submission_deadline")
+  examStartDate           DateTime?            @map("exam_start_date")
+  examEndDate             DateTime?            @map("exam_end_date")
   status                  String
-  isCurrent               Boolean   @default(false) @map("is_current")
-  campusId                String    @map("campus_id")
-  campus                  Campus    @relation(fields: [campusId], references: [id], onDelete: Restrict)
+  isCurrent               Boolean              @default(false) @map("is_current")
+  campusId                String               @map("campus_id")
+  campus                  Campus               @relation(fields: [campusId], references: [id], onDelete: Restrict)
   sections                Section[]
   parkingFeeSchedules     ParkingFeeSchedule[]
-  createdAt               DateTime  @default(now()) @map("created_at")
-  updatedAt               DateTime  @updatedAt @map("updated_at")
+  createdAt               DateTime             @default(now()) @map("created_at")
+  updatedAt               DateTime             @updatedAt @map("updated_at")
 
   @@index([campusId])
   @@map("academic_cycles")
@@ -372,28 +372,28 @@ model GradeRecord {
 }
 
 model FinancialCharge {
-  id             String                @id @default(cuid())
-  concept        String
-  amount         Float
-  dueDate        DateTime              @map("due_date")
-  status         String                @default("PENDIENTE")
-  cycleId        String?               @map("cycle_id")
-  careerFeeId    String?               @map("career_fee_id")
-  studentCarnet  String                @map("student_carnet")
-  student        Student               @relation(fields: [studentCarnet], references: [carnet], onDelete: Restrict)
-  payments       Payment[]
-  transferProofs TransferProof[]
-  adjustments    FinancialAdjustment[]
-  agreementId    String?               @map("agreement_id")
-  agreement      PaymentAgreement?     @relation(fields: [agreementId], references: [id], onDelete: SetNull)
-  careerFee      CareerFee?            @relation(fields: [careerFeeId], references: [id], onDelete: SetNull)
-  vehicleId            String?             @map("vehicle_id")
-  vehicle              ParkingVehicle?     @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
-  parkingFeeScheduleId String?             @map("parking_fee_schedule_id")
-  parkingFeeSchedule   ParkingFeeSchedule? @relation(fields: [parkingFeeScheduleId], references: [id], onDelete: SetNull)
-  recoveryExam   RecoveryExam?
-  createdAt      DateTime              @default(now()) @map("created_at")
-  updatedAt      DateTime              @updatedAt @map("updated_at")
+  id                   String                @id @default(cuid())
+  concept              String
+  amount               Float
+  dueDate              DateTime              @map("due_date")
+  status               String                @default("PENDIENTE")
+  cycleId              String?               @map("cycle_id")
+  careerFeeId          String?               @map("career_fee_id")
+  studentCarnet        String                @map("student_carnet")
+  student              Student               @relation(fields: [studentCarnet], references: [carnet], onDelete: Restrict)
+  payments             Payment[]
+  transferProofs       TransferProof[]
+  adjustments          FinancialAdjustment[]
+  agreementId          String?               @map("agreement_id")
+  agreement            PaymentAgreement?     @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  careerFee            CareerFee?            @relation(fields: [careerFeeId], references: [id], onDelete: SetNull)
+  vehicleId            String?               @map("vehicle_id")
+  vehicle              ParkingVehicle?       @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  parkingFeeScheduleId String?               @map("parking_fee_schedule_id")
+  parkingFeeSchedule   ParkingFeeSchedule?   @relation(fields: [parkingFeeScheduleId], references: [id], onDelete: SetNull)
+  recoveryExam         RecoveryExam?
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
 
   @@unique([careerFeeId, studentCarnet])
   @@index([studentCarnet, status])
@@ -846,20 +846,20 @@ model ParkingConfig {
 }
 
 model ParkingVehicle {
-  id         String         @id @default(cuid())
-  plate      String         @unique
+  id         String            @id @default(cuid())
+  plate      String            @unique
   make       String
   model      String
   color      String
-  type       String         @default("AUTOMOVIL")
-  accessCode String         @unique @map("access_code")
-  status     String         @default("ACTIVO")
-  ownerId    String         @map("owner_id")
-  owner      User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  type       String            @default("AUTOMOVIL")
+  accessCode String            @unique @map("access_code")
+  status     String            @default("ACTIVO")
+  ownerId    String            @map("owner_id")
+  owner      User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   visits     ParkingVisit[]
   charges    FinancialCharge[]
-  createdAt  DateTime       @default(now()) @map("created_at")
-  updatedAt  DateTime       @updatedAt @map("updated_at")
+  createdAt  DateTime          @default(now()) @map("created_at")
+  updatedAt  DateTime          @updatedAt @map("updated_at")
 
   @@index([ownerId, status])
   @@map("parking_vehicles")
