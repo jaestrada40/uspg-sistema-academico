@@ -12,7 +12,7 @@ export function registerFinanceRoutes(
   const financeView = (charge: any) => { const paid = charge.payments.reduce((sum: number, payment: any) => sum + payment.amount, 0); const adjusted = (charge.adjustments || []).reduce((sum: number, item: any) => sum + item.amount, 0); const netAmount = Math.max(0, charge.amount - adjusted); const balance = Math.max(0, netAmount - paid); const status = balance <= 0 ? 'PAGADO' : charge.dueDate < new Date() ? 'VENCIDO' : 'PENDIENTE'; return { id: charge.id, concept: charge.concept, grossAmount: charge.amount, adjusted, amount: netAmount, paid, balance, dueDate: charge.dueDate, status, cycleId: charge.cycleId, studentCarnet: charge.studentCarnet, studentName: charge.student.name, adjustments: (charge.adjustments || []).map((item: any) => ({ id: item.id, type: item.type, amount: item.amount, reason: item.reason, createdAt: item.createdAt })), payments: charge.payments.map((payment: any) => ({ id: payment.id, receiptNumber: payment.receiptNumber, amount: payment.amount, method: payment.method, reference: payment.reference, paidAt: payment.paidAt })) }; };
   const statementDates = (req: express.Request) => { const from = req.query.from ? new Date(`${String(req.query.from)}T00:00:00.000Z`) : new Date('2000-01-01T00:00:00.000Z'); const to = req.query.to ? new Date(`${String(req.query.to)}T23:59:59.999Z`) : new Date(); return { from, to, valid: !Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime()) && from <= to }; };
   const buildFinancialStatement = async (studentCarnet: string, from: Date, to: Date) => { const student = await prisma.student.findUnique({ where: { carnet: studentCarnet } }); if (!student) return null; const [charges, payments, adjustments] = await Promise.all([prisma.financialCharge.findMany({ where: { studentCarnet, createdAt: { lte: to } }, orderBy: { createdAt: 'asc' } }), prisma.payment.findMany({ where: { studentCarnet, paidAt: { lte: to } }, include: { charge: { select: { concept: true } } }, orderBy: { paidAt: 'asc' } }), prisma.financialAdjustment.findMany({ where: { studentCarnet, createdAt: { lte: to } }, include: { charge: { select: { concept: true } } }, orderBy: { createdAt: 'asc' } })]); const openingCharges = charges.filter((item) => item.createdAt < from).reduce((sum, item) => sum + item.amount, 0); const openingPayments = payments.filter((item) => item.paidAt < from).reduce((sum, item) => sum + item.amount, 0); const openingAdjustments = adjustments.filter((item) => item.createdAt < from).reduce((sum, item) => sum + item.amount, 0); const openingBalance = openingCharges - openingPayments - openingAdjustments; const movements = [...charges.filter((item) => item.createdAt >= from).map((item) => ({ id: `charge:${item.id}`, date: item.createdAt, type: 'CARGO', document: item.id.slice(-8).toUpperCase(), description: item.concept, debit: item.amount, credit: 0 })), ...payments.filter((item) => item.paidAt >= from).map((item) => ({ id: `payment:${item.id}`, date: item.paidAt, type: 'PAGO', document: item.receiptNumber, description: `Pago · ${item.charge.concept}`, debit: 0, credit: item.amount })), ...adjustments.filter((item) => item.createdAt >= from).map((item) => ({ id: `adjustment:${item.id}`, date: item.createdAt, type: item.type, document: item.id.slice(-8).toUpperCase(), description: `${item.type === 'BECA' ? 'Beca' : 'Descuento'} · ${item.charge.concept}`, debit: 0, credit: item.amount }))].sort((a, b) => a.date.getTime() - b.date.getTime()); let runningBalance = openingBalance; const ledger = movements.map((item) => { runningBalance += item.debit - item.credit; return { ...item, balance: runningBalance }; }); const periodDebits = movements.reduce((sum, item) => sum + item.debit, 0), periodCredits = movements.reduce((sum, item) => sum + item.credit, 0); return { student: { carnet: student.carnet, name: student.name, careerName: student.careerName || student.careerId }, period: { from, to }, openingBalance, periodDebits, periodCredits, closingBalance: runningBalance, movements: ledger }; };
-  const { requireUser, requireAdmin } = middleware;
+  const { requireUser, requireFinance } = middleware;
 
   app.get('/api/finances', requireUser, async (req, res) => {
     const user = res.locals.authUser;
@@ -39,12 +39,12 @@ export function registerFinanceRoutes(
     res.json(statement);
   });
 
-  app.get('/api/finances/career-fees', requireAdmin, async (_req, res) => {
+  app.get('/api/finances/career-fees', requireFinance, async (_req, res) => {
     const fees = await prisma.careerFee.findMany({ include: { career: { select: { name: true } }, campus: { select: { name: true } }, plan: { select: { code: true, version: true } } }, orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }] });
     res.json(fees.map((fee) => ({ ...fee, careerName: fee.career.name, campusName: fee.campus?.name, planCode: fee.plan?.code, planVersion: fee.plan?.version })));
   });
 
-  app.post('/api/finances/career-fee-schedules', requireAdmin, async (req, res) => {
+  app.post('/api/finances/career-fee-schedules', requireFinance, async (req, res) => {
     const careerId = String(req.body.careerId || '').trim();
     const cycleId = String(req.body.cycleId || '').trim();
     const campusId = req.body.campusId ? String(req.body.campusId) : null;
@@ -82,7 +82,7 @@ export function registerFinanceRoutes(
     res.status(201).json({ fees: created, assignedCount: activeStudents.length, message: `Calendario creado con ${created.length} cargos para ${activeStudents.length} estudiantes.` });
   });
 
-  app.post('/api/finances/career-fees', requireAdmin, async (req, res) => {
+  app.post('/api/finances/career-fees', requireFinance, async (req, res) => {
     const careerId = String(req.body.careerId || '').trim();
     const cycleId = String(req.body.cycleId || '').trim();
     const concept = String(req.body.concept || '').trim();
@@ -104,7 +104,7 @@ export function registerFinanceRoutes(
     res.status(201).json({ ...fee, careerName: career.name, message: `Cargo asignado a ${activeStudents.length} estudiantes activos de ${career.name}.` });
   });
 
-  app.post('/api/finances/charges', requireAdmin, async (req, res) => {
+  app.post('/api/finances/charges', requireFinance, async (req, res) => {
     const studentCarnet = String(req.body.studentCarnet || '').trim();
     const concept = String(req.body.concept || '').trim();
     const amount = Number(req.body.amount);
@@ -119,7 +119,7 @@ export function registerFinanceRoutes(
     res.status(201).json(financeView(charge));
   });
 
-  app.post('/api/finances/adjustments', requireAdmin, async (req, res) => {
+  app.post('/api/finances/adjustments', requireFinance, async (req, res) => {
     const chargeId = String(req.body.chargeId || '');
     const type = String(req.body.type || '').trim().toUpperCase();
     const amount = Number(req.body.amount);
@@ -141,7 +141,7 @@ export function registerFinanceRoutes(
     res.status(201).json(adjustment);
   });
 
-  app.post('/api/finances/late-fees', requireAdmin, async (req, res) => {
+  app.post('/api/finances/late-fees', requireFinance, async (req, res) => {
     const studentCarnet = String(req.body.studentCarnet || '').trim();
     const amount = Number(req.body.amount);
     const reason = String(req.body.reason || '').trim();
@@ -157,7 +157,7 @@ export function registerFinanceRoutes(
     res.status(201).json(charge);
   });
 
-  app.post('/api/finances/agreements', requireAdmin, async (req, res) => {
+  app.post('/api/finances/agreements', requireFinance, async (req, res) => {
     const studentCarnet = String(req.body.studentCarnet || '').trim();
     const totalAmount = Number(req.body.totalAmount);
     const installments = Number(req.body.installments);
@@ -177,7 +177,7 @@ export function registerFinanceRoutes(
     res.status(201).json(agreement);
   });
 
-  app.post('/api/finances/payments', requireAdmin, async (req, res) => {
+  app.post('/api/finances/payments', requireFinance, async (req, res) => {
     const chargeId = String(req.body.chargeId || '');
     const amount = Number(req.body.amount);
     const method = String(req.body.method || '').trim().toUpperCase();
@@ -257,7 +257,7 @@ export function registerFinanceRoutes(
     res.send(Buffer.from(proof.fileData, 'base64'));
   });
 
-  app.patch('/api/finances/transfer-proofs/:id/review', requireAdmin, async (req, res) => {
+  app.patch('/api/finances/transfer-proofs/:id/review', requireFinance, async (req, res) => {
     const status = String(req.body.status || '').trim().toUpperCase();
     const reviewNote = String(req.body.reviewNote || '').trim();
     if (!['APROBADO', 'RECHAZADO'].includes(status) || (status === 'RECHAZADO' && reviewNote.length < 3)) return void res.status(400).json({ message: 'Selecciona aprobar o rechazar; el rechazo requiere una observación.' });
