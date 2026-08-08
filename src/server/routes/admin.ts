@@ -9,7 +9,7 @@ export function registerAdminRoutes(
   helpers: ServerHelpers,
 ) {
   const { handleUniqueError, notifyUser, hashPassword, temporaryPassword } = helpers;
-  const { requireAdmin } = middleware;
+  const { requireAdmin, requireRegistro } = middleware;
 
   app.get('/api/admin/users', requireAdmin, async (_req, res) => {
     const users = await prisma.user.findMany({
@@ -94,7 +94,7 @@ export function registerAdminRoutes(
     });
   });
 
-  app.put('/api/institution', requireAdmin, async (req, res) => {
+  app.put('/api/institution', requireRegistro, async (req, res) => {
     const name = String(req.body?.name || '').trim();
     const shortName = String(req.body?.shortName || '').trim().toUpperCase();
     const logoDataUrl = req.body?.logoDataUrl == null ? null : String(req.body.logoDataUrl);
@@ -123,12 +123,12 @@ export function registerAdminRoutes(
     res.json(institution);
   });
 
-  app.get('/api/parameters', requireAdmin, async (_req, res) => {
+  app.get('/api/parameters', requireRegistro, async (_req, res) => {
     const params = await prisma.institutionConfig.findUnique({ where: { id: 1 } });
     res.json(params || {});
   });
 
-  app.get('/api/audit-logs', requireAdmin, async (req, res) => {
+  app.get('/api/audit-logs', requireRegistro, async (req, res) => {
     const take = Math.min(Number(req.query.limit) || 100, 500);
     const records = await prisma.auditLog.findMany({
       include: { actor: { select: { name: true, role: true } } },
@@ -147,18 +147,18 @@ export function registerAdminRoutes(
     })));
   });
 
-  app.get('/api/academic-parameters', requireAdmin, async (_req, res) => {
+  app.get('/api/academic-parameters', requireRegistro, async (_req, res) => {
     const config = await prisma.institutionConfig.findUnique({ where: { id: 1 } });
     res.json(config || {});
   });
 
-  app.get('/api/classrooms', requireAdmin, async (_req, res) => res.json(await prisma.classroom.findMany({ orderBy: [{ building: 'asc' }, { code: 'asc' }] })));
-  app.post('/api/classrooms', requireAdmin, async (req, res) => {
+  app.get('/api/classrooms', requireRegistro, async (_req, res) => res.json(await prisma.classroom.findMany({ orderBy: [{ building: 'asc' }, { code: 'asc' }] })));
+  app.post('/api/classrooms', requireRegistro, async (req, res) => {
     if (!req.body.campusId) return void res.status(400).json({ message: 'Selecciona el campus del aula.' });
     try { const classroom = await prisma.classroom.create({ data: req.body }); res.status(201).json(classroom); }
     catch (error) { if (!handleUniqueError(error, res)) throw error; }
   });
-  app.patch('/api/classrooms/:id', requireAdmin, async (req, res) => {
+  app.patch('/api/classrooms/:id', requireRegistro, async (req, res) => {
     if ('campusId' in req.body && !req.body.campusId) return void res.status(400).json({ message: 'Selecciona el campus del aula.' });
     res.json(await prisma.classroom.update({ where: { id: req.params.id }, data: req.body }));
   });
