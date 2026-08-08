@@ -12,7 +12,7 @@ export function registerAcademicRoutes(
   const { handleUniqueError, hashPassword, temporaryPassword, roleFromEmail } = helpers;
   const enrollmentView = (record: any) => ({ id: record.id, studentCarnet: record.studentCarnet, studentName: record.student?.name, sectionId: record.sectionId, courseCode: record.section?.courseCode, courseName: record.section?.course?.name, cycleId: record.section?.cycleId, enrollmentDate: record.enrollmentDate.toISOString().slice(0, 10), status: record.status });
   const cycleView = (cycle: any) => ({ ...cycle, startDate: cycle.startDate.toISOString().slice(0, 10), endDate: cycle.endDate.toISOString().slice(0, 10), enrollmentStartDate: cycle.enrollmentStartDate.toISOString().slice(0, 10), enrollmentEndDate: cycle.enrollmentEndDate.toISOString().slice(0, 10), gradeSubmissionDeadline: cycle.gradeSubmissionDeadline.toISOString().slice(0, 10), examStartDate: cycle.examStartDate ? cycle.examStartDate.toISOString().slice(0, 10) : undefined, examEndDate: cycle.examEndDate ? cycle.examEndDate.toISOString().slice(0, 10) : undefined, campusName: cycle.campus?.name, campusCode: cycle.campus?.code, campus: undefined });
-  const { requireAdmin, requireUser } = middleware;
+  const { requireRegistro, requireUser } = middleware;
 
   const studentView = (student: any) => ({ ...student, campusName: student.campus?.name, planCode: student.plan?.code, planName: student.plan?.name, planVersion: student.plan?.version, campus: undefined, plan: undefined });
 
@@ -27,7 +27,7 @@ export function registerAcademicRoutes(
     res.json({ campuses, plans: plans.map((plan) => ({ ...plan, careerName: plan.career.name, career: undefined })) });
   });
 
-  app.post('/api/academic-structure/campuses', requireAdmin, async (req, res) => {
+  app.post('/api/academic-structure/campuses', requireRegistro, async (req, res) => {
     const code = String(req.body.code || '').trim().toUpperCase(), name = String(req.body.name || '').trim(), address = String(req.body.address || '').trim();
     if (!/^[A-Z0-9-]{2,12}$/.test(code) || name.length < 3) return void res.status(400).json({ message: 'Indica un código válido y el nombre del campus.' });
     try {
@@ -36,7 +36,7 @@ export function registerAcademicRoutes(
     } catch (error) { if (!handleUniqueError(error, res)) throw error; }
   });
 
-  app.patch('/api/academic-structure/campuses/:id', requireAdmin, async (req, res) => {
+  app.patch('/api/academic-structure/campuses/:id', requireRegistro, async (req, res) => {
     const current = await prisma.campus.findUnique({ where: { id: req.params.id }, include: { _count: { select: { students: true } } } });
     if (!current) return void res.status(404).json({ message: 'Campus no encontrado.' });
     const name = String(req.body.name ?? current.name).trim(), address = String(req.body.address ?? current.address ?? '').trim(), status = String(req.body.status ?? current.status);
@@ -45,7 +45,7 @@ export function registerAcademicRoutes(
     res.json(campus);
   });
 
-  app.post('/api/academic-structure/plans', requireAdmin, async (req, res) => {
+  app.post('/api/academic-structure/plans', requireRegistro, async (req, res) => {
     const code = String(req.body.code || '').trim().toUpperCase(), name = String(req.body.name || '').trim(), version = String(req.body.version || '').trim().toUpperCase(), careerId = String(req.body.careerId || ''), sourcePlanId = String(req.body.sourcePlanId || ''), campusId = String(req.body.campusId || '');
     const effectiveFrom = new Date(`${req.body.effectiveFrom}T12:00:00Z`), totalCredits = Number(req.body.totalCredits), durationSemesters = Number(req.body.durationSemesters);
     if (!/^[A-Z0-9-]{3,30}$/.test(code) || name.length < 5 || !version || !careerId || !campusId || Number.isNaN(effectiveFrom.getTime()) || !Number.isInteger(totalCredits) || totalCredits <= 0 || !Number.isInteger(durationSemesters) || durationSemesters <= 0) return void res.status(400).json({ message: 'Completa carrera, campus, código, nombre, versión, vigencia, créditos y semestres.' });
@@ -62,7 +62,7 @@ export function registerAcademicRoutes(
     } catch (error) { if (!handleUniqueError(error, res)) throw error; }
   });
 
-  app.patch('/api/academic-structure/plans/:id', requireAdmin, async (req, res) => {
+  app.patch('/api/academic-structure/plans/:id', requireRegistro, async (req, res) => {
     const current = await prisma.curriculumPlan.findUnique({ where: { id: req.params.id }, include: { _count: { select: { students: true } } } });
     if (!current) return void res.status(404).json({ message: 'Plan académico no encontrado.' });
     const status = String(req.body.status ?? current.status), name = String(req.body.name ?? current.name).trim(), campusId = String(req.body.campusId ?? current.campusId ?? '');
@@ -75,7 +75,7 @@ export function registerAcademicRoutes(
 
   // ── Curriculum Plans ────────────────────────────────────────────────────────
 
-  app.get('/api/curriculum-plans/organizer', requireAdmin, async (_req, res) => {
+  app.get('/api/curriculum-plans/organizer', requireRegistro, async (_req, res) => {
     const [careers, plans] = await Promise.all([
       prisma.career.findMany({ where: { status: 'Activo' }, select: { code: true, name: true }, orderBy: { name: 'asc' } }),
       prisma.curriculumPlan.findMany({ include: { courses: { include: { course: { include: { prerequisites: { include: { prerequisite: { select: { name: true } } } } } } }, orderBy: [{ semester: 'asc' }, { courseCode: 'asc' }] } }, orderBy: [{ careerId: 'asc' }, { effectiveFrom: 'desc' }] }),
@@ -83,7 +83,7 @@ export function registerAcademicRoutes(
     res.json({ careers, plans: plans.map((plan) => ({ id: plan.id, code: plan.code, name: plan.name, version: plan.version, careerId: plan.careerId, status: plan.status, durationSemesters: plan.durationSemesters, totalCredits: plan.totalCredits, courses: plan.courses.map((item) => ({ code: item.course.code, name: item.course.name, credits: item.course.credits, semester: item.semester, prerequisites: item.course.prerequisites.map((prerequisite) => ({ code: prerequisite.prerequisiteCode, name: prerequisite.prerequisite.name })) })) })) });
   });
 
-  app.patch('/api/curriculum-plans/:id/layout', requireAdmin, async (req, res) => {
+  app.patch('/api/curriculum-plans/:id/layout', requireRegistro, async (req, res) => {
     const durationSemesters = Number(req.body.durationSemesters), assignments = Array.isArray(req.body.assignments) ? req.body.assignments : [];
     if (!Number.isInteger(durationSemesters) || durationSemesters < 1 || durationSemesters > 12) return void res.status(400).json({ message: 'La duración debe estar entre 1 y 12 semestres.' });
     const plan = await prisma.curriculumPlan.findUnique({ where: { id: req.params.id }, include: { courses: { include: { course: { include: { prerequisites: true } } } } } });
@@ -104,12 +104,12 @@ export function registerAcademicRoutes(
 
   // ── Students ────────────────────────────────────────────────────────────────
 
-  app.get('/api/students', requireAdmin, async (_req, res) => {
+  app.get('/api/students', requireRegistro, async (_req, res) => {
     const records = await prisma.student.findMany({ include: { campus: true, plan: true }, orderBy: { name: 'asc' } });
     res.json(records.map(studentView));
   });
 
-  app.post('/api/students', requireAdmin, async (req, res) => {
+  app.post('/api/students', requireRegistro, async (req, res) => {
     const data = req.body;
     const normalizedEmail = String(data.email || '').trim().toLowerCase();
     if (roleFromEmail(normalizedEmail) !== 'ESTUDIANTE') {
@@ -134,7 +134,7 @@ export function registerAcademicRoutes(
     }
   });
 
-  app.patch('/api/students/:carnet', requireAdmin, async (req, res) => {
+  app.patch('/api/students/:carnet', requireRegistro, async (req, res) => {
     const current = await prisma.student.findUnique({ where: { carnet: req.params.carnet } });
     if (!current) return void res.status(404).json({ message: 'Estudiante no encontrado.' });
     const next = { ...current, ...req.body };
@@ -157,12 +157,12 @@ export function registerAcademicRoutes(
 
   // ── Teachers ────────────────────────────────────────────────────────────────
 
-  app.get('/api/teachers', requireAdmin, async (_req, res) => {
+  app.get('/api/teachers', requireRegistro, async (_req, res) => {
     const records = await prisma.teacher.findMany({ orderBy: { name: 'asc' } });
     res.json(records.map(({ assignedSectionIds, ...teacher }) => ({ ...teacher, assignedSectionIds: JSON.parse(assignedSectionIds) })));
   });
 
-  app.post('/api/teachers', requireAdmin, async (req, res) => {
+  app.post('/api/teachers', requireRegistro, async (req, res) => {
     const data = req.body;
     if (roleFromEmail(String(data.email || '')) !== 'DOCENTE') return void res.status(400).json({ message: 'El catedrático debe usar un correo @catedratico.uspg.edu.gt.' });
     if (!data.campusId) return void res.status(400).json({ message: 'Selecciona el campus del docente.' });
@@ -179,7 +179,7 @@ export function registerAcademicRoutes(
     } catch (error) { if (!handleUniqueError(error, res)) throw error; }
   });
 
-  app.patch('/api/teachers/:code', requireAdmin, async (req, res) => {
+  app.patch('/api/teachers/:code', requireRegistro, async (req, res) => {
     const current = await prisma.teacher.findUnique({ where: { code: req.params.code } });
     if (!current) return void res.status(404).json({ message: 'Catedrático no encontrado.' });
     const next = { ...current, ...req.body };
@@ -203,12 +203,12 @@ export function registerAcademicRoutes(
     courseCount: await prisma.course.count({ where: { careerId: career.code } }),
   });
 
-  app.get('/api/careers', requireAdmin, async (_req, res) => {
+  app.get('/api/careers', requireRegistro, async (_req, res) => {
     const records = await prisma.career.findMany({ orderBy: { name: 'asc' } });
     res.json(await Promise.all(records.map(careerView)));
   });
 
-  app.post('/api/careers', requireAdmin, async (req, res) => {
+  app.post('/api/careers', requireRegistro, async (req, res) => {
     const data = req.body;
     if (!data.code?.trim() || !data.name?.trim()) return void res.status(400).json({ message: 'El código y nombre son obligatorios.' });
     try {
@@ -221,7 +221,7 @@ export function registerAcademicRoutes(
     } catch (error) { if (!handleUniqueError(error, res)) throw error; }
   });
 
-  app.patch('/api/careers/:code', requireAdmin, async (req, res) => {
+  app.patch('/api/careers/:code', requireRegistro, async (req, res) => {
     const current = await prisma.career.findUnique({ where: { code: req.params.code } });
     if (!current) return void res.status(404).json({ message: 'Carrera no encontrada.' });
     const next = { ...current, ...req.body, code: current.code };
@@ -287,7 +287,7 @@ export function registerAcademicRoutes(
     return rows.map((row, index) => ({ ...Object.fromEntries(Object.entries(row).map(([key, value]) => [aliases[normalizeImportHeader(key)] || normalizeImportHeader(key), value])), rowNumber: index + 2 }));
   };
 
-  app.post('/api/courses/import', requireAdmin, async (req, res) => {
+  app.post('/api/courses/import', requireRegistro, async (req, res) => {
     let rows: any[];
     try { rows = parseCourseImport(req.body.dataUrl); } catch (error) { return void res.status(400).json({ message: error instanceof Error ? error.message : 'No se pudo leer el archivo Excel.' }); }
     if (!rows.length) return void res.status(400).json({ message: 'El archivo Excel no contiene cursos.' });
@@ -328,12 +328,12 @@ export function registerAcademicRoutes(
     res.status(201).json({ message: `Se importaron ${normalizedRows.length} cursos correctamente.`, imported: normalizedRows.length });
   });
 
-  app.get('/api/courses', requireAdmin, async (_req, res) => {
+  app.get('/api/courses', requireRegistro, async (_req, res) => {
     const records = await prisma.course.findMany({ include: { career: true, prerequisites: true }, orderBy: [{ careerId: 'asc' }, { semester: 'asc' }, { code: 'asc' }] });
     res.json(records.map(courseView));
   });
 
-  app.post('/api/courses', requireAdmin, async (req, res) => {
+  app.post('/api/courses', requireRegistro, async (req, res) => {
     const data = req.body;
     const code = String(data.code || '').trim().toUpperCase();
     const prerequisiteCodes = Array.isArray(data.prerequisiteCodes) ? data.prerequisiteCodes : [];
@@ -350,7 +350,7 @@ export function registerAcademicRoutes(
     } catch (error) { if (!handleUniqueError(error, res)) throw error; }
   });
 
-  app.patch('/api/courses/:code', requireAdmin, async (req, res) => {
+  app.patch('/api/courses/:code', requireRegistro, async (req, res) => {
     const current = await prisma.course.findUnique({ where: { code: req.params.code } });
     if (!current) return void res.status(404).json({ message: 'Curso no encontrado.' });
     const next = { ...current, ...req.body, code: current.code };
@@ -425,7 +425,7 @@ export function registerAcademicRoutes(
   // ── Cycles ──────────────────────────────────────────────────────────────────
 
   app.get('/api/cycles', requireUser, async (_req, res) => res.json((await prisma.academicCycle.findMany({ orderBy: { startDate: 'desc' }, include: { campus: true } })).map(cycleView)));
-  app.post('/api/cycles', requireAdmin, async (req, res) => {
+  app.post('/api/cycles', requireRegistro, async (req, res) => {
     const data = req.body;
     if (new Date(data.startDate) >= new Date(data.endDate) || new Date(data.enrollmentStartDate) > new Date(data.enrollmentEndDate)) return void res.status(400).json({ message: 'Las fechas del ciclo no son válidas.' });
     if (!data.campusId) return void res.status(400).json({ message: 'Selecciona el campus del ciclo.' });
@@ -438,7 +438,7 @@ export function registerAcademicRoutes(
     });
     res.status(201).json(cycleView(cycle));
   });
-  app.patch('/api/cycles/:id', requireAdmin, async (req, res) => {
+  app.patch('/api/cycles/:id', requireRegistro, async (req, res) => {
     const current = await prisma.academicCycle.findUnique({ where: { id: req.params.id } });
     if (!current) return void res.status(404).json({ message: 'Ciclo no encontrado.' });
     const data = req.body;
@@ -471,7 +471,7 @@ export function registerAcademicRoutes(
   const schedulesOverlap = (a: string, b: string) => { const first = timeRange(a); const second = timeRange(b); return Boolean(first && second && first.start < second.end && second.start < first.end); };
 
   app.get('/api/sections', requireUser, async (_req, res) => res.json((await prisma.section.findMany({ include: { course: true, teacher: true, classroom: true } })).map(sectionView)));
-  app.post('/api/sections', requireAdmin, async (req, res) => {
+  app.post('/api/sections', requireRegistro, async (req, res) => {
     const data = req.body;
     const range = timeRange(data.scheduleTime); if (!range || !Array.isArray(data.scheduleDays) || data.scheduleDays.length === 0) return void res.status(400).json({ message: 'Indica un horario válido (ej. 07:45 - 10:00) y al menos un día.' });
     const classroom = await prisma.classroom.findUnique({ where: { id: data.classroomId } });
@@ -495,7 +495,7 @@ export function registerAcademicRoutes(
       res.status(201).json(sectionView(section));
     } catch (error) { if (!handleUniqueError(error, res)) throw error; }
   });
-  app.patch('/api/sections/:id', requireAdmin, async (req, res) => {
+  app.patch('/api/sections/:id', requireRegistro, async (req, res) => {
     const current = await prisma.section.findUnique({ where: { id: req.params.id } }); if (!current) return void res.status(404).json({ message: 'Sección no encontrada.' });
     const nextDays = Array.isArray(req.body.scheduleDays) ? req.body.scheduleDays : JSON.parse(current.scheduleDays); const nextTime = req.body.scheduleTime || current.scheduleTime; const range = timeRange(nextTime); if (!range || !nextDays.length) return void res.status(400).json({ message: 'Indica un horario válido y al menos un día.' });
     if (req.body.capacity !== undefined && Number(req.body.capacity) < current.enrolledCount) return void res.status(400).json({ message: `El cupo no puede ser menor que los ${current.enrolledCount} estudiantes inscritos.` });
@@ -505,7 +505,7 @@ export function registerAcademicRoutes(
     const section = await prisma.section.update({ where: { id: req.params.id }, data, include: { course: true, teacher: true, classroom: true } });
     res.json(sectionView(section));
   });
-  app.delete('/api/sections/:id', requireAdmin, async (req, res) => { await prisma.section.delete({ where: { id: req.params.id } }); res.json({ ok: true }); });
+  app.delete('/api/sections/:id', requireRegistro, async (req, res) => { await prisma.section.delete({ where: { id: req.params.id } }); res.json({ ok: true }); });
 
   // ── Enrollments ─────────────────────────────────────────────────────────────
 
@@ -575,7 +575,7 @@ export function registerAcademicRoutes(
     res.json(records.map((record) => ({ id: record.id, provider: record.provider, syncStatus: record.syncStatus, enrollmentCode: record.enrollmentCode, alternateLink: record.alternateLink, lastSyncedAt: record.lastSyncedAt, syncError: record.syncError, sectionId: record.sectionId, sectionCode: record.section.code, courseCode: record.section.courseCode, courseName: record.section.course.name, teacherName: record.section.teacher.name, cycleName: record.section.cycle.name })));
   });
 
-  app.post('/api/virtual-classrooms/:id/sync', requireAdmin, async (_req, res) => {
+  app.post('/api/virtual-classrooms/:id/sync', requireRegistro, async (_req, res) => {
     if (!process.env.GOOGLE_CLASSROOM_CLIENT_ID) return void res.status(503).json({ message: 'Google Workspace todavía no está configurado. TI debe proporcionar las credenciales OAuth institucionales.' });
     res.status(501).json({ message: 'Las credenciales fueron detectadas, pero la autorización administrativa todavía debe completarse.' });
   });
@@ -608,7 +608,7 @@ export function registerAcademicRoutes(
     res.status(201).json(record);
   });
 
-  app.patch('/api/student-requests/:id', requireAdmin, async (req, res) => {
+  app.patch('/api/student-requests/:id', requireRegistro, async (req, res) => {
     const status = String(req.body.status || '').trim().toUpperCase();
     const adminNote = String(req.body.adminNote || '').trim();
     if (!['EN_REVISION', 'APROBADA', 'RECHAZADA', 'ENTREGADA'].includes(status)) return void res.status(400).json({ message: 'Selecciona un estado válido.' });
@@ -677,7 +677,7 @@ export function registerAcademicRoutes(
     res.send(Buffer.from(document.fileData, 'base64'));
   });
 
-  app.patch('/api/enrollment-documents/:id/review', requireAdmin, async (req, res) => {
+  app.patch('/api/enrollment-documents/:id/review', requireRegistro, async (req, res) => {
     const status = String(req.body.status || '').trim().toUpperCase();
     const reviewNote = String(req.body.reviewNote || '').trim();
     if (!['APROBADO', 'RECHAZADO'].includes(status) || (status === 'RECHAZADO' && reviewNote.length < 3)) return void res.status(400).json({ message: 'Selecciona aprobar o rechazar; el rechazo requiere una observación.' });
