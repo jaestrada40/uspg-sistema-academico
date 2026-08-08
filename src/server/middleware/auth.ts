@@ -73,11 +73,59 @@ export function createAuthMiddleware(
   const requireSystems: express.RequestHandler = (_req, res, next) =>
     res.locals.authUser?.role === 'SISTEMAS' ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Sistemas.' });
 
-  const requireRegistro: express.RequestHandler = (_req, res, next) =>
-    ['ADMIN', 'REGISTRO'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Registro Académico.' });
+  const requireRegistro: express.RequestHandler = async (req, res, next) => {
+    try {
+      const token = readSessionToken(req);
+      if (!token) {
+        res.status(401).json({ message: 'Debes iniciar sesión.' });
+        return;
+      }
+      const session = await prisma.session.findUnique({
+        where: { tokenHash: hashToken(token) },
+        include: { user: true },
+      });
+      if (!session || session.expiresAt <= new Date() || !session.user.active) {
+        res.status(401).json({ message: 'La sesión no es válida.' });
+        return;
+      }
+      if (!['ADMIN', 'REGISTRO'].includes(session.user.role)) {
+        res.status(403).json({ message: 'Acción disponible únicamente para Registro Académico.' });
+        return;
+      }
+      if (await blockUntilMfaEnrollment(req, res, session.user)) return;
+      res.locals.authUser = session.user;
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
 
-  const requireFinance: express.RequestHandler = (_req, res, next) =>
-    ['ADMIN', 'FINANZAS'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Administración Financiera.' });
+  const requireFinance: express.RequestHandler = async (req, res, next) => {
+    try {
+      const token = readSessionToken(req);
+      if (!token) {
+        res.status(401).json({ message: 'Debes iniciar sesión.' });
+        return;
+      }
+      const session = await prisma.session.findUnique({
+        where: { tokenHash: hashToken(token) },
+        include: { user: true },
+      });
+      if (!session || session.expiresAt <= new Date() || !session.user.active) {
+        res.status(401).json({ message: 'La sesión no es válida.' });
+        return;
+      }
+      if (!['ADMIN', 'FINANZAS'].includes(session.user.role)) {
+        res.status(403).json({ message: 'Acción disponible únicamente para Administración Financiera.' });
+        return;
+      }
+      if (await blockUntilMfaEnrollment(req, res, session.user)) return;
+      res.locals.authUser = session.user;
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
 
   return { requireAdmin, requireUser, requireLibraryStaff, requireParkingStaff, requireSystems, requireRegistro, requireFinance };
 }
