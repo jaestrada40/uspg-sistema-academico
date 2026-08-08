@@ -35,6 +35,7 @@ const CurriculumOrganizerPage = lazyPage(() => import('./pages/CurriculumOrganiz
 const AcademicStructurePage = lazyPage(() => import('./pages/AcademicStructurePage'), 'AcademicStructurePage');
 const LibraryPage = lazyPage(() => import('./pages/LibraryPage'), 'LibraryPage');
 const ParkingPage = lazyPage(() => import('./pages/ParkingPage'), 'ParkingPage');
+const ParkingKioskPage = lazyPage(() => import('./pages/ParkingKioskPage'), 'ParkingKioskPage');
 const UsersPage = lazyPage(() => import('./pages/UsersPage'), 'UsersPage');
 const SystemsPage = lazyPage(() => import('./pages/SystemsPage'), 'SystemsPage');
 const EventsPage = lazyPage(() => import('./pages/EventsPage'), 'EventsPage');
@@ -90,6 +91,7 @@ export default function App() {
           <Route path="/estructura-academica" element={<ProtectedRoute><AcademicStructurePage /></ProtectedRoute>} />
           <Route path="/biblioteca" element={<ProtectedRoute><LibraryPage /></ProtectedRoute>} />
           <Route path="/parqueo" element={<ProtectedRoute><ParkingPage /></ProtectedRoute>} />
+          <Route path="/parqueo-kiosco" element={<ProtectedRoute><ParkingKioskPage /></ProtectedRoute>} />
           <Route path="/eventos" element={<ProtectedRoute><EventsPage /></ProtectedRoute>} />
 
           <Route

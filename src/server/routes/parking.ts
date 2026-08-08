@@ -10,7 +10,7 @@ export function registerParkingRoutes(
   helpers: ServerHelpers,
 ) {
   const { handleUniqueError, notifyUser, hashPassword, temporaryPassword, roleFromEmail } = helpers;
-  const { requireUser, requireAdmin, requireParkingStaff } = middleware;
+  const { requireUser, requireAdmin, requireParkingStaff, requireFinance } = middleware;
 
   const parkingCode = (prefix: string) => `${prefix}-${randomBytes(5).toString('hex').toUpperCase()}`;
   const normalizePlate = (value: unknown) => String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -57,6 +57,23 @@ export function registerParkingRoutes(
     const vehicle = await prisma.parkingVehicle.findUnique({ where: { id: req.params.id } }); if (!vehicle || vehicle.status !== 'ACTIVO') return void res.status(404).json({ message: 'Vehículo activo no encontrado.' }); if (!['PARQUEO'].includes(res.locals.authUser.role) && vehicle.ownerId !== res.locals.authUser.id) return void res.status(403).json({ message: 'No puedes generar este pase.' }); res.json(dynamicParkingPass(vehicle.id));
   });
 
+  app.post('/api/parking/vehicles/:id/day-pass', requireUser, async (req, res) => {
+    const vehicle = await prisma.parkingVehicle.findFirst({ where: { id: req.params.id, status: 'ACTIVO' }, include: { owner: { select: { role: true, student: { select: { carnet: true } } } } } });
+    if (!vehicle) return void res.status(404).json({ message: 'Vehículo activo no encontrado.' });
+    if (!['PARQUEO', 'ADMIN', 'REGISTRO'].includes(res.locals.authUser.role) && vehicle.ownerId !== res.locals.authUser.id) return void res.status(403).json({ message: 'No puedes comprar un pase para este vehículo.' });
+    if (vehicle.owner.role !== 'ESTUDIANTE' || !vehicle.owner.student) return void res.status(400).json({ message: 'El pase diario solo aplica a vehículos de estudiantes.' });
+    const config = await prisma.parkingConfig.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
+    if (config.dailyRate <= 0) return void res.status(409).json({ message: 'La tarifa diaria de parqueo todavía no está configurada.' });
+    const date = new Date(`${req.body.date}T23:59:59Z`);
+    const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+    if (Number.isNaN(date.getTime()) || date < today) return void res.status(400).json({ message: 'Selecciona una fecha válida, hoy o en el futuro.' });
+    const concept = `Pase de parqueo - ${date.toISOString().slice(0, 10)}`;
+    const duplicate = await prisma.financialCharge.findFirst({ where: { vehicleId: vehicle.id, concept } });
+    if (duplicate) return void res.status(409).json({ message: 'Ya existe un pase para esa fecha y vehículo.' });
+    const charge = await prisma.financialCharge.create({ data: { studentCarnet: vehicle.owner.student.carnet, vehicleId: vehicle.id, concept, amount: config.dailyRate, dueDate: date } });
+    res.status(201).json(charge);
+  });
+
   app.patch('/api/parking/vehicles/:id/status', requireUser, async (req, res) => {
     const vehicle = await prisma.parkingVehicle.findUnique({ where: { id: req.params.id } }); if (!vehicle) return void res.status(404).json({ message: 'Vehículo no encontrado.' }); if (!['PARQUEO'].includes(res.locals.authUser.role) && vehicle.ownerId !== res.locals.authUser.id) return void res.status(403).json({ message: 'No puedes modificar este vehículo.' }); const status = String(req.body.status); if (!['ACTIVO', 'BLOQUEADO'].includes(status)) return void res.status(400).json({ message: 'Estado no válido.' }); const saved = await prisma.parkingVehicle.update({ where: { id: vehicle.id }, data: { status } }); await notifyUser(vehicle.ownerId, status === 'ACTIVO' ? 'Pase de parqueo reactivado' : 'Pase de parqueo bloqueado', status === 'ACTIVO' ? `El pase digital del vehículo ${vehicle.plate} está activo nuevamente.` : `El pase digital del vehículo ${vehicle.plate} fue bloqueado y ya no permitirá ingresos.`, status === 'ACTIVO' ? 'SUCCESS' : 'WARNING', '/parqueo'); res.json(saved);
   });
@@ -65,13 +82,45 @@ export function registerParkingRoutes(
     const vehicle = await prisma.parkingVehicle.findUnique({ where: { id: req.params.id } });
     if (!vehicle) return void res.status(404).json({ message: 'Vehículo no encontrado.' });
     if (!['PARQUEO'].includes(res.locals.authUser.role) && vehicle.ownerId !== res.locals.authUser.id) return void res.status(403).json({ message: 'No puedes quitar este vehículo.' });
+    if (await prisma.financialCharge.findFirst({ where: { vehicleId: vehicle.id } })) return void res.status(409).json({ message: 'No puedes eliminar un vehículo con historial de cobros de parqueo.' });
     if (await prisma.parkingVisit.findFirst({ where: { vehicleId: vehicle.id, status: 'DENTRO' } })) return void res.status(409).json({ message: 'No puedes quitar un vehículo mientras aparece dentro del campus.' });
     await prisma.parkingVehicle.delete({ where: { id: vehicle.id } });
     res.json({ ok: true });
   });
 
   app.patch('/api/parking/config', requireUser, requireAdmin, async (req, res) => {
-    const totalCapacity = Number(req.body.totalCapacity), regularReserve = Number(req.body.regularReserve || 0); if (!Number.isInteger(totalCapacity) || totalCapacity < 1 || !Number.isInteger(regularReserve) || regularReserve < 0 || regularReserve >= totalCapacity) return void res.status(400).json({ message: 'Capacidad o reserva no válida.' }); res.json(await prisma.parkingConfig.upsert({ where: { id: 1 }, update: { totalCapacity, regularReserve }, create: { id: 1, totalCapacity, regularReserve } }));
+    const totalCapacity = Number(req.body.totalCapacity), regularReserve = Number(req.body.regularReserve || 0), dailyRate = Number(req.body.dailyRate ?? 0);
+    if (!Number.isInteger(totalCapacity) || totalCapacity < 1 || !Number.isInteger(regularReserve) || regularReserve < 0 || regularReserve >= totalCapacity || !Number.isFinite(dailyRate) || dailyRate < 0) return void res.status(400).json({ message: 'Capacidad, reserva o tarifa diaria no válida.' });
+    res.json(await prisma.parkingConfig.upsert({ where: { id: 1 }, update: { totalCapacity, regularReserve, dailyRate }, create: { id: 1, totalCapacity, regularReserve, dailyRate } }));
+  });
+
+  app.get('/api/parking/fee-schedules', requireUser, requireFinance, async (_req, res) => {
+    res.json(await prisma.parkingFeeSchedule.findMany({ orderBy: [{ dueDate: 'desc' }, { createdAt: 'desc' }] }));
+  });
+
+  app.post('/api/parking/fee-schedules', requireUser, requireFinance, async (req, res) => {
+    const periodType = String(req.body.periodType || '').trim().toUpperCase();
+    const amount = Number(req.body.amount);
+    const cycleId = String(req.body.cycleId || '').trim();
+    const dueDate = new Date(`${req.body.dueDate}T12:00:00Z`);
+    if (!['MENSUAL', 'TRIMESTRAL', 'SEMESTRAL'].includes(periodType) || !Number.isFinite(amount) || amount <= 0 || !cycleId || Number.isNaN(dueDate.getTime())) return void res.status(400).json({ message: 'Completa correctamente periodicidad, monto, ciclo y vencimiento.' });
+    const cycle = await prisma.academicCycle.findUnique({ where: { id: cycleId } });
+    if (!cycle) return void res.status(404).json({ message: 'Ciclo académico no encontrado.' });
+    const duplicate = await prisma.parkingFeeSchedule.findFirst({ where: { cycleId } });
+    if (duplicate) return void res.status(409).json({ message: 'Ya existe una tarifa de parqueo para este ciclo.' });
+    const activeVehicles = await prisma.parkingVehicle.findMany({
+      where: { status: 'ACTIVO', owner: { role: 'ESTUDIANTE', active: true, student: { isNot: null } } },
+      select: { id: true, owner: { select: { student: { select: { carnet: true } } } } },
+    });
+    const eligible = activeVehicles.filter((v) => v.owner.student?.carnet);
+    const concept = `Parqueo ${periodType.charAt(0) + periodType.slice(1).toLowerCase()} - ${cycle.name}`;
+    const created = await prisma.$transaction(async (tx) => {
+      const schedule = await tx.parkingFeeSchedule.create({ data: { periodType, amount, cycleId, dueDate, createdBy: res.locals.authUser.name, assignedCount: eligible.length } });
+      if (eligible.length) await tx.financialCharge.createMany({ data: eligible.map((v) => ({ studentCarnet: v.owner.student!.carnet, vehicleId: v.id, parkingFeeScheduleId: schedule.id, concept, amount, dueDate, cycleId })) });
+      await tx.auditLog.create({ data: { action: 'CREATE_PARKING_FEE_SCHEDULE', entityType: 'PARKING', entityId: schedule.id, actorId: res.locals.authUser.id, details: JSON.stringify({ periodType, amount, cycleId, vehicles: eligible.length }) } });
+      return schedule;
+    });
+    res.status(201).json({ schedule: created, assignedCount: eligible.length });
   });
 
   app.post('/api/parking/events', requireUser, requireParkingStaff, async (req, res) => {
@@ -102,7 +151,7 @@ export function registerParkingRoutes(
     const code = String(req.body.code || '').trim(), normalizedCode = code.toUpperCase(), plateInput = normalizePlate(req.body.plate), entryGate = String(req.body.entryGate || ''), operatorId = res.locals.authUser.id; const reject = async (status: number, reason: string, vehicleId?: string) => { const masked = maskedParkingCode(code); await prisma.parkingAccessAttempt.create({ data: { outcome: 'RECHAZADO', reason, entryGate, plate: plateInput || null, codeMasked: masked, vehicleId, operatorId } }); const since = new Date(Date.now() - 10 * 60 * 1000), repeated = await prisma.parkingAccessAttempt.count({ where: { outcome: 'RECHAZADO', createdAt: { gte: since }, OR: [...(plateInput ? [{ plate: plateInput }] : []), ...(masked ? [{ codeMasked: masked }] : [])] } }); if (repeated >= 3) await createParkingAlert(`REJECTED:${plateInput || masked}:${new Date().toISOString().slice(0, 13)}`, 'INTENTOS_INVALIDOS', 'ALTA', `${repeated} intentos rechazados en 10 minutos para ${plateInput || masked || 'un pase desconocido'}.`); res.status(status).json({ message: reason }); };
     if (!['ENTRADA_1', 'ENTRADA_2'].includes(entryGate)) return void await reject(400, 'Selecciona Entrada 1 o Entrada 2.'); const dynamicPass = verifyDynamicParkingPass(code);
     const [vehicle, guest, config, occupancy] = await Promise.all([dynamicPass ? prisma.parkingVehicle.findFirst({ where: { id: dynamicPass.vehicleId, status: 'ACTIVO' }, include: { owner: true } }) : prisma.parkingVehicle.findFirst({ where: { plate: plateInput || '__NONE__', status: 'ACTIVO' }, include: { owner: true } }), prisma.parkingEventGuest.findFirst({ where: { OR: [{ accessCode: normalizedCode || '__NONE__' }, { plate: plateInput || '__NONE__' }], status: 'AUTORIZADO' }, include: { event: true } }), prisma.parkingConfig.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } }), prisma.parkingVisit.count({ where: { status: 'DENTRO' } })]);
-    if (!vehicle && !guest) return void await reject(404, code.startsWith('PV1.') ? 'El QR vehicular venció o no es válido.' : 'Pase o placa no autorizado.'); if (occupancy >= config.totalCapacity) return void await reject(409, 'Parqueo lleno. Acceso temporalmente detenido.', vehicle?.id); const plate = vehicle?.plate || guest?.plate || plateInput; if (!plate) return void await reject(400, 'Registra la placa del visitante.', vehicle?.id); if (await prisma.parkingVisit.findFirst({ where: { plate, status: 'DENTRO' } })) return void await reject(409, 'El vehículo ya se encuentra dentro.', vehicle?.id);
+    if (!vehicle && !guest) return void await reject(404, code.startsWith('PV1.') ? 'El QR vehicular venció o no es válido.' : 'Pase o placa no autorizado.'); if (vehicle) { const overdue = await prisma.financialCharge.findFirst({ where: { vehicleId: vehicle.id, dueDate: { lt: new Date() }, status: { not: 'PAGADO' } } }); if (overdue) return void await reject(403, 'Saldo de parqueo vencido — regulariza tu pago para ingresar.', vehicle.id); } if (occupancy >= config.totalCapacity) return void await reject(409, 'Parqueo lleno. Acceso temporalmente detenido.', vehicle?.id); const plate = vehicle?.plate || guest?.plate || plateInput; if (!plate) return void await reject(400, 'Registra la placa del visitante.', vehicle?.id); if (await prisma.parkingVisit.findFirst({ where: { plate, status: 'DENTRO' } })) return void await reject(409, 'El vehículo ya se encuentra dentro.', vehicle?.id);
     if (guest && (guest.event.status !== 'ACTIVO' || new Date() < new Date(guest.event.startsAt.getTime() - 3 * 3600000) || new Date() > guest.event.endsAt)) return void await reject(403, 'El pase del evento no está vigente.'); const visit = await prisma.parkingVisit.create({ data: { plate, accessCode: code || vehicle?.accessCode, visitorName: guest?.guestName, entryGate, vehicleId: vehicle?.id, userId: vehicle?.ownerId, eventId: guest?.eventId } }); if (guest) await prisma.parkingEventGuest.update({ where: { id: guest.id }, data: { status: 'UTILIZADO' } }); await prisma.parkingAccessAttempt.create({ data: { outcome: 'AUTORIZADO', reason: guest ? 'Invitado de evento' : dynamicPass ? 'QR dinámico válido' : 'Placa autorizada', entryGate, plate, codeMasked: maskedParkingCode(code), vehicleId: vehicle?.id, operatorId } }); await evaluateOccupancyAlerts(occupancy + 1, config.totalCapacity); res.status(201).json({ visit, occupancy: occupancy + 1, available: config.totalCapacity - occupancy - 1 });
   });
 
