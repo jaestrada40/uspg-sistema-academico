@@ -73,4 +73,6 @@ export type AuthMiddleware = {
   requireLibraryStaff: express.RequestHandler;
   requireParkingStaff: express.RequestHandler;
   requireSystems: express.RequestHandler;
+  requireRegistro: express.RequestHandler;
+  requireFinance: express.RequestHandler;
 };

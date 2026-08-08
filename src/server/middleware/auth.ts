@@ -73,5 +73,11 @@ export function createAuthMiddleware(
   const requireSystems: express.RequestHandler = (_req, res, next) =>
     res.locals.authUser?.role === 'SISTEMAS' ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Sistemas.' });
 
-  return { requireAdmin, requireUser, requireLibraryStaff, requireParkingStaff, requireSystems };
+  const requireRegistro: express.RequestHandler = (_req, res, next) =>
+    ['ADMIN', 'REGISTRO'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Registro Académico.' });
+
+  const requireFinance: express.RequestHandler = (_req, res, next) =>
+    ['ADMIN', 'FINANZAS'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Administración Financiera.' });
+
+  return { requireAdmin, requireUser, requireLibraryStaff, requireParkingStaff, requireSystems, requireRegistro, requireFinance };
 }
