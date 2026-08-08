@@ -150,9 +150,10 @@ tarjeta demo. No hay backend nuevo — reutiliza `/api/finances` y
 ## Control de acceso
 
 `verifyDynamicParkingPass` (`parking.ts:19`) sigue validando la firma y
-expiración del QR sin cambios. Se agrega **un chequeo adicional** después de
-esa validación, tanto en el escaneo de QR como en `POST /api/parking/access`
-y `POST /api/parking/manual-barrier`:
+expiración del QR sin cambios. Se agrega **un chequeo adicional** dentro de
+`POST /api/parking/access` (el único punto donde un vehículo identificado por
+QR o placa entra de forma automatizada), justo después de confirmar que el
+vehículo existe y antes de crear la visita:
 
 ```ts
 const overdueCharge = await prisma.financialCharge.findFirst({
@@ -173,6 +174,12 @@ if (overdueCharge) {
   parqueo vencido — regulariza tu pago para ingresar", distinto de los demás
   motivos de rechazo ya existentes (código inválido, vehículo suspendido,
   etc.).
+- `POST /api/parking/manual-barrier` **no** lleva este chequeo: es la
+  apertura manual de emergencia que usa el staff para saltarse la
+  automatización a propósito (ej. QR con falla, contingencia). Bloquearla
+  por morosidad contradice su función; el staff sigue pudiendo abrir la
+  barrera manualmente sin importar el saldo, dejando registro igual que hoy
+  en `ParkingAccessAttempt`.
 
 ## Manejo de errores
 
