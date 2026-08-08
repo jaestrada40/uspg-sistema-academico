@@ -13,13 +13,15 @@ export function registerAcademicRoutes(
   const enrollmentView = (record: any) => ({ id: record.id, studentCarnet: record.studentCarnet, studentName: record.student?.name, sectionId: record.sectionId, courseCode: record.section?.courseCode, courseName: record.section?.course?.name, cycleId: record.section?.cycleId, enrollmentDate: record.enrollmentDate.toISOString().slice(0, 10), status: record.status });
   const cycleView = (cycle: any) => ({ ...cycle, startDate: cycle.startDate.toISOString().slice(0, 10), endDate: cycle.endDate.toISOString().slice(0, 10), enrollmentStartDate: cycle.enrollmentStartDate.toISOString().slice(0, 10), enrollmentEndDate: cycle.enrollmentEndDate.toISOString().slice(0, 10), gradeSubmissionDeadline: cycle.gradeSubmissionDeadline.toISOString().slice(0, 10), examStartDate: cycle.examStartDate ? cycle.examStartDate.toISOString().slice(0, 10) : undefined, examEndDate: cycle.examEndDate ? cycle.examEndDate.toISOString().slice(0, 10) : undefined, campusName: cycle.campus?.name, campusCode: cycle.campus?.code, campus: undefined });
   const { requireRegistro, requireUser } = middleware;
+  const requireAcademicRead: express.RequestHandler = (_req, res, next) =>
+    ['ADMIN', 'REGISTRO', 'FINANZAS'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Registro Académico.' });
 
   const studentView = (student: any) => ({ ...student, campusName: student.campus?.name, planCode: student.plan?.code, planName: student.plan?.name, planVersion: student.plan?.version, campus: undefined, plan: undefined });
 
   // ── Academic Structure ──────────────────────────────────────────────────────
 
   app.get('/api/academic-structure', requireUser, async (_req, res) => {
-    const admin = res.locals.authUser.role === 'ADMIN';
+    const admin = ['ADMIN', 'REGISTRO'].includes(res.locals.authUser.role);
     const [campuses, plans] = await Promise.all([
       prisma.campus.findMany({ where: admin ? {} : { status: 'Activo' }, include: { _count: { select: { students: true } } }, orderBy: { name: 'asc' } }),
       prisma.curriculumPlan.findMany({ where: admin ? {} : { status: 'Activo' }, include: { career: { select: { name: true } }, campus: { select: { id: true, code: true, name: true } }, _count: { select: { courses: true, students: true } } }, orderBy: [{ careerId: 'asc' }, { effectiveFrom: 'desc' }] }),
@@ -104,7 +106,7 @@ export function registerAcademicRoutes(
 
   // ── Students ────────────────────────────────────────────────────────────────
 
-  app.get('/api/students', requireRegistro, async (_req, res) => {
+  app.get('/api/students', requireUser, requireAcademicRead, async (_req, res) => {
     const records = await prisma.student.findMany({ include: { campus: true, plan: true }, orderBy: { name: 'asc' } });
     res.json(records.map(studentView));
   });
@@ -157,7 +159,7 @@ export function registerAcademicRoutes(
 
   // ── Teachers ────────────────────────────────────────────────────────────────
 
-  app.get('/api/teachers', requireRegistro, async (_req, res) => {
+  app.get('/api/teachers', requireUser, requireAcademicRead, async (_req, res) => {
     const records = await prisma.teacher.findMany({ orderBy: { name: 'asc' } });
     res.json(records.map(({ assignedSectionIds, ...teacher }) => ({ ...teacher, assignedSectionIds: JSON.parse(assignedSectionIds) })));
   });
@@ -203,7 +205,7 @@ export function registerAcademicRoutes(
     courseCount: await prisma.course.count({ where: { careerId: career.code } }),
   });
 
-  app.get('/api/careers', requireRegistro, async (_req, res) => {
+  app.get('/api/careers', requireUser, requireAcademicRead, async (_req, res) => {
     const records = await prisma.career.findMany({ orderBy: { name: 'asc' } });
     res.json(await Promise.all(records.map(careerView)));
   });
@@ -328,7 +330,7 @@ export function registerAcademicRoutes(
     res.status(201).json({ message: `Se importaron ${normalizedRows.length} cursos correctamente.`, imported: normalizedRows.length });
   });
 
-  app.get('/api/courses', requireRegistro, async (_req, res) => {
+  app.get('/api/courses', requireUser, requireAcademicRead, async (_req, res) => {
     const records = await prisma.course.findMany({ include: { career: true, prerequisites: true }, orderBy: [{ careerId: 'asc' }, { semester: 'asc' }, { code: 'asc' }] });
     res.json(records.map(courseView));
   });

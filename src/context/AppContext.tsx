@@ -189,7 +189,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .catch(() => showToast('No se pudo conectar con la configuración institucional', 'warning'));
   }, []);
   useEffect(() => {
-    if (!isAuthenticated || currentUser.role !== 'ADMIN') return;
+    if (!isAuthenticated || !['ADMIN', 'REGISTRO', 'FINANZAS'].includes(currentUser.role)) return;
     Promise.all([fetch('/api/students'), fetch('/api/teachers'), fetch('/api/careers'), fetch('/api/courses')])
       .then(async ([studentResponse, teacherResponse, careerResponse, courseResponse]) => {
         if (![studentResponse, teacherResponse, careerResponse, courseResponse].every((response) => response.ok)) throw new Error('No se pudieron cargar los datos académicos');

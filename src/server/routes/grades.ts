@@ -300,7 +300,7 @@ export function registerGradeRoutes(
     const user = res.locals.authUser;
     const where = user.role === 'ESTUDIANTE' ? { gradeRecord: { studentCarnet: user.carnetOrCode } } : user.role === 'DOCENTE' ? { gradeRecord: { section: { teacherId: user.carnetOrCode } } } : {};
     const recoveries = await prisma.recoveryExam.findMany({ where, include: { gradeRecord: { include: { student: true, section: { include: { course: true } } } }, financialCharge: { include: { payments: true } } }, orderBy: { requestedAt: 'desc' } });
-    const eligibleWhere = user.role === 'ESTUDIANTE' ? { studentCarnet: user.carnetOrCode, isPublished: true, total: { lt: 61 }, recoveryExam: null } : user.role === 'ADMIN' ? { isPublished: true, total: { lt: 61 }, recoveryExam: null } : { id: '__none__' };
+    const eligibleWhere = user.role === 'ESTUDIANTE' ? { studentCarnet: user.carnetOrCode, isPublished: true, total: { lt: 61 }, recoveryExam: null } : ['ADMIN', 'REGISTRO'].includes(user.role) ? { isPublished: true, total: { lt: 61 }, recoveryExam: null } : { id: '__none__' };
     const eligibleCandidates = await prisma.gradeRecord.findMany({ where: eligibleWhere as any, include: { student: true, section: { include: { course: true } } } });
     // Un curso reprobado deja de ser elegible para recuperación si el estudiante ya lo aprobó
     // en otro intento/sección (retake); GradeRecord es por sección, no por curso, así que ambos

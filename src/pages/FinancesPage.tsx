@@ -111,7 +111,7 @@ export const FinancesPage: React.FC = () => {
   useEffect(() => { loadTransferProofs(); }, [loadTransferProofs]);
 
   const loadCareerFees = useCallback(async () => {
-    if (currentUser.role !== 'ADMIN') return;
+    if (!['ADMIN', 'FINANZAS'].includes(currentUser.role)) return;
     const response = await fetch('/api/finances/career-fees');
     if (response.ok) setCareerFees(await response.json());
   }, [currentUser.role]);

@@ -26,7 +26,7 @@ export const TeachersPage: React.FC = () => {
   const { currentUser, teachers, sections, addTeacher, updateTeacher, toggleTeacherStatus } = useApp();
   const [campuses, setCampuses] = useState<{ id: string; name: string; status: string }[]>([]);
   useEffect(() => {
-    if (currentUser.role !== 'ADMIN') return;
+    if (!['ADMIN', 'REGISTRO'].includes(currentUser.role)) return;
     fetch('/api/academic-structure')
       .then((response) => response.ok ? response.json() : Promise.reject())
       .then((result) => setCampuses(result.campuses.filter((campus: { status: string }) => campus.status === 'Activo')))

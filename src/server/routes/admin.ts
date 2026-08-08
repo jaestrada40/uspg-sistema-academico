@@ -9,7 +9,9 @@ export function registerAdminRoutes(
   helpers: ServerHelpers,
 ) {
   const { handleUniqueError, notifyUser, hashPassword, temporaryPassword } = helpers;
-  const { requireAdmin, requireRegistro } = middleware;
+  const { requireAdmin, requireRegistro, requireUser } = middleware;
+  const requireAcademicRead: express.RequestHandler = (_req, res, next) =>
+    ['ADMIN', 'REGISTRO', 'FINANZAS'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Registro Académico.' });
 
   app.get('/api/admin/users', requireAdmin, async (_req, res) => {
     const users = await prisma.user.findMany({
@@ -152,7 +154,7 @@ export function registerAdminRoutes(
     res.json(config || {});
   });
 
-  app.get('/api/classrooms', requireRegistro, async (_req, res) => res.json(await prisma.classroom.findMany({ orderBy: [{ building: 'asc' }, { code: 'asc' }] })));
+  app.get('/api/classrooms', requireUser, requireAcademicRead, async (_req, res) => res.json(await prisma.classroom.findMany({ orderBy: [{ building: 'asc' }, { code: 'asc' }] })));
   app.post('/api/classrooms', requireRegistro, async (req, res) => {
     if (!req.body.campusId) return void res.status(400).json({ message: 'Selecciona el campus del aula.' });
     try { const classroom = await prisma.classroom.create({ data: req.body }); res.status(201).json(classroom); }

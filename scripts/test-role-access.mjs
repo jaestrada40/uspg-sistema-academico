@@ -35,10 +35,10 @@ const cases = {
     ['/api/parking', 200], ['/api/parking/offline-manifest', 200],
   ],
   REGISTRO: [
-    ['/api/students', 200], ['/api/finances/career-fees', 403],
+    ['/api/students', 200], ['/api/finances/career-fees', 403], ['/api/finances', 403],
   ],
   FINANZAS: [
-    ['/api/finances/career-fees', 200], ['/api/students', 403],
+    ['/api/finances/career-fees', 200], ['/api/students', 200], ['/api/students', 403, 'POST'],
   ],
 };
 let failures = 0;

@@ -61,6 +61,8 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   if (currentUser.role === 'PARQUEO' && location.pathname === '/dashboard') return <Navigate to="/parqueo" replace />;
   if (currentUser.role === 'EVENTOS' && location.pathname === '/dashboard') return <Navigate to="/eventos" replace />;
   if (currentUser.role === 'SISTEMAS' && location.pathname === '/dashboard') return <Navigate to="/sistemas" replace />;
+  if (currentUser.role === 'REGISTRO' && location.pathname === '/dashboard') return <Navigate to="/estudiantes" replace />;
+  if (currentUser.role === 'FINANZAS' && location.pathname === '/dashboard') return <Navigate to="/pagos" replace />;
   return <AppLayout>{children}<AcademicAssistant /></AppLayout>;
 };
 

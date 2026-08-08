@@ -16,7 +16,7 @@ export function registerFinanceRoutes(
 
   app.get('/api/finances', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'El módulo financiero no está disponible para catedráticos.' });
+    if (['DOCENTE', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'El módulo financiero no está disponible para catedráticos.' });
     const requestedCarnet = String(req.query.studentCarnet || '');
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode : requestedCarnet || undefined;
     const charges = await prisma.financialCharge.findMany({ where: studentCarnet ? { studentCarnet } : {}, include: { student: true, adjustments: { orderBy: { createdAt: 'desc' } }, payments: { orderBy: { paidAt: 'desc' } } }, orderBy: [{ dueDate: 'desc' }, { createdAt: 'desc' }] });
@@ -29,7 +29,7 @@ export function registerFinanceRoutes(
 
   app.get('/api/finances/statement', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (['DOCENTE', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción no permitida.' });
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode || '' : String(req.query.studentCarnet || '');
     const dates = statementDates(req);
     if (!studentCarnet) return void res.status(400).json({ message: 'Selecciona un estudiante.' });
@@ -213,7 +213,7 @@ export function registerFinanceRoutes(
 
   app.get('/api/finances/transfer-proofs', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (['DOCENTE', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción no permitida.' });
     const requestedCarnet = String(req.query.studentCarnet || '');
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode || '' : requestedCarnet;
     const records = await prisma.transferProof.findMany({ where: studentCarnet ? { studentCarnet } : {}, include: { student: true, charge: { select: { concept: true } } }, omit: { fileData: true }, orderBy: { createdAt: 'desc' }, take: 100 });
@@ -251,7 +251,7 @@ export function registerFinanceRoutes(
   app.get('/api/finances/transfer-proofs/:id/file', requireUser, async (req, res) => {
     const user = res.locals.authUser;
     const proof = await prisma.transferProof.findUnique({ where: { id: req.params.id } });
-    if (!proof || user.role === 'DOCENTE' || (user.role === 'ESTUDIANTE' && proof.studentCarnet !== user.carnetOrCode)) return void res.status(404).json({ message: 'Comprobante no encontrado.' });
+    if (!proof || ['DOCENTE', 'REGISTRO'].includes(user.role) || (user.role === 'ESTUDIANTE' && proof.studentCarnet !== user.carnetOrCode)) return void res.status(404).json({ message: 'Comprobante no encontrado.' });
     res.setHeader('Content-Type', proof.mimeType);
     res.setHeader('Content-Disposition', `inline; filename="${proof.fileName.replace(/["\r\n]/g, '')}"`);
     res.send(Buffer.from(proof.fileData, 'base64'));
@@ -280,7 +280,7 @@ export function registerFinanceRoutes(
 
   app.get('/api/finances/payments/:id/receipt.pdf', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (['DOCENTE', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción no permitida.' });
     const payment = await prisma.payment.findUnique({ where: { id: req.params.id }, include: { student: true, charge: true } });
     if (!payment || (user.role === 'ESTUDIANTE' && payment.studentCarnet !== user.carnetOrCode)) return void res.status(404).json({ message: 'Recibo no encontrado.' });
     const institution = await prisma.institutionConfig.findUnique({ where: { id: 1 } });
@@ -292,7 +292,7 @@ export function registerFinanceRoutes(
 
   app.get('/api/finances/statement.pdf', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'Acción no permitida.' });
+    if (['DOCENTE', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'Acción no permitida.' });
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode : String(req.query.studentCarnet || '');
     if (!studentCarnet) return void res.status(400).json({ message: 'Selecciona un estudiante.' });
     const dates = statementDates(req);
