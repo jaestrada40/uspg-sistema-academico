@@ -302,11 +302,11 @@ export function registerAuthRoutes(
   });
 
   app.get('/api/security/mfa-policy', requireAdmin, async (_req, res) => {
-    res.json({ requiredRoles: await getMfaRequiredRoles(), availableRoles: ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS'] });
+    res.json({ requiredRoles: await getMfaRequiredRoles(), availableRoles: ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS', 'REGISTRO', 'FINANZAS'] });
   });
 
   app.put('/api/security/mfa-policy', requireAdmin, async (req, res) => {
-    const availableRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS'];
+    const availableRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS', 'REGISTRO', 'FINANZAS'];
     const requiredRoles: string[] = Array.isArray(req.body?.requiredRoles) ? [...new Set<string>(req.body.requiredRoles.map((role: unknown) => String(role).toUpperCase()))] : [];
     if (requiredRoles.some((role) => !availableRoles.includes(role))) return void res.status(400).json({ message: 'La política contiene un rol inválido.' });
     await prisma.$transaction([

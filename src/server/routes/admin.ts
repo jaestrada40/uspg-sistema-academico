@@ -24,7 +24,7 @@ export function registerAdminRoutes(
     const email = String(req.body?.email || '').trim().toLowerCase();
     const role = String(req.body?.role || '').trim().toUpperCase();
     const carnetOrCode = String(req.body?.carnetOrCode || '').trim() || null;
-    const allowedRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS'];
+    const allowedRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS', 'REGISTRO', 'FINANZAS'];
     if (name.length < 3 || !/^\S+@\S+\.\S+$/.test(email) || !allowedRoles.includes(role)) return void res.status(400).json({ message: 'Nombre, correo y rol son obligatorios y válidos.' });
     const password = temporaryPassword();
     try {

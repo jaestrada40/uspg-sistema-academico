@@ -64,7 +64,7 @@ const assistantHistory = (history: unknown) => Array.isArray(history)
   : '';
 
 // ── MFA ───────────────────────────────────────────────────────────────────────
-const defaultMfaRequiredRoles = ['ADMIN', 'DOCENTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS'];
+const defaultMfaRequiredRoles = ['ADMIN', 'DOCENTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS', 'REGISTRO', 'FINANZAS'];
 const mfaEncryptionKey = (() => {
   const configured = process.env.MFA_ENCRYPTION_KEY;
   if (configured) { const decoded = Buffer.from(configured, 'base64'); if (decoded.length === 32) return decoded; }
@@ -128,7 +128,7 @@ const publicUser = (user: { id: string; name: string; email: string; role: strin
 const verifyPassword = (password: string, stored: string) => { const [salt, expectedHex] = stored.split(':'); if (!salt || !expectedHex) return false; const actual = scryptSync(password, salt, 64); const expected = Buffer.from(expectedHex, 'hex'); return actual.length === expected.length && timingSafeEqual(actual, expected); };
 const hashPassword = (password: string) => { const salt = randomBytes(16).toString('hex'); return `${salt}:${scryptSync(password, salt, 64).toString('hex')}`; };
 const passwordPolicyError = (password: string) => password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password) ? 'La contraseña debe tener 8 caracteres, mayúscula, minúscula y número.' : null;
-const roleFromEmail = (email: string) => { const value = email.trim().toLowerCase(); if (value.endsWith('@alumno.uspg.edu.gt')) return 'ESTUDIANTE'; if (value.endsWith('@catedratico.uspg.edu.gt')) return 'DOCENTE'; if (value.endsWith('@administrador.uspg.edu.gt')) return 'ADMIN'; if (value.endsWith('@biblioteca.uspg.edu.gt')) return 'BIBLIOTECA'; if (value.endsWith('@parqueo.uspg.edu.gt')) return 'PARQUEO'; if (value.endsWith('@eventos.uspg.edu.gt')) return 'EVENTOS'; if (value.endsWith('@sistemas.uspg.edu.gt')) return 'SISTEMAS'; return null; };
+const roleFromEmail = (email: string) => { const value = email.trim().toLowerCase(); if (value.endsWith('@alumno.uspg.edu.gt')) return 'ESTUDIANTE'; if (value.endsWith('@catedratico.uspg.edu.gt')) return 'DOCENTE'; if (value.endsWith('@administrador.uspg.edu.gt')) return 'ADMIN'; if (value.endsWith('@biblioteca.uspg.edu.gt')) return 'BIBLIOTECA'; if (value.endsWith('@parqueo.uspg.edu.gt')) return 'PARQUEO'; if (value.endsWith('@eventos.uspg.edu.gt')) return 'EVENTOS'; if (value.endsWith('@sistemas.uspg.edu.gt')) return 'SISTEMAS'; if (value.endsWith('@registro.uspg.edu.gt')) return 'REGISTRO'; if (value.endsWith('@finanzas.uspg.edu.gt')) return 'FINANZAS'; return null; };
 const temporaryPassword = () => `UsPG${randomBytes(4).toString('hex')}!`;
 const handleUniqueError = (error: unknown, res: express.Response) => { if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') { res.status(409).json({ message: 'El correo, carné o código ya está registrado.' }); return true; } return false; };
 
