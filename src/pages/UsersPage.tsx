@@ -90,6 +90,16 @@ export const UsersPage: React.FC = () => {
     await load();
   };
 
+  const changeRole = async (user: ManagedUser, role: string) => {
+    setBusyId(user.id);
+    const response = await fetch(`/api/admin/users/${user.id}/role`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role }) });
+    const result = await response.json();
+    setBusyId('');
+    if (!response.ok) return showToast(result.message, 'error');
+    showToast('Rol actualizado', 'success');
+    await load();
+  };
+
   const toggleActive = async (user: ManagedUser) => {
     setBusyId(user.id);
     const response = await fetch(`/api/admin/users/${user.id}/toggle-active`, { method: 'PATCH' });
@@ -154,7 +164,7 @@ export const UsersPage: React.FC = () => {
               {paginated.map((user) => (
                 <tr key={user.id} className={!user.active ? 'bg-slate-50 opacity-60' : ''}>
                   <td className="p-3"><p className="font-bold">{user.name}</p><p className="text-[10px] text-[#64748B]">{user.email}{user.carnetOrCode ? ` · ${user.carnetOrCode}` : ''}</p></td>
-                  <td className="p-3 font-bold">{user.role}</td>
+                  <td className="p-3"><select value={user.role} disabled={busyId === user.id || user.id === currentUser.id} onChange={(e) => changeRole(user, e.target.value)} className="rounded-lg border px-2 py-1 text-xs font-bold disabled:opacity-40"><option>ADMIN</option><option>DOCENTE</option><option>ESTUDIANTE</option><option>BIBLIOTECA</option><option>PARQUEO</option><option>EVENTOS</option><option>SISTEMAS</option><option>REGISTRO</option><option>FINANZAS</option></select></td>
                   <td className="p-3"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${user.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>{user.active ? 'Activo' : 'Inactivo'}</span></td>
                   <td className="p-3"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${user.mfaEnabled ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-700'}`}>MFA {user.mfaEnabled ? 'activo' : 'inactivo'}</span>{user.mustChangePassword && <span className="ml-2 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">Cambio pendiente</span>}</td>
                   <td className="p-3"><div className="flex flex-wrap justify-end gap-2">

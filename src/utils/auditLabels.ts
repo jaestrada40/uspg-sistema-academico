@@ -23,6 +23,7 @@ const ACTION_LABELS: Record<string, string> = {
   USER_ACTIVATED: 'Usuario activado',
   USER_DEACTIVATED: 'Usuario desactivado',
   USER_DELETED: 'Usuario eliminado',
+  USER_ROLE_CHANGED: 'Rol de usuario cambiado',
   // Institution
   INSTITUTION_UPDATED: 'Institución actualizada',
   // Academic

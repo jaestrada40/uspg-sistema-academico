@@ -65,6 +65,22 @@ export function registerAdminRoutes(
     res.json({ active });
   });
 
+  app.patch('/api/admin/users/:id/role', requireAdmin, async (req, res) => {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!user) return void res.status(404).json({ message: 'Usuario no encontrado.' });
+    if (user.id === res.locals.authUser.id) return void res.status(400).json({ message: 'No puedes cambiar tu propio rol.' });
+    const role = String(req.body?.role || '').trim().toUpperCase();
+    const allowedRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS', 'REGISTRO', 'FINANZAS'];
+    if (!allowedRoles.includes(role)) return void res.status(400).json({ message: 'Rol no válido.' });
+    const previousRole = user.role;
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: user.id }, data: { role } }),
+      prisma.auditLog.create({ data: { action: 'USER_ROLE_CHANGED', entityType: 'USER', entityId: user.id, actorId: res.locals.authUser.id, details: JSON.stringify({ email: user.email, previousRole, role }) } }),
+    ]);
+    await notifyUser(user.id, 'Tu rol en el sistema cambió · USPG', `Hola ${user.name},\n\nUn administrador cambió tu rol de ${previousRole} a ${role} en el Sistema Académico USPG.\n\nSi no esperabas este cambio, contacta a soporte.`, 'INFO', '/perfil');
+    res.json({ role });
+  });
+
   app.post('/api/admin/users/:id/reset-mfa', requireAdmin, async (req, res) => {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!user) return void res.status(404).json({ message: 'Usuario no encontrado.' });
