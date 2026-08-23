@@ -79,7 +79,8 @@ npm run production:check
 El archivo `docker-compose.coolify.yml` incluye la aplicación y PostgreSQL 17 con
 volumen persistente. En Coolify seleccione **Docker Compose**, indique ese archivo y
 configure como mínimo `APP_URL`, `POSTGRES_PASSWORD`, `PARKING_QR_SECRET`,
-`MFA_ENCRYPTION_KEY`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` y `SMTP_FROM`.
+`MFA_ENCRYPTION_KEY`, `BACKUP_ENCRYPTION_KEY`, `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USER`, `SMTP_PASS` y `SMTP_FROM`.
 
 Genere la llave de cifrado MFA una sola vez y consérvela en el almacén de secretos
 de Coolify. Perderla impide descifrar los factores TOTP existentes:
