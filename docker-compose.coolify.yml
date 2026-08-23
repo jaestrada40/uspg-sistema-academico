@@ -20,17 +20,58 @@ services:
       GOOGLE_CLASSROOM_CLIENT_ID: ${GOOGLE_CLASSROOM_CLIENT_ID:-}
       GOOGLE_CLASSROOM_CLIENT_SECRET: ${GOOGLE_CLASSROOM_CLIENT_SECRET:-}
       GOOGLE_CLASSROOM_REDIRECT_URI: ${GOOGLE_CLASSROOM_REDIRECT_URI:-}
+      REDIS_URL: redis://redis:6379
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?}
     depends_on:
-      postgres:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      clamav:
         condition: service_healthy
     expose:
       - "3000"
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      DATABASE_PROVIDER: postgresql
+      DATABASE_URL: postgresql://uspg:${POSTGRES_PASSWORD:?}@postgres:5432/uspg_academico
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npm", "run", "db:postgres:migrate:deploy"]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - uspg_redis_data:/data
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
-      interval: 30s
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  clamav:
+    image: clamav/clamav:1.4_base
+    restart: unless-stopped
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --ping 1"]
+      interval: 15s
       timeout: 5s
-      start_period: 45s
-      retries: 3
+      start_period: 180s
+      retries: 20
 
   postgres:
     image: postgres:17-alpine
@@ -49,3 +90,5 @@ services:
 
 volumes:
   uspg_postgres_data:
+  uspg_redis_data:
+  clamav_data:

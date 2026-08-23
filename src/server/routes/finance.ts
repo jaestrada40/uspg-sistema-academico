@@ -1,6 +1,8 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type express from 'express';
 import type { AppPrisma, AuthMiddleware, ServerHelpers } from '../types';
+import { decodeVerifiedUpload, secureFileResponse } from '../services/uploadSecurity';
+import { scanWithClamAv } from '../services/securityInfrastructure';
 
 export function registerFinanceRoutes(
   app: express.Express,
@@ -290,10 +292,9 @@ export function registerFinanceRoutes(
     const amount = Number(req.body.amount);
     const reference = String(req.body.reference || '').trim();
     const fileName = String(req.body.fileName || '').trim().slice(0, 180);
-    const dataUrl = String(req.body.dataUrl || '');
-    const match = dataUrl.match(/^data:(application\/pdf|image\/png|image\/jpeg);base64,([A-Za-z0-9+/=]+)$/);
-    if (!Number.isFinite(amount) || amount <= 0 || reference.length < 3 || !fileName || !match) return void res.status(400).json({ message: 'Completa monto, referencia y comprobante PDF, PNG o JPG.' });
-    if (Buffer.byteLength(match[2], 'base64') > 3 * 1024 * 1024) return void res.status(400).json({ message: 'El comprobante no puede superar 3 MB.' });
+    const upload = decodeVerifiedUpload(req.body.dataUrl, ['application/pdf', 'image/png', 'image/jpeg'], 3 * 1024 * 1024);
+    if (!Number.isFinite(amount) || amount <= 0 || reference.length < 3 || !fileName || !upload) return void res.status(400).json({ message: 'Completa monto, referencia y un comprobante PDF, PNG o JPG válido de máximo 3 MB.' });
+    try { if (!await scanWithClamAv(upload.content)) return void res.status(400).json({ message: 'El archivo fue rechazado por el análisis de seguridad.' }); } catch { return void res.status(503).json({ message: 'El análisis antimalware no está disponible. Intenta más tarde.' }); }
     const charge = await prisma.financialCharge.findUnique({ where: { id: chargeId }, include: { payments: true, adjustments: true, transferProofs: { where: { status: 'PENDIENTE' } } } });
     if (!charge || charge.studentCarnet !== user.carnetOrCode) return void res.status(404).json({ message: 'Cargo no encontrado.' });
     const paid = charge.payments.reduce((sum, item) => sum + item.amount, 0), adjusted = charge.adjustments.reduce((sum, item) => sum + item.amount, 0), pending = charge.transferProofs.reduce((sum, item) => sum + item.amount, 0);
@@ -302,7 +303,7 @@ export function registerFinanceRoutes(
     const duplicate = await prisma.transferProof.findFirst({ where: { reference, status: { in: ['PENDIENTE', 'APROBADO'] } } });
     if (duplicate) return void res.status(409).json({ message: 'La referencia ya fue registrada.' });
     const proof = await prisma.$transaction(async (tx) => {
-      const saved = await tx.transferProof.create({ data: { chargeId, studentCarnet: user.carnetOrCode || '', amount, reference, fileName, mimeType: match[1], fileData: match[2] } });
+      const saved = await tx.transferProof.create({ data: { chargeId, studentCarnet: user.carnetOrCode || '', amount, reference, fileName, mimeType: upload.mimeType, fileData: upload.base64 } });
       await tx.auditLog.create({ data: { action: 'SUBMIT_TRANSFER_PROOF', entityType: 'TRANSFER_PROOF', entityId: saved.id, actorId: user.id, details: JSON.stringify({ chargeId, amount, reference }) } });
       return saved;
     });
@@ -315,8 +316,7 @@ export function registerFinanceRoutes(
     const user = res.locals.authUser;
     const proof = await prisma.transferProof.findUnique({ where: { id: req.params.id } });
     if (!proof || !canReadFinances(user.role) || (user.role === 'ESTUDIANTE' && proof.studentCarnet !== user.carnetOrCode)) return void res.status(404).json({ message: 'Comprobante no encontrado.' });
-    res.setHeader('Content-Type', proof.mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${proof.fileName.replace(/["\r\n]/g, '')}"`);
+    secureFileResponse(res, proof.mimeType, proof.fileName);
     res.send(Buffer.from(proof.fileData, 'base64'));
   });
 

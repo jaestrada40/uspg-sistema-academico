@@ -13,6 +13,8 @@ import {
   timeRange,
   schedulesOverlap,
 } from '../services/academicService';
+import { decodeVerifiedUpload, secureFileResponse } from '../services/uploadSecurity';
+import { scanWithClamAv } from '../services/securityInfrastructure';
 
 export function registerAcademicRoutes(
   app: express.Express,
@@ -23,7 +25,7 @@ export function registerAcademicRoutes(
   const { handleUniqueError, hashPassword, temporaryPassword, roleFromEmail } = helpers;
   const { requireRegistro, requireUser } = middleware;
   const requireAcademicRead: express.RequestHandler = (_req, res, next) =>
-    ['ADMIN', 'REGISTRO', 'FINANZAS'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Registro Académico.' });
+    ['ADMIN', 'REGISTRO'].includes(res.locals.authUser?.role) ? next() : void res.status(403).json({ message: 'Acción disponible únicamente para Registro Académico.' });
   const careerView = (career: Parameters<typeof careerViewOf>[1]) => careerViewOf(prisma, career);
   const validatePrerequisites = (courseCode: string, prerequisiteCodes: string[]) => validatePrerequisitesOf(prisma, courseCode, prerequisiteCodes);
 
@@ -616,12 +618,11 @@ export function registerAcademicRoutes(
     const targetCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode || '' : String(req.body.studentCarnet || '').trim();
     const type = String(req.body.type || '').trim().toUpperCase();
     const fileName = String(req.body.fileName || '').trim().slice(0, 180);
-    const dataUrl = String(req.body.dataUrl || '');
-    const match = dataUrl.match(/^data:(application\/pdf|image\/png|image\/jpeg);base64,([A-Za-z0-9+/=]+)$/);
-    if (!enrollmentDocumentTypes[type] || !fileName || !match) return void res.status(400).json({ message: 'Selecciona un requisito y carga un archivo PDF, PNG o JPG válido.' });
-    if (Buffer.byteLength(match[2], 'base64') > 3 * 1024 * 1024) return void res.status(400).json({ message: 'El archivo no puede superar 3 MB.' });
+    const upload = decodeVerifiedUpload(req.body.dataUrl, ['application/pdf', 'image/png', 'image/jpeg'], 3 * 1024 * 1024);
+    if (!enrollmentDocumentTypes[type] || !fileName || !upload) return void res.status(400).json({ message: 'Selecciona un PDF, PNG o JPG válido de máximo 3 MB.' });
+    try { if (!await scanWithClamAv(upload.content)) return void res.status(400).json({ message: 'El archivo fue rechazado por el análisis de seguridad.' }); } catch { return void res.status(503).json({ message: 'El análisis antimalware no está disponible. Intenta más tarde.' }); }
     const document = await prisma.$transaction(async (tx) => {
-      const saved = await tx.enrollmentDocument.upsert({ where: { studentCarnet_type: { studentCarnet: targetCarnet, type } }, update: { fileName, mimeType: match[1], fileData: match[2], status: 'PENDIENTE', reviewNote: null, reviewedBy: null, reviewedAt: null }, create: { studentCarnet: targetCarnet, type, fileName, mimeType: match[1], fileData: match[2] } });
+      const saved = await tx.enrollmentDocument.upsert({ where: { studentCarnet_type: { studentCarnet: targetCarnet, type } }, update: { fileName, mimeType: upload.mimeType, fileData: upload.base64, status: 'PENDIENTE', reviewNote: null, reviewedBy: null, reviewedAt: null }, create: { studentCarnet: targetCarnet, type, fileName, mimeType: upload.mimeType, fileData: upload.base64 } });
       await tx.auditLog.create({ data: { action: 'UPLOAD_ENROLLMENT_DOCUMENT', entityType: 'ENROLLMENT_DOCUMENT', entityId: saved.id, actorId: user.id, details: JSON.stringify({ type, fileName }) } });
       return saved;
     });
@@ -634,9 +635,7 @@ export function registerAcademicRoutes(
     const user = res.locals.authUser;
     const document = await prisma.enrollmentDocument.findUnique({ where: { id: req.params.id } });
     if (!document || !['ESTUDIANTE', 'ADMIN', 'REGISTRO'].includes(user.role) || (user.role === 'ESTUDIANTE' && document.studentCarnet !== user.carnetOrCode)) return void res.status(404).json({ message: 'Documento no encontrado.' });
-    res.setHeader('Cache-Control', 'no-store, max-age=0');
-    res.setHeader('Content-Type', document.mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${document.fileName.replace(/["\r\n]/g, '')}"`);
+    secureFileResponse(res, document.mimeType, document.fileName);
     res.send(Buffer.from(document.fileData, 'base64'));
   });
 

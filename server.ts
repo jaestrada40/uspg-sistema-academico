@@ -23,12 +23,17 @@ import { registerAttendanceRoutes } from './src/server/routes/attendance';
 import { registerNotificationRoutes } from './src/server/routes/notifications';
 import { registerSystemsRoutes } from './src/server/routes/systems';
 import { registerReportsRoutes } from './src/server/routes/reports';
+import { consumeDistributedRateLimit } from './src/server/services/securityInfrastructure';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const prisma = createPrismaClient();
 
 // ── Gemini / AI ──────────────────────────────────────────────────────────────
-const gemini = process.env.AI_PROVIDER === 'gemini' && process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+// Academic records are sensitive data. Do not send them to an external model
+// from a production deployment unless a dedicated, reviewed integration exists.
+const gemini = process.env.NODE_ENV !== 'production' && process.env.AI_PROVIDER === 'gemini' && process.env.GEMINI_API_KEY
+  ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+  : null;
 const requestGeminiAnswer = async (question: string, role: string, context: string) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
@@ -114,12 +119,35 @@ const readSessionToken = (req: express.Request) => parseCookies(req.headers.cook
 
 const configuredOrigin = (() => { try { return process.env.APP_URL ? new URL(process.env.APP_URL).origin : null; } catch { return null; } })();
 const isDevelopmentOrigin = (origin: string) => /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
-app.use('/api', (req, res, next) => {
+app.use('/api', async (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   const origin = req.get('origin');
   const fetchSite = req.get('sec-fetch-site');
   const allowed = origin && (origin === configuredOrigin || (!isProduction && isDevelopmentOrigin(origin)));
   if ((origin && !allowed) || fetchSite === 'cross-site') return void res.status(403).json({ message: 'Origen de solicitud no permitido.' });
+  next();
+});
+
+const apiRequestWindows = new Map<string, { count: number; resetAt: number }>();
+app.use('/api', async (req, res, next) => {
+  const now = Date.now();
+  const key = `${req.ip}:${req.path.startsWith('/auth/') ? 'auth' : 'api'}`;
+  const limit = req.path === '/auth/login' ? 30 : req.path === '/auth/forgot-password' ? 10 : 300;
+  const windowMs = req.path.startsWith('/auth/') ? 15 * 60 * 1000 : 60 * 1000;
+  const current = apiRequestWindows.get(key);
+  try {
+    const distributedAllowed = await consumeDistributedRateLimit(`uspg:rate:${key}`, limit, windowMs);
+    if (!distributedAllowed) return void res.status(429).json({ message: 'Demasiadas solicitudes. Intenta nuevamente más tarde.' });
+  } catch (error) {
+    if (isProduction) return void next(error);
+  }
+  if (!current || current.resetAt <= now) {
+    if (apiRequestWindows.size >= 50_000) for (const [oldKey, value] of apiRequestWindows) if (value.resetAt <= now) apiRequestWindows.delete(oldKey);
+    apiRequestWindows.set(key, { count: 1, resetAt: now + windowMs });
+    return next();
+  }
+  current.count += 1;
+  if (current.count > limit) return void res.status(429).json({ message: 'Demasiadas solicitudes. Intenta nuevamente más tarde.' });
   next();
 });
 
@@ -136,7 +164,20 @@ const handleUniqueError = (error: unknown, res: express.Response) => { if (typeo
 const loginAttempts = new Map<string, { count: number; blockedUntil: number }>();
 const passwordRecoveryRequests = new Map<string, number>();
 const loginAttemptKey = (username: string, ip = '') => `${ip}:${username.toLowerCase()}`;
-const registerFailedLogin = (key: string) => { const current = loginAttempts.get(key); const count = (current?.blockedUntil && current.blockedUntil > Date.now() ? current.count : 0) + 1; loginAttempts.set(key, { count, blockedUntil: count >= 5 ? Date.now() + 15 * 60 * 1000 : 0 }); };
+const pruneAuthLimits = () => {
+  const now = Date.now();
+  for (const [key, value] of loginAttempts) if (!value.blockedUntil || value.blockedUntil <= now) loginAttempts.delete(key);
+  for (const [key, value] of passwordRecoveryRequests) if (now - value > 15 * 60 * 1000) passwordRecoveryRequests.delete(key);
+};
+const registerFailedLogin = (key: string) => {
+  pruneAuthLimits();
+  // Bounded process-local fallback. Production still requires a proxy/WAF
+  // limiter shared by all replicas.
+  if (loginAttempts.size >= 20_000 && !loginAttempts.has(key)) return;
+  const current = loginAttempts.get(key);
+  const count = (current?.blockedUntil && current.blockedUntil > Date.now() ? current.count : 0) + 1;
+  loginAttempts.set(key, { count, blockedUntil: count >= 5 ? Date.now() + 15 * 60 * 1000 : 0 });
+};
 const createAuthenticatedSession = async (res: express.Response, userId: string, rememberMe: boolean) => { await prisma.session.deleteMany({ where: { expiresAt: { lte: new Date() } } }); const token = randomBytes(32).toString('base64url'); const durationMs = (rememberMe ? 30 : 1) * 24 * 60 * 60 * 1000; await prisma.session.create({ data: { tokenHash: hashToken(token), userId, expiresAt: new Date(Date.now() + durationMs) } }); res.cookie(sessionCookie, token, { ...sessionCookieOptions, maxAge: rememberMe ? durationMs : undefined }); };
 
 const sendOk = (res: express.Response, data?: object) => res.json({ ok: true, ...data });

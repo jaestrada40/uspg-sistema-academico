@@ -92,10 +92,15 @@ export const normalizeImportHeader = (value: unknown) =>
 export const parseCourseImport = (dataUrl: string) => {
   const match = String(dataUrl || '').match(/^data:application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet;base64,([A-Za-z0-9+/=]+)$/);
   if (!match) throw new Error('Carga un archivo Excel .xlsx válido.');
-  const workbook = XLSX.read(Buffer.from(match[1], 'base64'), { type: 'buffer' });
+  const content = Buffer.from(match[1], 'base64');
+  if (content.length > 2 * 1024 * 1024 || content.subarray(0, 2).toString('ascii') !== 'PK') throw new Error('El archivo Excel no es válido o supera 2 MB.');
+  const workbook = XLSX.read(content, { type: 'buffer', cellFormula: false, cellHTML: false, bookVBA: false, sheetRows: 2_001 });
+  if (workbook.SheetNames.length > 10) throw new Error('El archivo supera el número de hojas permitido.');
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  if (!sheet) throw new Error('El archivo no contiene hojas.');
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+  if (!sheet || !sheet['!ref']) throw new Error('El archivo no contiene hojas.');
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  if (range.e.r > 2_000 || range.e.c > 49) throw new Error('El archivo supera los límites de filas o columnas permitidos.');
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', raw: true });
   const aliases: Record<string, string> = { codigo: 'code', nombre: 'name', creditos: 'credits', semestre: 'semester', carrera: 'career', prerrequisitos: 'prerequisites', horas_teoricas: 'theoreticalHours', horas_practicas: 'practicalHours', area: 'area' };
   return rows.map((row, index) => ({ ...Object.fromEntries(Object.entries(row).map(([key, value]) => [aliases[normalizeImportHeader(key)] || normalizeImportHeader(key), value])), rowNumber: index + 2 }));
 };
