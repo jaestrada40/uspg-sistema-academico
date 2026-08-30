@@ -9,5 +9,12 @@ if (appUrl.protocol !== 'https:') { console.error('APP_URL debe usar HTTPS en pr
 if (Buffer.byteLength(process.env.PARKING_QR_SECRET) < 32) { console.error('PARKING_QR_SECRET debe tener al menos 32 bytes aleatorios.'); process.exit(1); }
 if (Buffer.from(process.env.MFA_ENCRYPTION_KEY, 'base64').length !== 32) { console.error('MFA_ENCRYPTION_KEY debe contener exactamente 32 bytes codificados en base64.'); process.exit(1); }
 if (Buffer.from(process.env.BACKUP_ENCRYPTION_KEY, 'base64').length !== 32) { console.error('BACKUP_ENCRYPTION_KEY debe contener exactamente 32 bytes codificados en base64.'); process.exit(1); }
-if ((process.env.AI_PROVIDER || 'disabled').toLowerCase() === 'gemini') { console.error('La IA externa está desactivada en producción para proteger datos académicos.'); process.exit(1); }
+// Gemini SI puede usarse en producción: solo recibe la respuesta ya verificada
+// (datos reales de la base) y el conocimiento institucional aplicable para
+// redactarla — nunca un volcado de la base de datos ni credenciales. Ver
+// server.ts (const gemini = ...) y el comentario que documenta ese límite.
+if ((process.env.AI_PROVIDER || 'disabled').toLowerCase() === 'gemini' && !process.env.GEMINI_API_KEY) {
+  console.error('AI_PROVIDER=gemini requiere GEMINI_API_KEY configurada.');
+  process.exit(1);
+}
 console.log('Variables esenciales de producción verificadas.');
