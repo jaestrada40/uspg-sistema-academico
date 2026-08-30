@@ -22,6 +22,7 @@ import { registerParkingRoutes } from './src/server/routes/parking';
 import { registerAttendanceRoutes } from './src/server/routes/attendance';
 import { registerNotificationRoutes } from './src/server/routes/notifications';
 import { registerSystemsRoutes } from './src/server/routes/systems';
+import { registerWhatsAppIntegrationRoutes } from './src/server/routes/whatsappIntegration';
 import { registerReportsRoutes } from './src/server/routes/reports';
 import { consumeDistributedRateLimit } from './src/server/services/securityInfrastructure';
 
@@ -214,6 +215,7 @@ registerParkingRoutes(app, prisma, middleware, helpers);
 registerAttendanceRoutes(app, prisma, middleware, helpers);
 registerNotificationRoutes(app, prisma, middleware, helpers);
 registerReportsRoutes(app, prisma, middleware, helpers);
+registerWhatsAppIntegrationRoutes(app, prisma, helpers);
 
 // ── Error handler & static serving ───────────────────────────────────────────
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

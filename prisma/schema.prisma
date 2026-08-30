@@ -968,3 +968,22 @@ model ParkingOfflineOperation {
   @@index([recordedAt])
   @@map("parking_offline_operations")
 }
+
+// Cada intento de auto-inscripcion disparado desde el asistente de WhatsApp se
+// registra aqui, haya terminado en una cuenta real o en revision manual. Es el
+// rastro de auditoria independiente del AuditLog (que solo se escribe cuando si
+// se crea una cuenta) y lo que permite detectar abuso por telefono.
+model WhatsAppInscriptionRequest {
+  id            String   @id @default(cuid())
+  name          String
+  phone         String
+  careerName    String   @map("career_name")
+  status        String
+  studentCarnet String?  @map("student_carnet")
+  detail        String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([phone])
+  @@index([createdAt])
+  @@map("whatsapp_inscription_requests")
+}
