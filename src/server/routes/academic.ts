@@ -12,6 +12,7 @@ import {
   sectionView,
   timeRange,
   schedulesOverlap,
+  crearSolicitudEstudiante,
 } from '../services/academicService';
 import { decodeVerifiedUpload, secureFileResponse } from '../services/uploadSecurity';
 import { scanWithClamAv } from '../services/securityInfrastructure';
@@ -578,20 +579,9 @@ export function registerAcademicRoutes(
   app.post('/api/student-requests', requireUser, async (req, res) => {
     const user = res.locals.authUser;
     if (user.role !== 'ESTUDIANTE') return void res.status(403).json({ message: 'La solicitud debe ser creada desde la cuenta del estudiante.' });
-    const type = String(req.body.type || '').trim().toUpperCase();
-    const purpose = String(req.body.purpose || '').trim();
-    const deliveryType = String(req.body.deliveryType || 'DIGITAL').trim().toUpperCase();
-    if (!['CONSTANCIA_ESTUDIOS', 'CERTIFICACION_NOTAS', 'CIERRE_PENSUM'].includes(type) || purpose.length < 5 || !['DIGITAL', 'FISICA'].includes(deliveryType)) return void res.status(400).json({ message: 'Selecciona un trámite e indica el propósito y forma de entrega.' });
-    const duplicate = await prisma.studentServiceRequest.findFirst({ where: { studentCarnet: user.carnetOrCode || '', type, status: { in: ['SOLICITADA', 'EN_REVISION', 'APROBADA'] } } });
-    if (duplicate) return void res.status(409).json({ message: 'Ya tienes una solicitud activa de este trámite.' });
-    const record = await prisma.$transaction(async (tx) => {
-      const created = await tx.studentServiceRequest.create({ data: { studentCarnet: user.carnetOrCode || '', type, purpose, deliveryType } });
-      await tx.auditLog.create({ data: { action: 'CREATE_STUDENT_REQUEST', entityType: 'STUDENT_REQUEST', entityId: created.id, actorId: user.id, details: JSON.stringify({ type, deliveryType }) } });
-      return created;
-    });
-    const admins = await prisma.user.findMany({ where: { role: 'ADMIN', active: true }, select: { id: true } });
-    for (const admin of admins) await helpers.notifyUser(admin.id, 'Nueva solicitud estudiantil', `${user.name} solicitó ${type.replaceAll('_', ' ').toLowerCase()}.`, 'INFO', '/solicitudes');
-    res.status(201).json(record);
+    const resultado = await crearSolicitudEstudiante(prisma, helpers.notifyUser, user, req.body || {});
+    if (resultado.ok === false) return void res.status(resultado.status).json({ message: resultado.message });
+    res.status(201).json(resultado.record);
   });
 
   app.patch('/api/student-requests/:id', requireRegistro, async (req, res) => {

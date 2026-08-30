@@ -137,3 +137,56 @@ export const schedulesOverlap = (a: string, b: string) => {
   const second = timeRange(b);
   return Boolean(first && second && first.start < second.end && second.start < first.end);
 };
+
+export const STUDENT_REQUEST_TYPES = ['CONSTANCIA_ESTUDIOS', 'CERTIFICACION_NOTAS', 'CIERRE_PENSUM'] as const;
+export const STUDENT_REQUEST_DELIVERY_TYPES = ['DIGITAL', 'FISICA'] as const;
+
+type CrearSolicitudResultado =
+  | { ok: true; record: unknown }
+  | { ok: false; status: number; message: string };
+
+// Logica compartida entre POST /api/student-requests (ruta HTTP normal) y la
+// herramienta del asistente interno (POST /api/assistant con function calling):
+// las mismas reglas de negocio (tipos validos, duplicado activo, notificar a
+// ADMIN, dejar auditoria) aplican sin importar quien invoque la creacion.
+export async function crearSolicitudEstudiante(
+  prisma: AppPrisma,
+  notifyUser: (userId: string, title: string, message: string, type?: string, link?: string) => Promise<void>,
+  actor: { id: string; name: string; carnetOrCode: string | null },
+  input: { type: string; purpose: string; deliveryType?: string },
+): Promise<CrearSolicitudResultado> {
+  const type = String(input.type || '').trim().toUpperCase();
+  const purpose = String(input.purpose || '').trim();
+  const deliveryType = String(input.deliveryType || 'DIGITAL').trim().toUpperCase();
+  const studentCarnet = actor.carnetOrCode || '';
+
+  if (
+    !STUDENT_REQUEST_TYPES.includes(type as (typeof STUDENT_REQUEST_TYPES)[number])
+    || purpose.length < 5
+    || !STUDENT_REQUEST_DELIVERY_TYPES.includes(deliveryType as (typeof STUDENT_REQUEST_DELIVERY_TYPES)[number])
+  ) {
+    return { ok: false, status: 400, message: 'Selecciona un trámite válido e indica el propósito (mínimo 5 caracteres) y forma de entrega (digital o física).' };
+  }
+
+  const duplicate = await prisma.studentServiceRequest.findFirst({
+    where: { studentCarnet, type, status: { in: ['SOLICITADA', 'EN_REVISION', 'APROBADA'] } },
+  });
+  if (duplicate) {
+    return { ok: false, status: 409, message: 'Ya existe una solicitud activa de este trámite; no se puede duplicar.' };
+  }
+
+  const record = await prisma.$transaction(async (tx) => {
+    const created = await tx.studentServiceRequest.create({ data: { studentCarnet, type, purpose, deliveryType } });
+    await tx.auditLog.create({
+      data: { action: 'CREATE_STUDENT_REQUEST', entityType: 'STUDENT_REQUEST', entityId: created.id, actorId: actor.id, details: JSON.stringify({ type, deliveryType }) },
+    });
+    return created;
+  });
+
+  const admins = await prisma.user.findMany({ where: { role: 'ADMIN', active: true }, select: { id: true } });
+  for (const admin of admins) {
+    await notifyUser(admin.id, 'Nueva solicitud estudiantil', `${actor.name} solicitó ${type.replaceAll('_', ' ').toLowerCase()}.`, 'INFO', '/solicitudes');
+  }
+
+  return { ok: true, record };
+}

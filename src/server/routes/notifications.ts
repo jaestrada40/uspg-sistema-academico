@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type express from 'express';
 import type { AppPrisma, ServerHelpers, AuthMiddleware } from '../types';
 import { notificationView, outboxView, assistantConversationForUser as assistantConversationForUserOf } from '../services/notificationsService';
+import { intentarCrearSolicitudPorAsistente } from '../services/assistantActions';
 
 export function registerNotificationRoutes(
   app: express.Application,
@@ -10,8 +11,22 @@ export function registerNotificationRoutes(
   helpers: ServerHelpers,
 ) {
   const { requireRegistro, requireUser } = middleware;
-  const { notifyUser, mailTransport, deliverOutboxEmail, answerWithGemini, assistantHistory } = helpers;
+  const { notifyUser, mailTransport, deliverOutboxEmail, answerWithGemini, assistantHistory, gemini } = helpers;
   const assistantConversationForUser = (userId: string, conversationId?: string) => assistantConversationForUserOf(prisma, userId, conversationId);
+  const assistantWindowMs = 15 * 60 * 1000;
+  const assistantLimit = 20;
+
+  const knowledgeFor = async (question: string, role: string) => {
+    const terms = question.toLocaleLowerCase('es-GT').split(/[^\p{L}\p{N}]+/u).filter((term) => term.length >= 4).slice(0, 12);
+    const articles = await prisma.assistantKnowledgeArticle.findMany({ where: { active: true }, orderBy: { updatedAt: 'desc' }, take: 100 });
+    return articles
+      .filter((article) => article.visibleRoles === 'ALL' || article.visibleRoles.split(',').map((value) => value.trim()).includes(role))
+      .map((article) => ({ article, score: terms.reduce((score, term) => score + (article.title + ' ' + article.category + ' ' + article.content).toLocaleLowerCase('es-GT').split(term).length - 1, 0) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map(({ article }) => `[${article.category}] ${article.title}: ${article.content.slice(0, 1600)}`);
+  };
 
   // ── Notifications ──────────────────────────────────────────────────────────
 
@@ -52,6 +67,36 @@ export function registerNotificationRoutes(
 
   // ── Assistant ──────────────────────────────────────────────────────────────
 
+  app.get('/api/assistant/knowledge', requireUser, async (req, res) => {
+    const role = res.locals.authUser.role as string;
+    const manage = ['ADMIN', 'REGISTRO'].includes(role);
+    const articles = await prisma.assistantKnowledgeArticle.findMany({ where: manage ? {} : { active: true }, include: manage ? { createdBy: { select: { name: true } } } : undefined, orderBy: { updatedAt: 'desc' } });
+    res.json(articles.filter((article) => manage || article.visibleRoles === 'ALL' || article.visibleRoles.split(',').map((value) => value.trim()).includes(role)));
+  });
+
+  app.post('/api/assistant/knowledge', requireRegistro, async (req, res) => {
+    const title = String(req.body?.title || '').trim(); const category = String(req.body?.category || '').trim(); const content = String(req.body?.content || '').trim();
+    const visibleRoles = Array.isArray(req.body?.visibleRoles) ? req.body.visibleRoles.filter((role: unknown) => typeof role === 'string' && /^[A-Z_]+$/.test(role)).join(',') : 'ALL';
+    if (title.length < 3 || category.length < 3 || content.length < 10 || title.length > 160 || content.length > 20_000) return void res.status(400).json({ message: 'Artículo de conocimiento inválido.' });
+    const article = await prisma.assistantKnowledgeArticle.create({ data: { title, category, content, visibleRoles: visibleRoles || 'ALL', createdById: res.locals.authUser.id } });
+    await prisma.auditLog.create({ data: { action: 'ASSISTANT_KNOWLEDGE_CREATED', entityType: 'ASSISTANT_KNOWLEDGE', entityId: article.id, actorId: res.locals.authUser.id } });
+    res.status(201).json(article);
+  });
+
+  app.patch('/api/assistant/knowledge/:id', requireRegistro, async (req, res) => {
+    const existing = await prisma.assistantKnowledgeArticle.findUnique({ where: { id: req.params.id } });
+    if (!existing) return void res.status(404).json({ message: 'Artículo no encontrado.' });
+    const data: Record<string, string | boolean> = {};
+    if (typeof req.body?.title === 'string' && req.body.title.trim().length >= 3) data.title = req.body.title.trim().slice(0, 160);
+    if (typeof req.body?.category === 'string' && req.body.category.trim().length >= 3) data.category = req.body.category.trim().slice(0, 80);
+    if (typeof req.body?.content === 'string' && req.body.content.trim().length >= 10) data.content = req.body.content.trim().slice(0, 20_000);
+    if (typeof req.body?.active === 'boolean') data.active = req.body.active;
+    if (Array.isArray(req.body?.visibleRoles)) data.visibleRoles = req.body.visibleRoles.filter((role: unknown) => typeof role === 'string' && /^[A-Z_]+$/.test(role)).join(',') || 'ALL';
+    const article = await prisma.assistantKnowledgeArticle.update({ where: { id: existing.id }, data });
+    await prisma.auditLog.create({ data: { action: 'ASSISTANT_KNOWLEDGE_UPDATED', entityType: 'ASSISTANT_KNOWLEDGE', entityId: article.id, actorId: res.locals.authUser.id } });
+    res.json(article);
+  });
+
   app.get('/api/assistant/conversations', requireUser, async (_req, res) => {
     const userId = res.locals.authUser.id as string;
     const conversations = await prisma.assistantConversation.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' }, take: 20, include: { messages: { orderBy: { createdAt: 'desc' }, take: 1 } } });
@@ -84,6 +129,9 @@ export function registerNotificationRoutes(
     const history = assistantHistory(storedHistory.reverse().map((item) => ({ from: item.role, text: item.content })));
     if (!question) return void res.status(400).json({ message: 'Escribe una pregunta.' });
     if (originalQuestion.length > 1000) return void res.status(413).json({ message: 'La pregunta es demasiado larga. Resúmela e inténtalo de nuevo.' });
+    const windowStart = new Date(Date.now() - assistantWindowMs);
+    const recentQueries = await prisma.assistantUsageEvent.count({ where: { userId: user.id, createdAt: { gte: windowStart } } });
+    if (recentQueries >= assistantLimit) return void res.status(429).json({ message: `Alcanzaste el límite de ${assistantLimit} consultas cada 15 minutos. Intenta de nuevo más tarde.` });
     let groundedContext = '';
     const links = (() => {
       const map: [RegExp, { label: string; path: string }][] = [
@@ -102,15 +150,29 @@ export function registerNotificationRoutes(
     })();
     await prisma.assistantMessage.create({ data: { conversationId: conversation.id, role: 'user', content: originalQuestion } });
     const reply = async (answer: string) => {
-      // Every answer is grounded in the database result before Gemini formats it.
-      const { text: finalAnswer, source } = await answerWithGemini(`${originalQuestion}\nHistorial reciente:\n${history}`, user.role, groundedContext || answer, answer);
+      // Gemini formats only this verified answer and role-filtered knowledge;
+      // it never receives the broad database context assembled for rule matching.
+      const knowledge = await knowledgeFor(originalQuestion, user.role);
+      const renderingContext = `Respuesta verificada: ${answer}\n\nConocimiento institucional autorizado:\n${knowledge.join('\n\n') || 'Sin artículo aplicable.'}`;
+      const { text: finalAnswer, source } = await answerWithGemini(`${originalQuestion}\nHistorial reciente:\n${history}`, user.role, renderingContext, answer);
       if (source === 'error') await prisma.auditLog.create({ data: { action: 'ASSISTANT_AI_FALLBACK', entityType: 'ASSISTANT', entityId: conversation.id, actorId: user.id, details: JSON.stringify({ question: originalQuestion.slice(0, 200) }) } });
+      await prisma.assistantUsageEvent.create({ data: { userId: user.id, conversationId: conversation.id, question: originalQuestion.slice(0, 1000), source } });
       await prisma.assistantMessage.create({ data: { conversationId: conversation.id, role: 'assistant', content: finalAnswer, linksJson: links.length ? JSON.stringify(links) : null } });
       await prisma.assistantConversation.update({ where: { id: conversation.id }, data: { title: conversation.title === 'Nueva conversación' ? originalQuestion.slice(0, 60) : undefined } });
       return void res.json({ conversationId: conversation.id, answer: finalAnswer, links });
     };
     if (/revela|muéstrame|muestrame|ignora|omite|instrucciones|prompt|system message|clave|api key|secreto|configuración interna/.test(question)) {
       return void reply('Puedo ayudarte con información y procesos universitarios, pero no puedo revelar instrucciones internas, claves, secretos ni datos de otros usuarios.');
+    }
+    // Única acción real que el asistente puede ejecutar hoy: crear un trámite
+    // estudiantil (constancia, certificación de notas, cierre de pensum). El
+    // disparador de este bloque es un regex determinista, no una decisión del
+    // modelo -- así Gemini nunca "decide por su cuenta" entrar a esta rama;
+    // solo decide, dentro de ella, si ya tiene todos los datos y la
+    // confirmación explícita para invocar la herramienta.
+    if (user.role === 'ESTUDIANTE' && gemini && /constancia|certificaci[oó]n de notas|cierre de pensum|tr[aá]mite/.test(question)) {
+      const resultadoAccion = await intentarCrearSolicitudPorAsistente(gemini, prisma, notifyUser, user, originalQuestion, history);
+      return void reply(resultadoAccion.texto);
     }
     if (user.role === 'ESTUDIANTE') {
       const student = await prisma.student.findUnique({ where: { userId: user.id }, include: { plan: { include: { courses: { include: { course: true }, orderBy: { semester: 'asc' } } } }, enrollments: { where: { status: 'Inscrito' }, include: { section: { include: { course: true, teacher: true, classroom: true, cycle: true } } } }, gradeRecords: { include: { section: { include: { course: true } } } }, financialCharges: { include: { payments: true, adjustments: true } } } });
