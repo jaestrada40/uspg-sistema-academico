@@ -334,7 +334,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const result = await response.json();
     if (!response.ok) { showToast(result.message || 'No se pudo registrar el estudiante', 'error'); return false; }
     setStudents((prev) => [...prev, result.student]);
-    showToast(`Cuenta creada. Contraseña temporal: ${result.temporaryPassword}`, 'success');
+    showToast(`Estudiante registrado. Carné: ${result.student.carnet} · Contraseña temporal: ${result.temporaryPassword}`, 'success');
     return true;
   };
 

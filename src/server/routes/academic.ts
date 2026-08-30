@@ -130,17 +130,38 @@ export function registerAcademicRoutes(
     }
     const password = temporaryPassword();
     const userId = randomUUID();
+    // El carné se asigna automáticamente: dos dígitos del año de ingreso + un
+    // correlativo de cinco dígitos que reinicia cada año (p. ej. 2600001).
+    const entryYear = String(data.entryCycle || '').match(/\d{4}/)?.[0] || String(new Date().getFullYear());
+    const yearPrefix = entryYear.slice(-2);
     try {
       const plan = data.planId ? await prisma.curriculumPlan.findUnique({ where: { id: data.planId } }) : await prisma.curriculumPlan.findFirst({ where: { careerId: data.careerId, status: 'Activo' }, orderBy: { effectiveFrom: 'desc' } });
       const campus = data.campusId ? await prisma.campus.findUnique({ where: { id: data.campusId } }) : await prisma.campus.findFirst({ where: { status: 'Activo' }, orderBy: { name: 'asc' } });
       if (!plan || plan.careerId !== data.careerId || plan.campusId !== campus?.id) return void res.status(400).json({ message: 'Selecciona un plan académico vigente para la carrera y campus elegidos.' });
       if (!campus) return void res.status(400).json({ message: 'Selecciona un campus válido.' });
-      const student = await prisma.$transaction(async (tx) => {
-        await tx.user.create({ data: { id: userId, name: data.name, email: normalizedEmail, passwordHash: hashPassword(password), role: 'ESTUDIANTE', carnetOrCode: data.carnet, phone: data.phone, department: data.careerName, mustChangePassword: true } });
-        const created = await tx.student.create({ data: { carnet: data.carnet, name: data.name, email: normalizedEmail, phone: data.phone, careerId: data.careerId, careerName: data.careerName, entryCycle: data.entryCycle, jornada: data.jornada, status: data.status || 'Activo', gpa: data.gpa || 0, creditsEarned: data.creditsEarned || 0, totalCreditsRequired: plan.totalCredits, address: data.address, dpi: data.dpi, campusId: campus.id, planId: plan.id, userId }, include: { campus: true, plan: true } });
-        await tx.auditLog.create({ data: { action: 'CREATE', entityType: 'STUDENT', entityId: data.carnet, actorId: res.locals.authUser.id } });
-        return created;
-      });
+      let student: Awaited<ReturnType<typeof prisma.student.create>> | undefined;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          student = await prisma.$transaction(async (tx) => {
+            const siblings = await tx.student.findMany({ where: { carnet: { startsWith: yearPrefix } }, select: { carnet: true } });
+            const lastSequence = siblings.reduce((max, item) => (/^\d{7}$/.test(item.carnet) ? Math.max(max, Number(item.carnet.slice(2))) : max), 0);
+            const carnet = `${yearPrefix}${String(lastSequence + 1).padStart(5, '0')}`;
+            await tx.user.create({ data: { id: userId, name: data.name, email: normalizedEmail, passwordHash: hashPassword(password), role: 'ESTUDIANTE', carnetOrCode: carnet, phone: data.phone, department: data.careerName, mustChangePassword: true } });
+            const created = await tx.student.create({ data: { carnet, name: data.name, email: normalizedEmail, phone: data.phone, careerId: data.careerId, careerName: data.careerName, entryCycle: data.entryCycle, jornada: data.jornada, status: data.status || 'Activo', gpa: data.gpa || 0, creditsEarned: data.creditsEarned || 0, totalCreditsRequired: plan.totalCredits, address: data.address, dpi: data.dpi, campusId: campus.id, planId: plan.id, userId }, include: { campus: true, plan: true } });
+            await tx.auditLog.create({ data: { action: 'CREATE', entityType: 'STUDENT', entityId: carnet, actorId: res.locals.authUser.id } });
+            return created;
+          });
+          break;
+        } catch (error) {
+          const isCarnetRace = typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002'
+            && Array.isArray((error as { meta?: { target?: string[] } }).meta?.target)
+            && ((error as { meta: { target: string[] } }).meta.target.some((field) => field.includes('carnet')));
+          if (isCarnetRace && attempt < 3) continue;
+          if (!handleUniqueError(error, res)) throw error;
+          return;
+        }
+      }
+      if (!student) return void res.status(409).json({ message: 'No se pudo asignar un carné disponible. Intenta de nuevo.' });
       res.status(201).json({ student: studentView(student), temporaryPassword: password });
     } catch (error) {
       if (!handleUniqueError(error, res)) throw error;

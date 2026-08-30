@@ -89,7 +89,6 @@ export const StudentsPage: React.FC = () => {
 
   const validateForm = (editing = false) => {
     const errors: Record<string, string> = {};
-    if (!editing && !formData.carnet?.trim()) errors.carnet = 'El carné es obligatorio';
     if (!formData.name?.trim()) errors.name = 'El nombre completo es obligatorio';
     const normalizedEmail = formData.email?.trim().toLowerCase();
     if (!normalizedEmail) errors.email = 'El correo electrónico es obligatorio';
@@ -108,7 +107,7 @@ export const StudentsPage: React.FC = () => {
 
     const selectedCareer = careers.find((c) => c.code === formData.careerId);
     const newStudent: Student = {
-      carnet: formData.carnet!,
+      carnet: '', // el backend asigna el correlativo oficial
       name: formData.name!,
       email: formData.email!.trim().toLowerCase(),
       phone: formData.phone || '+502 0000-0000',
@@ -381,15 +380,15 @@ export const StudentsPage: React.FC = () => {
           <form onSubmit={handleCreateStudent} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-[#333333] mb-1">Carné *</label>
+                <label className="block text-xs font-bold text-[#333333] mb-1">Carné</label>
                 <input
                   type="text"
-                  value={formData.carnet}
-                  onChange={(e) => setFormData({ ...formData, carnet: e.target.value })}
-                  placeholder="ej. 20260012"
-                  className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 px-3 text-xs font-medium text-[#333333]"
+                  value="Se asigna automáticamente"
+                  readOnly
+                  disabled
+                  className="w-full rounded-lg border border-[#E2E8F0] bg-[#EEF2F7] py-2 px-3 text-xs font-medium text-[#64748B]"
                 />
-                {formErrors.carnet && <p className="text-[10px] font-semibold text-[#C53030] mt-0.5">{formErrors.carnet}</p>}
+                <p className="text-[10px] font-medium text-[#64748B] mt-0.5">Año de ingreso + correlativo (p. ej. 2600001)</p>
               </div>
 
               <div>
