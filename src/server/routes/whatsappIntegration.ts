@@ -11,6 +11,9 @@ import type { AppPrisma, ServerHelpers } from '../types';
 //  - El correo de un ESTUDIANTE debe terminar en @alumno.uspg.edu.gt (roleFromEmail
 //    en server.ts lo exige), asi que el correo institucional se genera aqui; el
 //    aspirante nunca lo escribe.
+//  - El aspirante SI da un correo personal (Gmail, Outlook, etc.). Ahi se le envian
+//    las credenciales, porque todavia no puede entrar a su correo institucional nuevo
+//    para leerlas. Es obligatorio para poder crear la cuenta.
 //  - Solo se crea la cuenta real (User + Student) si existe un CurriculumPlan
 //    activo para la combinacion carrera+campus. Si no existe (todavia falta cargar
 //    esa carrera en el sistema), la solicitud queda como revision manual: no se
@@ -40,6 +43,14 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(bufferA, bufferB);
 }
 
+// Validacion minima de correo: algo@algo.dominio. No cubre el RFC entero, solo
+// atrapa typos evidentes antes de crear la cuenta.
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+function isValidEmail(value: string): boolean {
+  return EMAIL_RE.test(value) && value.length <= 254;
+}
+
 function stripAccents(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
@@ -62,6 +73,32 @@ export function registerWhatsAppIntegrationRoutes(
   helpers: ServerHelpers,
 ) {
   const { hashPassword, temporaryPassword, notifyUser } = helpers;
+
+  // Envia una notificacion (feed + correo) a una direccion de correo distinta a la
+  // institucional del usuario. Se usa para mandarle las credenciales al correo
+  // PERSONAL del aspirante: su correo institucional recien creado todavia no lo
+  // puede abrir sin esas mismas credenciales.
+  async function notifyUserAtEmail(
+    userId: string,
+    recipientEmail: string,
+    title: string,
+    message: string,
+    type = 'INFO',
+    link?: string,
+  ) {
+    const notification = await prisma.appNotification.create({
+      data: {
+        userId,
+        title,
+        message,
+        type,
+        link,
+        email: { create: { recipientEmail, subject: title, textBody: message } },
+      },
+      include: { email: true },
+    });
+    if (notification.email) await helpers.deliverOutboxEmail(notification.email.id);
+  }
 
   const requireApiKey: express.RequestHandler = (req, res, next) => {
     const configured = process.env.WHATSAPP_AGENT_API_KEY || '';
@@ -132,9 +169,17 @@ export function registerWhatsAppIntegrationRoutes(
     const name = String(req.body?.name || '').trim();
     const phone = String(req.body?.phone || '').trim();
     const careerName = String(req.body?.careerName || '').trim();
+    const personalEmail = String(req.body?.personalEmail || '').trim().toLowerCase();
 
     if (name.length < 3 || phone.length < 6 || careerName.length < 3) {
       res.status(400).json({ message: 'Nombre, teléfono y carrera son obligatorios.' });
+      return;
+    }
+    if (!isValidEmail(personalEmail)) {
+      res.status(400).json({
+        status: 'error',
+        message: 'El correo personal es obligatorio y debe tener un formato válido (ejemplo: nombre@gmail.com).',
+      });
       return;
     }
 
@@ -142,7 +187,7 @@ export function registerWhatsAppIntegrationRoutes(
     const existingStudent = await prisma.student.findFirst({ where: { phone } });
     if (existingStudent) {
       await prisma.whatsAppInscriptionRequest.create({
-        data: { name, phone, careerName, status: 'DUPLICATE', studentCarnet: existingStudent.carnet },
+        data: { name, phone, careerName, personalEmail, status: 'DUPLICATE', studentCarnet: existingStudent.carnet },
       });
       res.status(409).json({
         status: 'duplicate',
@@ -160,7 +205,7 @@ export function registerWhatsAppIntegrationRoutes(
 
     if (!career) {
       await prisma.whatsAppInscriptionRequest.create({
-        data: { name, phone, careerName, status: 'PENDING_NO_CAREER' },
+        data: { name, phone, careerName, personalEmail, status: 'PENDING_NO_CAREER' },
       });
       await notifyAdmissionsStaff(
         'Nueva solicitud de inscripción (WhatsApp)',
@@ -181,7 +226,7 @@ export function registerWhatsAppIntegrationRoutes(
 
     if (!plan || !plan.campus) {
       await prisma.whatsAppInscriptionRequest.create({
-        data: { name, phone, careerName: career.name, status: 'PENDING_NO_PLAN' },
+        data: { name, phone, careerName: career.name, personalEmail, status: 'PENDING_NO_PLAN' },
       });
       await notifyAdmissionsStaff(
         'Nueva solicitud de inscripción (WhatsApp)',
@@ -251,8 +296,11 @@ export function registerWhatsAppIntegrationRoutes(
         return created;
       });
 
-      await notifyUser(
+      // Las credenciales van al correo PERSONAL: el institucional recién creado no
+      // lo puede abrir todavía sin estas mismas credenciales.
+      await notifyUserAtEmail(
         userId,
+        personalEmail,
         'Bienvenido/a a USPG',
         `Tu cuenta fue creada a partir de tu conversación por WhatsApp.\n\nCarné: ${carnet}\nCorreo institucional: ${email}\nContraseña temporal: ${password}\n\nDebes cambiar la contraseña la primera vez que inicies sesión.`,
         'SUCCESS',
@@ -261,12 +309,12 @@ export function registerWhatsAppIntegrationRoutes(
 
       await notifyAdmissionsStaff(
         'Cuenta creada automáticamente (WhatsApp)',
-        `Se creó la cuenta de ${name} (carné ${carnet}, ${career.name}) a partir de una conversación de WhatsApp, sin revisión previa. Verifica que corresponda a una inscripción real.`,
+        `Se creó la cuenta de ${name} (carné ${carnet}, ${career.name}) a partir de una conversación de WhatsApp, sin revisión previa. Correo personal declarado: ${personalEmail}. Verifica que corresponda a una inscripción real.`,
         `/estudiantes/${carnet}`,
       );
 
       await prisma.whatsAppInscriptionRequest.create({
-        data: { name, phone, careerName: career.name, status: 'CREATED', studentCarnet: carnet },
+        data: { name, phone, careerName: career.name, personalEmail, status: 'CREATED', studentCarnet: carnet },
       });
 
       res.status(201).json({
@@ -275,7 +323,7 @@ export function registerWhatsAppIntegrationRoutes(
         email,
         temporaryPassword: password,
         loginUrl: process.env.APP_URL || null,
-        message: `Cuenta creada. Carné ${carnet}, correo ${email}. Las credenciales también se enviaron por correo.`,
+        message: `Cuenta creada. Carné ${carnet}, correo ${email}. Las credenciales también se enviaron a ${personalEmail}.`,
       });
     } catch (error) {
       await prisma.whatsAppInscriptionRequest.create({
@@ -283,6 +331,7 @@ export function registerWhatsAppIntegrationRoutes(
           name,
           phone,
           careerName: career.name,
+          personalEmail,
           status: 'ERROR',
           detail: error instanceof Error ? error.message.slice(0, 500) : 'Error desconocido',
         },

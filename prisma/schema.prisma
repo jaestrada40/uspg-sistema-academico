@@ -978,6 +978,7 @@ model WhatsAppInscriptionRequest {
   name          String
   phone         String
   careerName    String   @map("career_name")
+  personalEmail String?  @map("personal_email")
   status        String
   studentCarnet String?  @map("student_carnet")
   detail        String?
