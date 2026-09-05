@@ -296,27 +296,15 @@ export function registerWhatsAppIntegrationRoutes(
         return created;
       });
 
-      // Las credenciales van al correo PERSONAL: el institucional recién creado no
-      // lo puede abrir todavía sin estas mismas credenciales.
-      await notifyUserAtEmail(
-        userId,
-        personalEmail,
-        'Bienvenido/a a USPG',
-        `Tu cuenta fue creada a partir de tu conversación por WhatsApp.\n\nCarné: ${carnet}\nCorreo institucional: ${email}\nContraseña temporal: ${password}\n\nDebes cambiar la contraseña la primera vez que inicies sesión.`,
-        'SUCCESS',
-        process.env.APP_URL,
-      );
-
-      await notifyAdmissionsStaff(
-        'Cuenta creada automáticamente (WhatsApp)',
-        `Se creó la cuenta de ${name} (carné ${carnet}, ${career.name}) a partir de una conversación de WhatsApp, sin revisión previa. Correo personal declarado: ${personalEmail}. Verifica que corresponda a una inscripción real.`,
-        `/estudiantes/${carnet}`,
-      );
-
       await prisma.whatsAppInscriptionRequest.create({
         data: { name, phone, careerName: career.name, personalEmail, status: 'CREATED', studentCarnet: carnet },
       });
 
+      // Se responde AHORA, antes de enviar los correos. Crear la cuenta ya terminó;
+      // el envío por SMTP puede tardar bastante (o colgarse si el host no alcanza al
+      // servidor de correo) y el agente de WhatsApp corta la llamada a los ~20-40s.
+      // Si esperáramos al correo, el aspirante recibiría "falló" aunque su cuenta sí
+      // quedó creada, y el reintento chocaría con un 409 de duplicado.
       res.status(201).json({
         status: 'created',
         carnet,
@@ -325,6 +313,34 @@ export function registerWhatsAppIntegrationRoutes(
         loginUrl: process.env.APP_URL || null,
         message: `Cuenta creada. Carné ${carnet}, correo ${email}. Las credenciales también se enviaron a ${personalEmail}.`,
       });
+
+      // Notificaciones fuera del ciclo de respuesta. Si el envío falla, el correo
+      // queda en la cola (email_outbox) para reintento manual; no afecta al aspirante,
+      // que ya tiene sus credenciales en el chat de WhatsApp.
+      void (async () => {
+        try {
+          // Las credenciales van al correo PERSONAL: el institucional recién creado
+          // no lo puede abrir todavía sin estas mismas credenciales.
+          await notifyUserAtEmail(
+            userId,
+            personalEmail,
+            'Bienvenido/a a USPG',
+            `Tu cuenta fue creada a partir de tu conversación por WhatsApp.\n\nCarné: ${carnet}\nCorreo institucional: ${email}\nContraseña temporal: ${password}\n\nDebes cambiar la contraseña la primera vez que inicies sesión.`,
+            'SUCCESS',
+            process.env.APP_URL,
+          );
+          await notifyAdmissionsStaff(
+            'Cuenta creada automáticamente (WhatsApp)',
+            `Se creó la cuenta de ${name} (carné ${carnet}, ${career.name}) a partir de una conversación de WhatsApp, sin revisión previa. Correo personal declarado: ${personalEmail}. Verifica que corresponda a una inscripción real.`,
+            `/estudiantes/${carnet}`,
+          );
+        } catch (notifyError) {
+          console.error(
+            'WhatsApp inscripción: la cuenta se creó pero fallaron las notificaciones por correo:',
+            notifyError instanceof Error ? notifyError.message : 'error desconocido',
+          );
+        }
+      })();
     } catch (error) {
       await prisma.whatsAppInscriptionRequest.create({
         data: {
