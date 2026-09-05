@@ -99,6 +99,8 @@ const ACTION_LABELS: Record<string, string> = {
   // Notifications / Assistant
   BROADCAST_NOTIFICATION: 'Notificación masiva enviada',
   ASSISTANT_AI_FALLBACK: 'Asistente IA sin respuesta',
+  ASSISTANT_KNOWLEDGE_CREATED: 'Artículo de conocimiento del asistente creado',
+  ASSISTANT_KNOWLEDGE_UPDATED: 'Artículo de conocimiento del asistente actualizado',
   // Systems
   SESSION_TERMINATED: 'Sesión terminada',
   SYSTEM_CONFIG_UPDATED: 'Configuración de sistema actualizada',

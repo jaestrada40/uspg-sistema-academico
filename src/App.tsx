@@ -39,6 +39,7 @@ const ParkingKioskPage = lazyPage(() => import('./pages/ParkingKioskPage'), 'Par
 const UsersPage = lazyPage(() => import('./pages/UsersPage'), 'UsersPage');
 const SystemsPage = lazyPage(() => import('./pages/SystemsPage'), 'SystemsPage');
 const EventsPage = lazyPage(() => import('./pages/EventsPage'), 'EventsPage');
+const AssistantKnowledgePage = lazyPage(() => import('./pages/AssistantKnowledgePage'), 'AssistantKnowledgePage');
 
 const PageLoader = () => <div className="flex min-h-[40vh] items-center justify-center text-sm font-semibold text-[#64748B]">Cargando módulo...</div>;
 
@@ -83,6 +84,7 @@ export default function App() {
           <Route path="/actividades-zona" element={<ProtectedRoute><ZoneActivitiesPage /></ProtectedRoute>} />
           <Route path="/recuperaciones" element={<ProtectedRoute><RecoveriesPage /></ProtectedRoute>} />
           <Route path="/notificaciones" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+          <Route path="/conocimiento-asistente" element={<ProtectedRoute><AssistantKnowledgePage /></ProtectedRoute>} />
           <Route path="/solicitudes" element={<ProtectedRoute><StudentRequestsPage /></ProtectedRoute>} />
           <Route path="/expediente" element={<ProtectedRoute><EnrollmentDocumentsPage /></ProtectedRoute>} />
           <Route path="/malla" element={<ProtectedRoute><CurriculumMapPage /></ProtectedRoute>} />

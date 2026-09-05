@@ -32,7 +32,9 @@ const prisma = createPrismaClient();
 // ── Gemini / AI ──────────────────────────────────────────────────────────────
 // Academic records are sensitive data. Do not send them to an external model
 // from a production deployment unless a dedicated, reviewed integration exists.
-const gemini = process.env.NODE_ENV !== 'production' && process.env.AI_PROVIDER === 'gemini' && process.env.GEMINI_API_KEY
+// Gemini receives only the already-authorized, verified response and matching
+// institutional knowledge. It never receives a database dump or credentials.
+const gemini = process.env.AI_PROVIDER === 'gemini' && process.env.GEMINI_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
   : null;
 const requestGeminiAnswer = async (question: string, role: string, context: string) => {

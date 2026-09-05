@@ -65,6 +65,7 @@ export const Sidebar: React.FC = () => {
     { path: '/historial', label: 'Historial Académico', icon: History, roles: ['ADMIN', 'REGISTRO', 'ESTUDIANTE', 'DOCENTE'] },
     { path: '/reportes', label: 'Reportes Académicos', icon: BarChart3, roles: ['ADMIN', 'REGISTRO'] },
     { path: '/notificaciones', label: 'Notificaciones', icon: BellRing, roles: ['ADMIN', 'REGISTRO'] },
+    { path: '/conocimiento-asistente', label: 'Base del Asistente', icon: BookOpen, roles: ['ADMIN', 'REGISTRO'] },
     { path: '/sistemas', label: 'Operación de Sistemas', icon: Wrench, roles: ['SISTEMAS'] },
     { path: '/perfil', label: 'Perfil y Configuración', icon: Settings, roles: ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS', 'REGISTRO', 'FINANZAS'] },
   ];

@@ -46,8 +46,39 @@ model User {
   parkingVehicles           ParkingVehicle[]
   parkingVisits             ParkingVisit[]
   assistantConversations    AssistantConversation[]
+  assistantUsageEvents      AssistantUsageEvent[]
+  knowledgeArticles         AssistantKnowledgeArticle[] @relation("KnowledgeAuthor")
 
   @@map("users")
+}
+
+model AssistantKnowledgeArticle {
+  id           String   @id @default(cuid())
+  title        String
+  category     String
+  content      String
+  visibleRoles String   @default("ALL") @map("visible_roles")
+  active       Boolean  @default(true)
+  createdById  String   @map("created_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdBy    User     @relation("KnowledgeAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([active, category])
+  @@map("assistant_knowledge_articles")
+}
+
+model AssistantUsageEvent {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  conversationId String?  @map("conversation_id")
+  question       String
+  source         String
+  createdAt      DateTime @default(now()) @map("created_at")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("assistant_usage_events")
 }
 
 model AssistantConversation {
