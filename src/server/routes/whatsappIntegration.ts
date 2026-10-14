@@ -213,7 +213,16 @@ export function registerWhatsAppIntegrationRoutes(
 
     // Un teléfono ya usado para inscribirse no puede volver a generar otra cuenta.
     const phoneKey = normalizePhoneKey(phone);
-    const phoneClaim = await prisma.whatsAppPhoneClaim.findUnique({ where: { phoneKey } });
+    let phoneClaim = await prisma.whatsAppPhoneClaim.findUnique({ where: { phoneKey } });
+    if (phoneClaim) {
+      // El reclamo puede haber quedado desfasado (el estudiante cambió de número o ya no existe): si el
+      // carné reclamado ya no tiene este teléfono, el reclamo se libera para no bloquear a su nuevo titular.
+      const claimed = await prisma.student.findUnique({ where: { carnet: phoneClaim.studentCarnet }, select: { phone: true } });
+      if (!claimed || normalizePhoneKey(String(claimed.phone || '')) !== phoneKey) {
+        await prisma.whatsAppPhoneClaim.deleteMany({ where: { phoneKey, studentCarnet: phoneClaim.studentCarnet } });
+        phoneClaim = null;
+      }
+    }
     const existingStudent = phoneClaim ? { carnet: phoneClaim.studentCarnet } : await prisma.student.findFirst({ where: { phone } });
     if (existingStudent) {
       await prisma.whatsAppInscriptionRequest.create({

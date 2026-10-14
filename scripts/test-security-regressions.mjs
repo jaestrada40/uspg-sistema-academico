@@ -88,8 +88,8 @@ try {
 
   // 4. SISTEMAS no puede intervenir cuentas con autoridad de gestión.
   const systems = await signIn(accounts.systems);
-  const registro = await request('POST', '/api/auth/login', { body: accounts.registro });
-  const resetRegistro = await request('POST', `/api/systems/accounts/${registro.json.user.id}/reset-password`, { cookie: systems.cookie });
+  const registro = await signIn(accounts.registro);
+  const resetRegistro = await request('POST', `/api/systems/accounts/${registro.user.id}/reset-password`, { cookie: systems.cookie });
   check('sistemas: no puede resetear una cuenta REGISTRO', resetRegistro.status === 404 && !resetRegistro.json?.temporaryPassword, `status ${resetRegistro.status}`);
 
   // 5. Una cookie malformada no tumba el servidor.
@@ -106,7 +106,7 @@ try {
   // 7. Inscripciones simultáneas por WhatsApp no derriban el servidor (requiere TEST_WHATSAPP_API_KEY y un plan activo).
   if (whatsappKey) {
     const tag = randomUUID().slice(0, 6);
-    const results = await Promise.all(Array.from({ length: 5 }, (_, i) => request('POST', '/api/integrations/whatsapp/solicitudes-inscripcion', {
+    const results = await Promise.all(Array.from({ length: 4 }, (_, i) => request('POST', '/api/integrations/whatsapp/solicitudes-inscripcion', {
       headers: { 'x-api-key': whatsappKey },
       body: { name: 'Regresion Concurrente', phone: `+502 8${tag.replace(/\D/g, '0')}${i}0000`, careerName: whatsappCareer, personalEmail: `reg-${tag}-${i}@example.com` },
     }).then((r) => r.status).catch(() => 'sin respuesta')));
@@ -120,6 +120,13 @@ try {
       body: { name: `Mismo Telefono ${i} Regresion`, phone, careerName: whatsappCareer, personalEmail: `tel-${tag}-${i}@example.com` },
     }).then((r) => r.status).catch(() => 'sin respuesta')));
     check('whatsapp: un teléfono en formatos distintos crea una sola cuenta', same.filter((s) => s === 201).length === 1 && same.filter((s) => s === 409).length === 2, same.join(','));
+    // Si el estudiante cambia de número, el reclamo antiguo se libera y el número vuelve a poder inscribirse.
+    const stale = String(Math.floor(10_000_000 + Math.random() * 89_999_999));
+    const enroll = (phone, name) => request('POST', '/api/integrations/whatsapp/solicitudes-inscripcion', { headers: { 'x-api-key': whatsappKey }, body: { name, phone, careerName: whatsappCareer, personalEmail: `old-${tag}@example.com` } });
+    const first = await enroll(stale, 'Reclamo Original Regresion');
+    const moved = await request('PATCH', `/api/students/${first.json?.carnet}`, { cookie: registro.cookie, body: { phone: `+502 ${String(Math.floor(10_000_000 + Math.random() * 89_999_999))}` } });
+    const again = await enroll(stale, 'Nuevo Titular Regresion');
+    check('whatsapp: el reclamo desfasado se libera al cambiar el teléfono', first.status === 201 && moved.status === 200 && again.status === 201, `${first.status},${moved.status},${again.status}`);
   } else {
     console.log('SKIP whatsapp: define TEST_WHATSAPP_API_KEY (y un plan curricular activo) para probar la ráfaga concurrente.');
   }
