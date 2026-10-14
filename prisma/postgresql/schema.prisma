@@ -1004,6 +1004,16 @@ model ParkingOfflineOperation {
 // registra aqui, haya terminado en una cuenta real o en revision manual. Es el
 // rastro de auditoria independiente del AuditLog (que solo se escribe cuando si
 // se crea una cuenta) y lo que permite detectar abuso por telefono.
+// Reclamo atómico de un teléfono normalizado: garantiza una sola cuenta por número aunque lleguen
+// inscripciones simultáneas (Student.phone no es único y hay datos existentes que lo impiden).
+model WhatsAppPhoneClaim {
+  phoneKey      String   @id @map("phone_key")
+  studentCarnet String   @map("student_carnet")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("whatsapp_phone_claims")
+}
+
 model WhatsAppInscriptionRequest {
   id            String   @id @default(cuid())
   name          String

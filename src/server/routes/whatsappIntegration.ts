@@ -47,6 +47,13 @@ function safeEqual(a: string, b: string): boolean {
 // atrapa typos evidentes antes de crear la cuenta.
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+// Clave comparable de un teléfono: solo dígitos y sin el prefijo de país de Guatemala (502),
+// de modo que '+502 1234 5678', '502-12345678' y '12345678' son el mismo número.
+function normalizePhoneKey(value: string): string {
+  const digits = value.replace(/\D/g, '').replace(/^00/, '');
+  return digits.length === 11 && digits.startsWith('502') ? digits.slice(3) : digits;
+}
+
 function isValidEmail(value: string): boolean {
   return EMAIL_RE.test(value) && value.length <= 254;
 }
@@ -205,7 +212,9 @@ export function registerWhatsAppIntegrationRoutes(
     }
 
     // Un teléfono ya usado para inscribirse no puede volver a generar otra cuenta.
-    const existingStudent = await prisma.student.findFirst({ where: { phone } });
+    const phoneKey = normalizePhoneKey(phone);
+    const phoneClaim = await prisma.whatsAppPhoneClaim.findUnique({ where: { phoneKey } });
+    const existingStudent = phoneClaim ? { carnet: phoneClaim.studentCarnet } : await prisma.student.findFirst({ where: { phone } });
     if (existingStudent) {
       await prisma.whatsAppInscriptionRequest.create({
         data: { name, phone, careerName, personalEmail, status: 'DUPLICATE', studentCarnet: existingStudent.carnet },
@@ -277,10 +286,13 @@ export function registerWhatsAppIntegrationRoutes(
     // (fuera de la transacción) ni consumir su ventana de tiempo (5s por defecto).
     const actorId = await ensureSystemActor();
 
+    const isPhoneClaimConflict = (error: unknown) => isUniqueViolation(error) && /phone_key|whatsapp_phone_claims|phoneKey/.test(JSON.stringify((error as { meta?: unknown }).meta ?? ''));
     const isUniqueViolation = (error: unknown) => typeof error === 'object' && error !== null && (error as { code?: string }).code === 'P2002';
 
     try {
       const runEnrollment = () => prisma.$transaction(async (tx) => {
+        // Reclamo atómico del teléfono: si otra inscripción simultánea ya lo tomó, esta falla aquí.
+        await tx.whatsAppPhoneClaim.create({ data: { phoneKey, studentCarnet: carnet } });
         await tx.user.create({
           data: {
             id: userId,
@@ -329,7 +341,7 @@ export function registerWhatsAppIntegrationRoutes(
         try {
           student = await runEnrollment();
         } catch (error) {
-          if (attempt >= 4 || !isUniqueViolation(error)) throw error;
+          if (attempt >= 4 || !isUniqueViolation(error) || isPhoneClaimConflict(error)) throw error;
           await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1) + Math.floor(Math.random() * 75)));
           email = await uniqueInstitutionalEmail(name);
           carnet = await nextCarnet();
@@ -386,6 +398,10 @@ export function registerWhatsAppIntegrationRoutes(
         },
       }).catch(() => undefined);
       if (res.headersSent) return;
+      if (isPhoneClaimConflict(error)) {
+        res.status(409).json({ status: 'duplicate', message: 'Este número de WhatsApp ya tiene una cuenta registrada.' });
+        return;
+      }
       if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
         res.status(409).json({ status: 'conflict', message: 'No se pudo asignar un carné único. Intenta de nuevo.' });
         return;

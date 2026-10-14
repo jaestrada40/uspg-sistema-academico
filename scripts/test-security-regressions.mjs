@@ -112,6 +112,14 @@ try {
     }).then((r) => r.status).catch(() => 'sin respuesta')));
     const alive = await fetch(`${baseUrl}/api/health`).then((r) => r.status).catch(() => 'sin respuesta');
     check('whatsapp: ráfaga concurrente sin caída y con inscripciones creadas', alive === 200 && !results.includes('sin respuesta') && results.filter((s) => s === 201).length >= 1, `${results.join(',')} health ${alive}`);
+    // Un mismo teléfono (en formatos distintos) llegando a la vez crea una sola cuenta.
+    const digits = String(Math.floor(10_000_000 + Math.random() * 89_999_999));
+    const formats = [digits, `+502 ${digits.slice(0, 4)} ${digits.slice(4)}`, `502-${digits}`];
+    const same = await Promise.all(formats.map((phone, i) => request('POST', '/api/integrations/whatsapp/solicitudes-inscripcion', {
+      headers: { 'x-api-key': whatsappKey },
+      body: { name: `Mismo Telefono ${i} Regresion`, phone, careerName: whatsappCareer, personalEmail: `tel-${tag}-${i}@example.com` },
+    }).then((r) => r.status).catch(() => 'sin respuesta')));
+    check('whatsapp: un teléfono en formatos distintos crea una sola cuenta', same.filter((s) => s === 201).length === 1 && same.filter((s) => s === 409).length === 2, same.join(','));
   } else {
     console.log('SKIP whatsapp: define TEST_WHATSAPP_API_KEY (y un plan curricular activo) para probar la ráfaga concurrente.');
   }
