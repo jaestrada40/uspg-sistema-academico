@@ -1,6 +1,9 @@
 import type express from 'express';
 import type { AppPrisma, ServerHelpers, AuthMiddleware } from '../types';
 
+// Soporte técnico solo puede intervenir cuentas sin autoridad académica, financiera ni administrativa.
+const SUPPORTED_ROLES = ['ESTUDIANTE', 'DOCENTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS'];
+
 export function registerSystemsRoutes(
   app: express.Application,
   prisma: AppPrisma,
@@ -23,13 +26,13 @@ export function registerSystemsRoutes(
   });
 
   app.get('/api/systems/accounts', requireUser, requireSystems, async (_req, res) => {
-    const users = await prisma.user.findMany({ where: { role: { not: 'ADMIN' } }, select: { id: true, name: true, email: true, role: true, active: true, mustChangePassword: true, mfaEnabled: true }, orderBy: [{ role: 'asc' }, { name: 'asc' }] });
+    const users = await prisma.user.findMany({ where: { role: { in: SUPPORTED_ROLES } }, select: { id: true, name: true, email: true, role: true, active: true, mustChangePassword: true, mfaEnabled: true }, orderBy: [{ role: 'asc' }, { name: 'asc' }] });
     res.json(users);
   });
 
   app.post('/api/systems/accounts/:id/reset-password', requireUser, requireSystems, async (req, res) => {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
-    if (!user || user.role === 'ADMIN') return void res.status(404).json({ message: 'Usuario no disponible para soporte técnico.' });
+    if (!user || !SUPPORTED_ROLES.includes(user.role)) return void res.status(404).json({ message: 'Usuario no disponible para soporte técnico.' });
     const password = temporaryPassword();
     await prisma.$transaction([
       prisma.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(password), mustChangePassword: true } }),
@@ -43,7 +46,7 @@ export function registerSystemsRoutes(
 
   app.post('/api/systems/accounts/:id/reset-mfa', requireUser, requireSystems, async (req, res) => {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
-    if (!user || user.role === 'ADMIN') return void res.status(404).json({ message: 'Usuario no disponible para soporte técnico.' });
+    if (!user || !SUPPORTED_ROLES.includes(user.role)) return void res.status(404).json({ message: 'Usuario no disponible para soporte técnico.' });
     await prisma.$transaction([
       prisma.user.update({ where: { id: user.id }, data: { mfaEnabled: false, mfaSecretEncrypted: null, mfaPendingSecretEncrypted: null, mfaRecoveryCodeHashes: null, mfaLastUsedStep: null } }),
       prisma.session.deleteMany({ where: { userId: user.id } }),
@@ -80,7 +83,7 @@ export function registerSystemsRoutes(
     const session = await prisma.session.findUnique({ where: { id: req.params.id } });
     if (!session) return void res.status(404).json({ message: 'Sesión no encontrada.' });
     const user = await prisma.user.findUnique({ where: { id: session.userId } });
-    if (user?.role === 'ADMIN') return void res.status(403).json({ message: 'No se puede cerrar sesión de ADMIN.' });
+    if (user && !SUPPORTED_ROLES.includes(user.role)) return void res.status(403).json({ message: 'Soporte técnico no puede cerrar sesión de esta cuenta.' });
     await prisma.session.delete({ where: { id: req.params.id } });
     await prisma.auditLog.create({ data: { action: 'SESSION_CLOSED_SYSTEMS', entityType: 'SESSION', entityId: req.params.id, actorId: res.locals.authUser.id, details: JSON.stringify({ userId: session.userId }) } });
     res.json({ ok: true });
@@ -97,7 +100,7 @@ export function registerSystemsRoutes(
 
   app.patch('/api/systems/accounts/:id/toggle-active', requireUser, requireSystems, async (req, res) => {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
-    if (!user || user.role === 'ADMIN') return void res.status(404).json({ message: 'Usuario no disponible para soporte técnico.' });
+    if (!user || !SUPPORTED_ROLES.includes(user.role)) return void res.status(404).json({ message: 'Usuario no disponible para soporte técnico.' });
     const updated = await prisma.user.update({ where: { id: user.id }, data: { active: !user.active } });
     if (!updated.active) await prisma.session.deleteMany({ where: { userId: user.id } });
     await prisma.auditLog.create({ data: { action: updated.active ? 'USER_ACTIVATED_SYSTEMS' : 'USER_DEACTIVATED_SYSTEMS', entityType: 'USER', entityId: user.id, actorId: res.locals.authUser.id } });

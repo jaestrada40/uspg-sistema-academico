@@ -117,18 +117,26 @@ export function registerWhatsAppIntegrationRoutes(
   async function ensureSystemActor(): Promise<string> {
     const existing = await prisma.user.findUnique({ where: { id: SYSTEM_ACTOR_ID } });
     if (existing) return existing.id;
-    const created = await prisma.user.create({
-      data: {
-        id: SYSTEM_ACTOR_ID,
-        name: 'Asistente de WhatsApp (automático)',
-        email: SYSTEM_ACTOR_EMAIL,
-        passwordHash: hashPassword(randomBytes(24).toString('hex')),
-        role: 'SISTEMAS',
-        active: false, // nunca debe poder iniciar sesión; solo existe como actor de auditoría
-        mustChangePassword: true,
-      },
-    });
-    return created.id;
+    try {
+      const created = await prisma.user.create({
+        data: {
+          id: SYSTEM_ACTOR_ID,
+          name: 'Asistente de WhatsApp (automático)',
+          email: SYSTEM_ACTOR_EMAIL,
+          passwordHash: hashPassword(randomBytes(24).toString('hex')),
+          role: 'SISTEMAS',
+          active: false, // nunca debe poder iniciar sesión; solo existe como actor de auditoría
+          mustChangePassword: true,
+        },
+      });
+      return created.id;
+    } catch (error) {
+      // Dos inscripciones simultáneas pueden intentar crear el actor a la vez: gana una y la otra lo reutiliza.
+      if ((error as { code?: string }).code !== 'P2002') throw error;
+      const raced = await prisma.user.findUnique({ where: { id: SYSTEM_ACTOR_ID } });
+      if (raced) return raced.id;
+      throw error;
+    }
   }
 
   async function nextCarnet(): Promise<string> {
@@ -256,8 +264,8 @@ export function registerWhatsAppIntegrationRoutes(
       return;
     }
 
-    const email = await uniqueInstitutionalEmail(name);
-    const carnet = await nextCarnet();
+    let email = await uniqueInstitutionalEmail(name);
+    let carnet = await nextCarnet();
     const password = temporaryPassword();
     const userId = randomUUID();
     const currentCycle = await prisma.academicCycle.findFirst({
@@ -269,8 +277,10 @@ export function registerWhatsAppIntegrationRoutes(
     // (fuera de la transacción) ni consumir su ventana de tiempo (5s por defecto).
     const actorId = await ensureSystemActor();
 
+    const isUniqueViolation = (error: unknown) => typeof error === 'object' && error !== null && (error as { code?: string }).code === 'P2002';
+
     try {
-      const student = await prisma.$transaction(async (tx) => {
+      const runEnrollment = () => prisma.$transaction(async (tx) => {
         await tx.user.create({
           data: {
             id: userId,
@@ -312,6 +322,19 @@ export function registerWhatsAppIntegrationRoutes(
         });
         return created;
       });
+      // El carné y el correo se calculan leyendo antes de escribir: dos inscripciones simultáneas pueden
+      // obtener el mismo valor y una falla con violación de unicidad (P2002). Se recalculan y se reintenta.
+      let student: Awaited<ReturnType<typeof runEnrollment>> | undefined;
+      for (let attempt = 0; !student; attempt += 1) {
+        try {
+          student = await runEnrollment();
+        } catch (error) {
+          if (attempt >= 4 || !isUniqueViolation(error)) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1) + Math.floor(Math.random() * 75)));
+          email = await uniqueInstitutionalEmail(name);
+          carnet = await nextCarnet();
+        }
+      }
 
       await prisma.whatsAppInscriptionRequest.create({
         data: { name, phone, careerName: career.name, personalEmail, status: 'CREATED', studentCarnet: carnet },
