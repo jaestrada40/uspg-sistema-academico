@@ -39,7 +39,7 @@ export type ServerHelpers = {
   assistantHistory: (history: unknown) => string;
 
   // Auth / rate limiting
-  loginAttempts: Map<string, { count: number; blockedUntil: number }>;
+  loginAttempts: Map<string, { count: number; blockedUntil: number; resetAt: number }>;
   passwordRecoveryRequests: Map<string, number>;
   loginAttemptKey: (username: string, ip?: string) => string;
   registerFailedLogin: (key: string) => void;

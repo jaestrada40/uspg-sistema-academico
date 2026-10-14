@@ -361,8 +361,14 @@ export function registerWhatsAppIntegrationRoutes(
           status: 'ERROR',
           detail: error instanceof Error ? error.message.slice(0, 500) : 'Error desconocido',
         },
-      });
-      throw error;
+      }).catch(() => undefined);
+      if (res.headersSent) return;
+      if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
+        res.status(409).json({ status: 'conflict', message: 'No se pudo asignar un carné único. Intenta de nuevo.' });
+        return;
+      }
+      console.error(error);
+      res.status(500).json({ status: 'error', message: 'Ocurrió un error interno al registrar la inscripción.' });
     }
   });
 }

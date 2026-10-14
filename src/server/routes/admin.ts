@@ -28,6 +28,7 @@ export function registerAdminRoutes(
     const carnetOrCode = String(req.body?.carnetOrCode || '').trim() || null;
     const allowedRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS', 'REGISTRO', 'FINANZAS'];
     if (name.length < 3 || !/^\S+@\S+\.\S+$/.test(email) || !allowedRoles.includes(role)) return void res.status(400).json({ message: 'Nombre, correo y rol son obligatorios y válidos.' });
+    if (role === 'ESTUDIANTE' && !carnetOrCode) return void res.status(400).json({ message: 'Un estudiante requiere carné.' });
     const password = temporaryPassword();
     try {
       const user = await prisma.user.create({ data: { id: randomUUID(), name, email, role, carnetOrCode, passwordHash: hashPassword(password), mustChangePassword: true, department: role === 'ADMIN' ? 'Administración' : null } });
@@ -72,6 +73,7 @@ export function registerAdminRoutes(
     const role = String(req.body?.role || '').trim().toUpperCase();
     const allowedRoles = ['ADMIN', 'DOCENTE', 'ESTUDIANTE', 'BIBLIOTECA', 'PARQUEO', 'EVENTOS', 'SISTEMAS', 'REGISTRO', 'FINANZAS'];
     if (!allowedRoles.includes(role)) return void res.status(400).json({ message: 'Rol no válido.' });
+    if (role === 'ESTUDIANTE' && !user.carnetOrCode) return void res.status(400).json({ message: 'Un estudiante requiere carné.' });
     const previousRole = user.role;
     await prisma.$transaction([
       prisma.user.update({ where: { id: user.id }, data: { role } }),

@@ -100,6 +100,19 @@ const notifyByCarnet = async (carnet: string, title: string, message: string, ty
 
 // ── App setup ─────────────────────────────────────────────────────────────────
 const app = express();
+// Express 4 no reenvía los rechazos de los manejadores async al middleware de errores:
+// sin esto, cualquier excepción dentro de una ruta async terminaría el proceso.
+const forwardAsyncErrors = (handler: unknown): unknown => {
+  if (Array.isArray(handler)) return handler.map(forwardAsyncErrors);
+  if (typeof handler !== 'function' || handler.length >= 4) return handler;
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    try { const result = (handler as (...args: unknown[]) => unknown)(req, res, next); if (result && typeof (result as Promise<unknown>).catch === 'function') (result as Promise<unknown>).catch(next); } catch (error) { next(error); }
+  };
+};
+for (const method of ['get', 'post', 'put', 'patch', 'delete'] as const) {
+  const original = (app as unknown as Record<string, (...args: unknown[]) => unknown>)[method].bind(app);
+  (app as unknown as Record<string, unknown>)[method] = (...args: unknown[]) => (method === 'get' && args.length === 1 ? original(...args) : original(...args.map((arg) => (typeof arg === 'string' || arg instanceof RegExp ? arg : forwardAsyncErrors(arg)))));
+}
 const isProduction = process.env.NODE_ENV === 'production';
 if (isProduction) app.set('trust proxy', 1);
 app.disable('x-powered-by');
@@ -121,7 +134,8 @@ app.use(express.json({ limit: '5mb', strict: true, verify: (req, _res, buffer) =
 const sessionCookie = 'uspg_session';
 const sessionCookieOptions = { httpOnly: true, sameSite: 'lax' as const, secure: isProduction, path: '/' };
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
-const parseCookies = (header = '') => Object.fromEntries(header.split(';').map((part) => part.trim().split('=').map(decodeURIComponent)).filter(([key]) => key));
+const safeDecodeURIComponent = (value: string) => { try { return decodeURIComponent(value); } catch { return value; } };
+const parseCookies = (header = '') => Object.fromEntries(header.split(';').map((part) => part.trim().split('=').map(safeDecodeURIComponent)).filter(([key]) => key));
 const readSessionToken = (req: express.Request) => parseCookies(req.headers.cookie)[sessionCookie];
 
 const configuredOrigin = (() => { try { return process.env.APP_URL ? new URL(process.env.APP_URL).origin : null; } catch { return null; } })();
@@ -168,12 +182,13 @@ const temporaryPassword = () => `UsPG${randomBytes(4).toString('hex')}!`;
 const handleUniqueError = (error: unknown, res: express.Response) => { if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') { res.status(409).json({ message: 'El correo, carné o código ya está registrado.' }); return true; } return false; };
 
 // ── Rate limiting / sessions ──────────────────────────────────────────────────
-const loginAttempts = new Map<string, { count: number; blockedUntil: number }>();
+const loginAttempts = new Map<string, { count: number; blockedUntil: number; resetAt: number }>();
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
 const passwordRecoveryRequests = new Map<string, number>();
 const loginAttemptKey = (username: string, ip = '') => `${ip}:${username.toLowerCase()}`;
 const pruneAuthLimits = () => {
   const now = Date.now();
-  for (const [key, value] of loginAttempts) if (!value.blockedUntil || value.blockedUntil <= now) loginAttempts.delete(key);
+  for (const [key, value] of loginAttempts) if (value.resetAt <= now && value.blockedUntil <= now) loginAttempts.delete(key);
   for (const [key, value] of passwordRecoveryRequests) if (now - value > 15 * 60 * 1000) passwordRecoveryRequests.delete(key);
 };
 const registerFailedLogin = (key: string) => {
@@ -182,8 +197,10 @@ const registerFailedLogin = (key: string) => {
   // limiter shared by all replicas.
   if (loginAttempts.size >= 20_000 && !loginAttempts.has(key)) return;
   const current = loginAttempts.get(key);
-  const count = (current?.blockedUntil && current.blockedUntil > Date.now() ? current.count : 0) + 1;
-  loginAttempts.set(key, { count, blockedUntil: count >= 5 ? Date.now() + 15 * 60 * 1000 : 0 });
+  const now = Date.now();
+  const inWindow = Boolean(current && current.resetAt > now);
+  const count = (inWindow ? current!.count : 0) + 1;
+  loginAttempts.set(key, { count, blockedUntil: count >= 5 ? now + LOGIN_FAILURE_WINDOW_MS : 0, resetAt: inWindow ? current!.resetAt : now + LOGIN_FAILURE_WINDOW_MS });
 };
 const createAuthenticatedSession = async (res: express.Response, userId: string, rememberMe: boolean) => { await prisma.session.deleteMany({ where: { expiresAt: { lte: new Date() } } }); const token = randomBytes(32).toString('base64url'); const durationMs = (rememberMe ? 30 : 1) * 24 * 60 * 60 * 1000; await prisma.session.create({ data: { tokenHash: hashToken(token), userId, expiresAt: new Date(Date.now() + durationMs) } }); res.cookie(sessionCookie, token, { ...sessionCookieOptions, maxAge: rememberMe ? durationMs : undefined }); };
 

@@ -75,6 +75,7 @@ export function registerFinanceRoutes(
     const user = res.locals.authUser;
     if (rejectNonFinanceUser(res, user.role)) return;
     const requestedCarnet = String(req.query.studentCarnet || '');
+    if (user.role === 'ESTUDIANTE' && !user.carnetOrCode) return void res.status(403).json({ message: 'Tu cuenta no tiene carné asignado.' });
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode : requestedCarnet || undefined;
     const charges = await prisma.financialCharge.findMany({ where: studentCarnet ? { studentCarnet } : {}, include: { student: true, vehicle: { select: { plate: true } }, adjustments: { orderBy: { createdAt: 'desc' } }, payments: { orderBy: { paidAt: 'desc' } } }, orderBy: [{ dueDate: 'desc' }, { createdAt: 'desc' }] });
     const records = charges.map(financeView);
@@ -280,6 +281,7 @@ export function registerFinanceRoutes(
     const user = res.locals.authUser;
     if (rejectNonFinanceUser(res, user.role)) return;
     const requestedCarnet = String(req.query.studentCarnet || '');
+    if (user.role === 'ESTUDIANTE' && !user.carnetOrCode) return void res.status(403).json({ message: 'Tu cuenta no tiene carné asignado.' });
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode || '' : requestedCarnet;
     const records = await prisma.transferProof.findMany({ where: studentCarnet ? { studentCarnet } : {}, include: { student: true, charge: { select: { concept: true } } }, omit: { fileData: true }, orderBy: { createdAt: 'desc' }, take: 100 });
     res.json(records.map((item) => ({ ...item, studentName: item.student.name, concept: item.charge.concept })));

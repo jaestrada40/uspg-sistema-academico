@@ -352,7 +352,7 @@ export function registerAcademicRoutes(
 
   app.get('/api/curriculum-map', requireUser, async (req, res) => {
     const user = res.locals.authUser;
-    if (user.role === 'DOCENTE') return void res.status(403).json({ message: 'La malla estudiantil no está disponible para catedráticos.' });
+    if (!['ESTUDIANTE', 'ADMIN', 'REGISTRO'].includes(user.role)) return void res.status(403).json({ message: 'No tienes acceso a la malla estudiantil.' });
     const studentCarnet = user.role === 'ESTUDIANTE' ? user.carnetOrCode || '' : String(req.query.studentCarnet || '');
     if (!studentCarnet) return void res.status(400).json({ message: 'Selecciona un estudiante.' });
     const student = await prisma.student.findUnique({ where: { carnet: studentCarnet }, include: {

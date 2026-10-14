@@ -29,7 +29,7 @@ import { FilterBar } from '../components/common/FilterBar';
 import { RoleGuard } from '../components/common/RoleGuard';
 
 const exportToCSV = (filename: string, rows: string[][], headers: string[]) => {
-  const escape = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+  const escape = (v: string) => { const text = String(v); const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text; return `"${safe.replace(/"/g, '""')}"`; };
   const csv = [headers.map(escape).join(','), ...rows.map((r) => r.map(escape).join(','))].join('\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
   const a = document.createElement('a');
